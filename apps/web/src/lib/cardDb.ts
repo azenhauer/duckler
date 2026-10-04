@@ -41,7 +41,13 @@ export const saveCollection = async (collection: CollectionRecord): Promise<Coll
 };
 
 export const removeCard = async (cardId: string): Promise<void> => {
-  await cardDb.cards.delete(cardId);
+  await cardDb.transaction('rw', cardDb.cards, cardDb.collections, async () => {
+    await cardDb.cards.delete(cardId);
+    await cardDb.collections.filter(collection => collection.cardIds.includes(cardId)).modify(collection => {
+      collection.cardIds = collection.cardIds.filter(id => id !== cardId);
+      collection.updatedAt = new Date().toISOString();
+    });
+  });
 };
 
 export const deleteCollection = async (collectionId: string): Promise<void> => {

@@ -1,7 +1,46 @@
 (() => {
   if (window.__ducklerRegionPickerInstalled) return;
   window.__ducklerRegionPickerInstalled = true;
-  let host, surface, selection, start, viewport, invalid = false, busy = false, toastHost;
+  let host, surface, selection, start, viewport, invalid = false, busy = false, toastHost, reviewHost;
+  const review = capture => {
+    reviewHost?.remove();
+    reviewHost = document.createElement('div');
+    reviewHost.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;background:#0007;display:grid;place-items:center;';
+    const root = reviewHost.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = ':host{all:initial}*{box-sizing:border-box}.panel{width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:22px;background:#1d2025;color:#f5f5f7;border:1px solid #393d46;border-radius:18px;box-shadow:0 20px 70px #0008;font:14px/1.5 system-ui}h2{margin:0 0 14px;font-size:20px}img{display:block;width:100%;max-height:220px;object-fit:contain;background:#111;border-radius:10px;margin-bottom:16px}label{display:block;margin-bottom:6px}textarea{width:100%;min-height:90px;padding:12px;border:1px solid #3b404a;border-radius:10px;background:#272b32;color:inherit;font:inherit;resize:vertical}.actions{display:flex;gap:10px;margin-top:14px}button{padding:10px 16px;border:1px solid #484e59;border-radius:10px;background:#363c46;color:inherit;font:inherit;cursor:pointer}button:disabled{opacity:.5}button:focus-visible,textarea:focus-visible{outline:2px solid #b7c5db;outline-offset:2px}.error{color:#efa49a}';
+    const panel = document.createElement('section');
+    panel.className = 'panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Review screenshot');
+    const heading = document.createElement('h2'); heading.textContent = 'Review screenshot';
+    const image = document.createElement('img'); image.src = capture.payload; image.alt = 'Captured screenshot';
+    const label = document.createElement('label'); label.htmlFor = 'capture-note'; label.textContent = 'Add a note';
+    const note = document.createElement('textarea'); note.id = 'capture-note'; note.maxLength = 100000; note.placeholder = 'What caught your eye?';
+    const message = document.createElement('p'); message.setAttribute('role', 'status'); message.textContent = 'Save when ready. Your screenshot has not been sent.';
+    const actions = document.createElement('div'); actions.className = 'actions';
+    const saveButton = document.createElement('button'); saveButton.textContent = 'Save screenshot';
+    const discard = document.createElement('button'); discard.textContent = 'Discard';
+    const previousFocus = document.activeElement;
+    const close = () => { reviewHost?.remove(); reviewHost = undefined; previousFocus?.focus?.(); };
+    discard.addEventListener('click', close);
+    saveButton.addEventListener('click', async () => {
+      if (saveButton.disabled) return;
+      saveButton.disabled = true; discard.disabled = true; saveButton.textContent = 'Saving…';
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'queue-capture', capture: { ...capture, note: note.value.trim() } });
+        if (!response?.ok) throw new Error(response?.error || 'Could not save this screenshot.');
+        close(); toast('Screenshot queued · open your library to receive it');
+      } catch (error) { message.textContent = error.message || 'Could not save this screenshot. Try again.'; message.className = 'error'; message.setAttribute('role', 'alert'); }
+      finally { saveButton.disabled = false; discard.disabled = false; saveButton.textContent = 'Save screenshot'; }
+    });
+    panel.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !saveButton.disabled) { event.preventDefault(); close(); }
+      if (event.key === 'Tab') {
+        if (event.shiftKey && root.activeElement === note) { event.preventDefault(); discard.focus(); }
+        else if (!event.shiftKey && root.activeElement === discard) { event.preventDefault(); note.focus(); }
+      }
+    });
+    actions.append(saveButton, discard); panel.append(heading, image, label, note, message, actions); root.append(style, panel); document.documentElement.append(reviewHost); note.focus();
+  };
   const toast = (text, error = false) => {
     toastHost?.remove();
     toastHost = document.createElement('div');
@@ -48,7 +87,8 @@
       if (!unchanged()) throw new Error('The page changed. Start the screenshot again.');
       const response = await chrome.runtime.sendMessage({ type: 'capture-region', rect, viewport: { width: viewport.width, height: viewport.height }, url: viewport.url });
       if (!response?.ok) throw new Error(response?.error || 'Could not save this screenshot.');
-      toast('Screenshot queued · open your library to receive it');
+      cancel();
+      review(response.capture);
     } catch (error) { toast(error.message || 'Could not save this screenshot.', true); }
     finally { busy = false; cancel(); }
   };
@@ -59,7 +99,7 @@
     }
     if (message?.type !== 'start-region-capture') return false;
     if (!/^https?:$/.test(location.protocol) || Math.abs((visualViewport?.scale || 1) - 1) >= 0.01) { respond({ ok: false, error: 'Use screenshot upload for this page or reset pinch zoom.' }); return false; }
-    if (busy) { respond({ ok: false, error: 'A screenshot is already being saved.' }); return false; }
+    if (busy || reviewHost) { respond({ ok: false, error: 'Finish or discard the current screenshot first.' }); return false; }
     cancel(); invalid = false; toastHost?.remove();
     viewport = { url: location.href, width: innerWidth, height: innerHeight, scrollX, scrollY, dpr: devicePixelRatio };
     host = document.createElement('div'); host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;';

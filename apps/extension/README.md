@@ -18,7 +18,7 @@ The development build allows localhost/127.0.0.1; pairing and each transfer bind
 ## Capture
 
 - **Link**, **Highlight**, and **Note** save through the popup. Highlight needs selected text on a supported page.
-- **Capture region** opens a drag selector; `Alt+Shift+D` starts the same flow. Escape cancels.
+- **Capture region** opens a drag selector; `Alt+Shift+D` starts the same flow. After capture, review the screenshot on the current website, add an optional note, then choose **Save screenshot** or **Discard**. Nothing enters the delivery queue until Save. Escape cancels; unsaved drafts are lost when the page closes or reloads.
 - Scrolling, zooming, resizing, switching tabs or navigating cancels unstable region captures. Cropping uses actual screenshot-to-viewport dimensions.
 - Context-menu actions save pages, links, selected text and accessible same-origin images. For blocked/cross-origin images, use region capture.
 - **Pending** supports reviewing, exporting and removing queued items. Export before uninstalling or deleting the browser profile.

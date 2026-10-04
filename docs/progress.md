@@ -62,6 +62,9 @@ Verification evidence from that earlier scaffold:
 
 ## UX refinement and extension hardening (October 2026)
 
+- Card hover/focus now reveals a local options menu for note editing, collection membership, trash, and confirmed permanent deletion. Touch devices keep these controls visible. Bulk actions appear only for two or more selected cards and stay in document flow. Permanent deletion atomically cleans stored collection references.
+- Region capture now returns an unsent screenshot draft and opens an on-page review dialog with a note field, explicit Save, and Discard. Queue delivery starts only after Save; failures retain the review for retry. Regression coverage verifies single/multiple selection, collection assignment, deletion persistence, note inclusion and discard without delivery.
+- Capture popup now follows the supplied dark panel reference with rounded segmented tabs, capture-mode icons, a visible note label, and neutral gradient controls. Settings and library links remain visible controls; oversized content scrolls within Chromium's popup height limit. Both extension builds were rebuilt, 23 extension tests passed, and the layout was rendered locally with browser API mocks (not a live extension acceptance test).
 - npm workspaces remain the monorepo toolchain. Both extension and app build locally.
 - The refs workspace is centered, defaults to dark, uses bundled/offline-cached Inter, and uses the supplied duck artwork without a header wordmark.
 - Cards have natural image proportions, rounded corners, compact captions and external collection pills. Profile hover is read-only; editing and connections live in Settings.

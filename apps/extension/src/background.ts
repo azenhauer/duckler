@@ -2,6 +2,7 @@ import { CAPTURE_PORT, MAX_QUEUE_BYTES, bytesToBase64, cropBounds, parsePairing 
 import { CaptureQueue } from './queue';
 import { bridgeRequest, validateSender } from './bridge';
 import { isAllowedLibraryOrigin } from './origin';
+import { isSettingsSender } from './settingsSender';
 
 const queue = new CaptureQueue();
 const trustedPorts = new Set<chrome.runtime.Port>();
@@ -68,7 +69,7 @@ async function captureRegion(sender: chrome.runtime.MessageSender, request: Reco
     if (!ctx) throw new Error('Could not crop this screenshot.');
     ctx.drawImage(bitmap, bounds.left, bounds.top, bounds.width, bounds.height, 0, 0, bounds.width, bounds.height);
     const blob = await canvas.convertToBlob({ type: 'image/png' });
-    return await save({ kind: 'screenshot', title: `Screenshot — ${sender.tab?.title || 'Captured area'}`.slice(0, 1000), sourceUrl: request.url, payload: `data:image/png;base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` });
+    return { kind: 'screenshot', title: `Screenshot — ${sender.tab?.title || 'Captured area'}`.slice(0, 1000), sourceUrl: request.url, payload: `data:image/png;base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` };
   } finally { bitmap.close(); }
 }
 
@@ -132,9 +133,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'delete-capture': await queue.captures.delete(message.id); await notify(); return {};
       case 'deliver-capture': case 'open-library': await openLibrary(); return {};
       case 'start-region': await beginRegion(message.tabId); return {};
-      case 'capture-region': return { item: await captureRegion(sender, message) };
+      case 'capture-region': return { capture: await captureRegion(sender, message) };
       case 'pair-library': {
-        if (sender.tab || !sender.url?.startsWith(chrome.runtime.getURL('options.html'))) throw new Error('Confirm the connection in extension settings.');
+        if (!isSettingsSender(sender, chrome.runtime.id, chrome.runtime.getURL('options.html'))) throw new Error('Confirm the connection in extension settings.');
         const pairing = parsePairing(message.pairing);
         const allowed = chrome.runtime.getManifest().externally_connectable?.matches ?? [];
         if (!isAllowedLibraryOrigin(pairing.origin, allowed)) throw new Error('This extension build does not support that library address.');

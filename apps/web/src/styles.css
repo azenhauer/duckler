@@ -2921,3 +2921,17 @@ button, .library-options > summary { transition:background-color 160ms ease,colo
 }
 @media (prefers-reduced-motion: reduce) { .library-card { translate: none; } .home-entry:hover, .home-entry:focus-visible { transform: none; } .collection-stack-icon rect, .canvas-orbit-icon .canvas-node { transform: none!important; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } .card-tile:hover, .dock-item:hover, .theme-toggle:hover, .profile-trigger:hover, .card-collection-pills button:hover, .floating-add-button:hover { transform:none; } }
+/* Card actions stay attached to their card; bulk actions stay in document flow. */
+.bulk-actions { position:static; width:fit-content; max-width:100%; margin:0 auto 18px; }
+.bulk-actions select { width:auto; flex:0 1 220px; }
+.card-options { position:absolute; top:10px; right:10px; z-index:5; opacity:0; pointer-events:none; }
+.card-tile:hover .card-options,.card-tile:focus-within .card-options,.card-options[open] { opacity:1; pointer-events:auto; }
+.card-options summary { list-style:none; padding:4px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface-strong); color:var(--ink); cursor:pointer; }
+.card-options summary::-webkit-details-marker { display:none; }
+.card-options-menu { position:absolute; right:0; top:36px; width:220px; max-width:calc(100vw - 60px); padding:10px; display:grid; gap:8px; border:1px solid var(--border); border-radius:12px; background:var(--surface-strong); color:var(--ink); box-shadow:0 10px 30px var(--shadow); }
+.card-options-menu label { display:flex; align-items:center; gap:8px; font-size:.8rem; }
+.card-options-menu input { width:16px; height:16px; }
+.card-options-menu strong,.card-options-menu span { font-size:.75rem; }
+.card-options-menu button { padding:7px 10px; font-size:.8rem; }
+.card-tile:has(.card-options[open]) { overflow:visible; z-index:6; }
+@media (hover:none) { .card-options { opacity:1; pointer-events:auto; } .tile-header input { opacity:1; } }

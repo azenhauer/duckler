@@ -21,6 +21,41 @@ beforeEach(async () => {
 });
 
 describe('App', () => {
+  it('shows bulk actions only for multiple cards and saves membership from card options', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    const card = await screen.findByRole('article', { name: 'Open Design note' });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Design note' }));
+    expect(screen.queryByRole('group', { name: 'Selected card actions' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Spec checklist' }));
+    expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+    fireEvent.click(within(card).getByLabelText('Options for Design note'));
+    fireEvent.click(within(card).getByRole('checkbox', { name: 'Research' }));
+    await waitFor(async () => {
+      const storedCard = (await readCards()).find(item => item.title === 'Design note')!;
+      const research = (await cardDb.collections.toArray()).find(item => item.name === 'Research')!;
+      expect(research.cardIds).toContain(storedCard.id);
+    });
+    expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
+  });
+
+  it('deletes from card options only after confirmation and removes collection references', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    const card = await screen.findByRole('article', { name: 'Open Design note' });
+    fireEvent.click(within(card).getByLabelText('Options for Design note'));
+    fireEvent.click(within(card).getByRole('button', { name: 'Delete permanently' }));
+    expect(card).toBeInTheDocument();
+    confirm.mockReturnValue(true);
+    const id = (await readCards()).find(item => item.title === 'Design note')!.id;
+    fireEvent.click(within(card).getByRole('button', { name: 'Delete permanently' }));
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'Open Design note' })).not.toBeInTheDocument());
+    expect((await readCards()).some(item => item.id === id)).toBe(false);
+    expect((await cardDb.collections.toArray()).some(item => item.cardIds.includes(id))).toBe(false);
+    confirm.mockRestore();
+  });
   it('defaults to dark and opens settings only through the profile avatar', () => {
     localStorage.removeItem('duckler-theme-mode');
     localStorage.removeItem('visual-library-theme');

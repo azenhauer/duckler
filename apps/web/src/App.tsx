@@ -774,6 +774,8 @@ function App() {
   };
 
   const handleDelete = async (cardId: string) => {
+    const card = cards.find(item => item.id === cardId);
+    if (!card || !window.confirm(`Delete “${card.title}” permanently? This cannot be undone.`)) return;
     setCollections((current) =>
       current.map((collection) => ({
         ...collection,
@@ -1296,8 +1298,8 @@ function App() {
           </div>
         )}
 
-        {activeView === 'library' && selectedCardIds.length > 0 && (
-          <div className="bulk-actions">
+        {activeView === 'library' && selectedCardIds.length > 1 && (
+          <div className="bulk-actions" role="group" aria-label="Selected card actions">
             <span>{selectedCardIds.length} selected</span>
             <select value={bulkDestinationId} onChange={(event) => setBulkDestinationId(event.target.value)}>
               <option value="">Choose collection</option>
@@ -1366,6 +1368,20 @@ function App() {
                     onClick={(event) => event.stopPropagation()}
                   />
                 </div>
+                <details className="card-options" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+                  <summary aria-label={`Options for ${card.title}`}>•••</summary>
+                  <div className="card-options-menu">
+                    <button type="button" onClick={() => setSelectedId(card.id)}>Edit note</button>
+                    <strong>Collections</strong>
+                    {collections.length === 0 && <span>Create a collection to organize this card.</span>}
+                    {collections.map(collection => <label key={collection.id}>
+                      <input type="checkbox" checked={collection.cardIds.includes(card.id)} onChange={() => void handleToggleCardCollectionMembership(collection.id, card.id)} />
+                      {collection.name}
+                    </label>)}
+                    <button type="button" onClick={() => void handleToggleTrash(card.id)}>{card.trashed ? 'Restore' : 'Move to trash'}</button>
+                    <button type="button" className="danger" onClick={() => void handleDelete(card.id)}>Delete permanently</button>
+                  </div>
+                </details>
                 {card.type === 'image' && card.dataUrl ? <img src={card.dataUrl} alt={card.title} className="card-image" /> : null}
                 {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p></div> : null}
                 {card.type === 'bookmark' ? <div className="bookmark-card-preview">
@@ -1439,7 +1455,7 @@ function App() {
 
             <div className="detail-actions">
               <button type="button" onClick={() => void handleToggleTrash(selectedCard.id)}>{selectedCard.trashed ? 'Restore' : 'Move to trash'}</button>
-              <button type="button" className="danger" onClick={() => void handleDelete(selectedCard.id)}>Delete</button>
+              <button type="button" className="danger" onClick={() => void handleDelete(selectedCard.id)}>Delete permanently</button>
             </div>
           </aside></Dialog>
         ) : null}
