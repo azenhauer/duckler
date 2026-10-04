@@ -3,6 +3,9 @@
   window.__ducklerRegionPickerInstalled = true;
   let host, surface, selection, start, viewport, invalid = false, busy = false, toastHost, reviewHost;
   const review = capture => {
+    if (capture?.kind !== 'screenshot' || typeof capture.payload !== 'string' || !capture.payload.startsWith('data:image/png;base64,')) {
+      throw new Error('Screenshot preview is unavailable. Reload Duckler Capture in Extensions, refresh this website, and try again.');
+    }
     reviewHost?.remove();
     reviewHost = document.createElement('div');
     reviewHost.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;background:#0007;display:grid;place-items:center;';
@@ -85,7 +88,8 @@
     try {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (!unchanged()) throw new Error('The page changed. Start the screenshot again.');
-      const response = await chrome.runtime.sendMessage({ type: 'capture-region', rect, viewport: { width: viewport.width, height: viewport.height }, url: viewport.url });
+      const response = await chrome.runtime.sendMessage({ type: 'prepare-region-review', rect, viewport: { width: viewport.width, height: viewport.height }, url: viewport.url });
+      if (response?.error === 'Unsupported capture request.') throw new Error('Reload Duckler Capture in Extensions, refresh this website, and try again.');
       if (!response?.ok) throw new Error(response?.error || 'Could not save this screenshot.');
       cancel();
       review(response.capture);

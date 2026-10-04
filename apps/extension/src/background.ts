@@ -133,7 +133,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'delete-capture': await queue.captures.delete(message.id); await notify(); return {};
       case 'deliver-capture': case 'open-library': await openLibrary(); return {};
       case 'start-region': await beginRegion(message.tabId); return {};
-      case 'capture-region': return { capture: await captureRegion(sender, message) };
+      case 'prepare-region-review': return { capture: await captureRegion(sender, message) };
+      case 'capture-region': throw new Error('Refresh this website before taking a screenshot. The screenshot review has been updated.');
       case 'pair-library': {
         if (!isSettingsSender(sender, chrome.runtime.id, chrome.runtime.getURL('options.html'))) throw new Error('Confirm the connection in extension settings.');
         const pairing = parsePairing(message.pairing);
