@@ -1,0 +1,105 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visual Library share target</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #020817;
+        color: #e2e8f0;
+      }
+      main {
+        max-width: 540px;
+        padding: 2rem;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.4);
+      }
+      h1 {
+        margin-top: 0;
+      }
+      code {
+        display: block;
+        white-space: pre-wrap;
+        background: rgba(148, 163, 184, 0.12);
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Visual Library share target</h1>
+      <p>The app is ready to accept a shared URL or text item from the system share sheet.</p>
+      <code id="payload">Waiting for shared data…</code>
+    </main>
+    <script>
+      const key = 'visual-library-pending-share';
+      const readQueue = () => {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const storePayload = (payload) => {
+        const queue = Array.isArray(readQueue()) ? readQueue() : [];
+        queue.push(payload);
+        localStorage.setItem(key, JSON.stringify(queue));
+      };
+
+      const buildPayloadFromParams = () => {
+        const params = new URLSearchParams(window.location.search);
+        return {
+          title: params.get('title') || 'Shared item',
+          text: params.get('text') || '',
+          url: params.get('url') || '',
+        };
+      };
+
+      const handleShare = (payload) => {
+        const sanitized = {
+          title: payload.title?.trim() || 'Shared item',
+          text: payload.text?.trim() || '',
+          url: payload.url?.trim() || '',
+        };
+        document.getElementById('payload').textContent = JSON.stringify(sanitized, null, 2);
+        storePayload(sanitized);
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 300);
+      };
+
+      const form = document.querySelector('form');
+      if (form) {
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          const formData = new FormData(form);
+          const payload = {
+            title: formData.get('title') || 'Shared item',
+            text: formData.get('text') || '',
+            url: formData.get('url') || '',
+          };
+          handleShare(payload);
+        });
+      }
+
+      const initialPayload = buildPayloadFromParams();
+      if (initialPayload.title || initialPayload.text || initialPayload.url) {
+        handleShare(initialPayload);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "moduleResolution": "Node",
+    "declaration": true,
+    "declarationMap": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["src"]
+}

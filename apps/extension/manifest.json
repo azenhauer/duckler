@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Duckler Capture",
+  "version": "0.2.0",
+  "description": "Save pages, notes, images, and screen regions to your Duckler library.",
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Capture to Duckler",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "capture-visible-area": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "Capture a region of the current page"
+    }
+  }
+}

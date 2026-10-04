@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Visual Library icon">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="26" fill="#020817"/>
+  <rect x="18" y="18" width="92" height="92" rx="18" fill="url(#g)" opacity="0.25"/>
+  <rect x="24" y="30" width="38" height="52" rx="10" fill="#f8fafc" opacity="0.92"/>
+  <rect x="66" y="30" width="38" height="24" rx="8" fill="#e2e8f0" opacity="0.9"/>
+  <rect x="66" y="58" width="38" height="24" rx="8" fill="#cbd5e1" opacity="0.9"/>
+  <circle cx="43" cy="92" r="10" fill="#020817" opacity="0.8"/>
+</svg>
+

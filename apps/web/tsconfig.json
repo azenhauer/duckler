@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+    "rootDir": "../..",
+    "outDir": "./dist",
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
+    "baseUrl": "../..",
+    "paths": {
+      "@visual-library/shared": ["packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["src", "../../packages/shared/src"]
+}

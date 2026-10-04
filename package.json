@@ -1,0 +1,38 @@
+{
+  "name": "visual-library-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "corepack pnpm --dir apps/web dev",
+    "build": "corepack pnpm -r build",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "pages:preview": "corepack pnpm dlx wrangler pages dev apps/web/dist",
+    "pages:deploy": "corepack pnpm dlx wrangler pages deploy apps/web/dist --project-name=duckler",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.0.1",
+    "@types/node": "^20.14.12",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.5.0",
+    "@typescript-eslint/parser": "^7.5.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react": "^7.0.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "fake-indexeddb": "^6.0.0",
+    "jsdom": "^24.1.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.4.7",
+    "vite": "^5.4.1",
+    "vitest": "^2.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

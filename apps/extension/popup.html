@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Save to Duckler</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header class="page-summary">
+        <div class="site-mark" id="site-mark" aria-hidden="true">D</div>
+        <div class="page-meta">
+          <strong id="page-title">Current page</strong>
+          <span id="page-domain"></span>
+        </div>
+        <button id="settings" class="icon-button" type="button" aria-label="Extension settings" title="Extension settings">•••</button>
+      </header>
+      <nav class="tabs" aria-label="Capture panel">
+        <button type="button" class="tab active" data-tab="save" aria-current="page"><span aria-hidden="true">＋</span> Save</button>
+        <button type="button" class="tab" data-tab="related"><span aria-hidden="true">⌘</span> Related ideas</button>
+        <button type="button" class="tab" data-tab="insights"><span aria-hidden="true">✦</span> Insights</button>
+      </nav>
+      <section id="save-panel">
+        <label class="visually-hidden" for="note-text">Add a note</label>
+        <textarea id="note-text" maxlength="100000" rows="2" placeholder="Add a note"></textarea>
+        <div class="collection-control">
+          <button id="collection-toggle" type="button" aria-expanded="false" aria-controls="collection-field">
+            <span aria-hidden="true">⌕</span><span id="collection-label">Add to collections</span>
+          </button>
+          <input id="collection-field" type="text" maxlength="120" placeholder="Collection name" hidden>
+        </div>
+        <div class="tag-controls">
+          <button type="button" class="tag-toggle" data-tag="favorite" aria-pressed="false"><span aria-hidden="true">★</span> Favorites</button>
+          <button type="button" class="tag-toggle" data-tag="private" aria-pressed="false"><span aria-hidden="true">▣</span> Private</button>
+        </div>
+        <div class="save-actions">
+          <button id="save-page" class="save-button" type="button">Add to my library</button>
+          <button id="capture-region" class="region-button" type="button" aria-label="Capture a region of this page" title="Capture a region">▧</button>
+        </div>
+      </section>
+      <section id="related-panel" class="info-panel" hidden>
+        <strong>Related ideas</strong>
+        <p>Related cards will be available after this capture is added to your library.</p>
+      </section>
+      <section id="insights-panel" class="info-panel" hidden>
+        <strong>Page details</strong>
+        <p id="insights-title"></p>
+        <p id="insights-url"></p>
+        <button id="save-selection" type="button">Save selected text</button>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+      <details class="queue-menu">
+        <summary><span>Queued captures</span><span id="queue-count">0</span></summary>
+        <ul id="queue-list"></ul>
+        <button id="export-queue" type="button">Export queue JSON</button>
+      </details>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
