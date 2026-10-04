@@ -29,6 +29,8 @@ try {
   await page.mouse.move(0, 0);
   assert.equal(await card.locator('.card-options').evaluate(el => getComputedStyle(el).opacity), '0');
   await card.hover();
+  await card.getByRole('button', { name: 'Edit Spec checklist' }).waitFor({ state: 'visible' });
+  assert.equal(await card.locator('.card-hover-edit').evaluate(el => getComputedStyle(el).opacity), '1');
   await card.getByLabel('Options for Spec checklist').click();
   await card.getByRole('button', { name: 'Delete permanently' }).waitFor();
   await card.getByLabel('Options for Spec checklist').click();
@@ -41,6 +43,20 @@ try {
   await bulk.waitFor();
   assert.equal(await bulk.evaluate(el => getComputedStyle(el).position), 'static');
   await page.getByRole('button', { name: 'Clear selection' }).click();
+  await page.getByRole('button', { name: 'Add card' }).hover();
+  await page.getByRole('button', { name: 'Link', exact: true }).waitFor();
+  await card.hover();
+  await card.getByRole('button', { name: 'Edit Spec checklist' }).click();
+  const editor = page.getByRole('dialog', { name: 'Card details' });
+  await editor.getByRole('textbox', { name: 'Note' }).waitFor();
+  await page.screenshot({ path: fileURLToPath(new URL('card-editor.png', output)), fullPage: true });
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    const save = await editor.getByRole('button', { name: 'Save', exact: true }).boundingBox();
+    assert.ok(save && save.x >= 0 && save.x + save.width <= width && save.y + save.height <= 800, 'Editor Save stays visible on phones');
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await editor.getByRole('button', { name: 'Close details' }).click();
   assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
   assert.ok((await page.locator('link[data-browser-icon]').getAttribute('href')).endsWith('duck-tab-light.png'));
   await page.emulateMedia({ colorScheme: 'dark' });

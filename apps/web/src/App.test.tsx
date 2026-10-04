@@ -21,6 +21,23 @@ beforeEach(async () => {
 });
 
 describe('App', () => {
+  it('opens the add menu on hover and edits a card only after Save', async () => {
+    render(<App />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Add card' }).parentElement!);
+    expect(screen.getByRole('button', { name: 'Link' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Design note' }));
+    const dialog = screen.getByRole('dialog', { name: 'Card details' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Note' }), { target: { value: 'Revised note' } });
+    expect((await readCards()).find(card => card.title === 'Design note')?.note).toBe('A design observation');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Collections/ }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Research' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument());
+    const card = (await readCards()).find(card => card.title === 'Design note')!;
+    expect(card.note).toBe('Revised note');
+    expect((await cardDb.collections.toArray()).find(collection => collection.name === 'Research')?.cardIds).toContain(card.id);
+  });
   it('shows bulk actions only for multiple cards and saves membership from card options', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));

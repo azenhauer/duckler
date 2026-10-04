@@ -36,6 +36,7 @@ import { parseShareTargetFallback } from './lib/shareTargetFallback';
 import { startExtensionBridge, getExtensionConnection } from './lib/extensionBridge';
 import { ExtensionSetup } from './components/ExtensionSetup';
 import { Dialog } from './components/Dialog';
+import { CardEditor } from './components/CardEditor';
 import { NavigationIcon } from './components/NavigationIcon';
 import { InterfaceIcon } from './components/InterfaceIcon';
 import { CanvasGallery } from './components/CanvasGallery';
@@ -747,23 +748,6 @@ function App() {
     }
   };
 
-  const handleUpdateSelected = async (updated: Partial<CardRecord>) => {
-    if (!selectedCard) {
-      return;
-    }
-
-    const nextCard: CardRecord = {
-      ...selectedCard,
-      ...updated,
-      updatedAt: new Date().toISOString(),
-      searchText: `${updated.title ?? selectedCard.title} ${updated.note ?? selectedCard.note} ${updated.sourceUrl ?? selectedCard.sourceUrl ?? ''} ${updated.tags?.join(' ') ?? selectedCard.tags.join(' ')}`.toLowerCase(),
-      tags: updated.tags ?? selectedCard.tags,
-    };
-
-    setCards((current) => current.map((item) => (item.id === nextCard.id ? nextCard : item)));
-    await saveCard(nextCard);
-  };
-
   const handleToggleTrash = async (cardId: string) => {
     const target = cards.find((card) => card.id === cardId);
     if (!target) return;
@@ -1368,6 +1352,7 @@ function App() {
                     onClick={(event) => event.stopPropagation()}
                   />
                 </div>
+                <button type="button" className="card-hover-edit" aria-label={`Edit ${card.title}`} onClick={event => { event.stopPropagation(); setSelectedId(card.id); }}><InterfaceIcon name="note" />Edit</button>
                 <details className="card-options" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
                   <summary aria-label={`Options for ${card.title}`}>•••</summary>
                   <div className="card-options-menu">
@@ -1408,56 +1393,15 @@ function App() {
         </div>}
 
         {activeView === 'library' && selectedCard ? (
-          <Dialog label="Card details" className="card-reader" onClose={() => setSelectedId(null)}>
-          <aside className="detail-panel">
-            <div className="detail-header">
-              <div className="detail-preview">
-                {selectedCard.type === 'image' && selectedCard.dataUrl ? <img src={selectedCard.dataUrl} alt={selectedCard.title} /> : null}
-                {selectedCard.type !== 'image' ? <div className="detail-preview-text">
-                  <span className="card-kind">{selectedCard.type === 'text' ? 'NOTE' : 'LINK'}</span><h2>{selectedCard.title}</h2>
-                  {selectedCard.note && <p>{selectedCard.note}</p>}
-                  {selectedCard.sourceUrl && <a href={selectedCard.sourceUrl} target="_blank" rel="noopener noreferrer">Open source ↗</a>}
-                </div> : null}
-              </div>
-              <button type="button" className="close-detail" onClick={() => setSelectedId(null)} aria-label="Close details">×</button>
-            </div>
-
-            <div className="detail-field">
-              <label htmlFor="reader-title">Title</label>
-              <input id="reader-title" value={selectedCard.title} onChange={(event) => void handleUpdateSelected({ title: event.target.value })} />
-            </div>
-            <div className="detail-field">
-              <label htmlFor="reader-source">Source</label>
-              <input id="reader-source" value={selectedCard.sourceUrl ?? ''} onChange={(event) => void handleUpdateSelected({ sourceUrl: event.target.value || undefined })} />
-            </div>
-            <div className="detail-field">
-              <label htmlFor="reader-note">Note</label>
-              <textarea id="reader-note" value={selectedCard.note} onChange={(event) => void handleUpdateSelected({ note: event.target.value })} />
-            </div>
-            <div className="detail-field">
-              <label htmlFor="reader-tags">Tags</label>
-              <input id="reader-tags" value={selectedCard.tags.join(', ')} onChange={(event) => void handleUpdateSelected({ tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) })} />
-            </div>
-
-            <div className="collection-assignment">
-              <h3>Collections</h3>
-              {collections.map((collection) => (
-                <label key={collection.id} className="check-row">
-                  <input
-                    type="checkbox"
-                    checked={collection.cardIds.includes(selectedCard.id)}
-                    onChange={() => void handleToggleCardCollectionMembership(collection.id, selectedCard.id)}
-                  />
-                  <span>{collection.name}</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="detail-actions">
-              <button type="button" onClick={() => void handleToggleTrash(selectedCard.id)}>{selectedCard.trashed ? 'Restore' : 'Move to trash'}</button>
-              <button type="button" className="danger" onClick={() => void handleDelete(selectedCard.id)}>Delete permanently</button>
-            </div>
-          </aside></Dialog>
+          <CardEditor key={selectedCard.id} card={selectedCard} collections={collections} onClose={() => setSelectedId(null)}
+            onTrash={() => { void handleToggleTrash(selectedCard.id); setSelectedId(null); }}
+            onDelete={() => { void handleDelete(selectedCard.id); }}
+            onSave={async (draft, collectionIds) => {
+              const updated = { ...draft, updatedAt: new Date().toISOString(), searchText: `${draft.title} ${draft.note} ${draft.sourceUrl ?? ''} ${draft.tags.join(' ')}`.toLowerCase() };
+              const nextCollections = collections.map(collection => ({ ...collection, cardIds: collectionIds.includes(collection.id) ? [...new Set([...collection.cardIds, draft.id])] : collection.cardIds.filter(id => id !== draft.id), updatedAt: updated.updatedAt }));
+              await saveCardWithCollections(updated, nextCollections);
+              setCards(current => current.map(card => card.id === draft.id ? updated : card)); setCollections(nextCollections);
+            }} />
         ) : null}
 
         {captureQueue.length > 0 && (
@@ -1633,11 +1577,11 @@ function App() {
         </div>
       </Dialog>}
       {extensionSetupOpen && <ExtensionSetup onClose={() => setExtensionSetupOpen(false)} onConnected={() => setExtensionConnectionVersion(current => current + 1)} />}
-      <div className={`add-menu ${addMenuOpen ? 'is-open' : ''}`} ref={addMenuRef} onMouseLeave={event => {
+      <div className={`add-menu ${addMenuOpen ? 'is-open' : ''}`} ref={addMenuRef} onMouseEnter={() => setAddMenuOpen(true)} onMouseLeave={event => {
         const menu = event.currentTarget;
         window.setTimeout(() => { if (!menu.matches(':hover')) setAddMenuOpen(false); }, 140);
       }}>
-        <button ref={cardComposerTriggerRef} type="button" className="floating-add-button" aria-label="Add card" aria-expanded={addMenuOpen} aria-haspopup="true" title="Add card" onClick={() => setAddMenuOpen((open) => !open)}>+</button>
+        <button ref={cardComposerTriggerRef} type="button" className="floating-add-button" aria-label="Add card" aria-expanded={addMenuOpen} aria-haspopup="true" title="Add card" onFocus={() => setAddMenuOpen(true)} onClick={() => setAddMenuOpen(true)}>+</button>
         {addMenuOpen && <div className="add-menu-popover" aria-label="Create">
           <div className="add-menu-group">
             <button type="button" onClick={() => {
