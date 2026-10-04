@@ -11,6 +11,7 @@
     "packages/**/*.ts",
     "packages/**/*.tsx",
     "packages/**/*.d.ts",
+    "scripts/**/*.test.ts",
     "vitest.config.ts",
     "vitest.setup.ts",
     ".eslintrc.cjs"

@@ -10,6 +10,7 @@ export default defineConfig({
       'apps/web/src/**/*.test.{ts,tsx}',
       'apps/extension/**/*.test.ts',
       'functions/**/*.test.js',
+      'scripts/**/*.test.ts',
       'packages/shared/src/**/*.test.{ts,tsx}',
     ],
   },

@@ -9,7 +9,9 @@ The repository contains two specification documents:
 
 The later document takes precedence for architecture, product requirements, non-goals, and milestone ordering. The earlier docs/specification file was preserved as historical context and does not override the later selection.
 
-## Command history
+## Historical command history
+
+These commands record the earlier pnpm-based scaffold. The current workspace uses npm and `package-lock.json`; use the npm commands in README.md for current development and deployment.
 
 - `corepack enable`
 - `corepack prepare pnpm@9.15.0 --activate`
@@ -19,7 +21,7 @@ The later document takes precedence for architecture, product requirements, non-
 - `corepack pnpm build`
 - `curl.exe -I http://localhost:5176`
 
-Latest verification evidence:
+Verification evidence from that earlier scaffold:
 - Test suite passed: 34/34 tests (15 shared, 8 web app, 2 extension-import, 3 share fallback, 3 Cloudflare Pages Function, 3 extension-worker).
 - `corepack pnpm lint` passed.
 - `corepack pnpm typecheck` passed.

@@ -45,6 +45,8 @@ For command-line publishing, authenticate once with `npx wrangler login`, build 
 
 `wrangler.jsonc` points Wrangler at `apps/web/dist`. Git-connected Pages deployments use the build settings above; no Cloudflare account or credentials are stored in this repository.
 
+Use npm for both dependency installation and the Pages build command. This repository keeps only `package-lock.json`; do not add a pnpm lockfile or configure a pnpm build command. If a Pages log says this project is configured to use npm, check the dashboard's build command and replace any old pnpm command with the npm command above, then retry the deployment. Wrangler's `vars` configure the Functions runtime; Vite's `VITE_*` values must also be supplied as build environment variables in Pages when needed.
+
 ## Environment configuration
 
 To enable the real Google Drive OAuth path for M5b, set a local environment value before starting the web app:
