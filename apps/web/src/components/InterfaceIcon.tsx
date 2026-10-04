@@ -1,19 +1,19 @@
-type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash';
-const paths: Record<Exclude<IconName, 'sun'>, string> = {
-  edit: 'M3 17v4h4L20 8l-4-4L3 17Zm18-12-2-2a2 2 0 0 0-3 0l-1 1 4 4 2-1a2 2 0 0 0 0-2Z',
-  move: 'M3 5h7l2 2h9v4h-3V9H5v10h7v2H3V5Zm14 8v3h-5v3h5v3l6-5-6-4Z',
-  trash: 'M8 2h8v3h5v3H3V5h5V2Zm-3 8h14l-1 12H6L5 10Zm4 2v7h2v-7H9Zm4 0v7h2v-7h-2Z',
-  back: 'M10.8 3.2a1.6 1.6 0 0 1 0 2.3L6 10.4h14.4a1.6 1.6 0 0 1 0 3.2H6l4.8 4.9a1.6 1.6 0 0 1-2.3 2.3l-7.6-7.7a1.6 1.6 0 0 1 0-2.2l7.6-7.7a1.6 1.6 0 0 1 2.3 0Z',
-  search: 'M10 2a8 8 0 1 0 4.9 14.3l5.7 5.7 2.3-2.3-5.7-5.7A8 8 0 0 0 10 2Zm0 3a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z',
-  moon: 'M20.8 15.1A9.5 9.5 0 0 1 8.9 3.2 9.7 9.7 0 1 0 20.8 15.1Z',
-  link: 'M9 3h12v12h-3V8.1L5.1 21 3 18.9 15.9 6H9V3Z',
-  upload: 'M10.5 15h3V8.7l3.2 3.2 2.1-2.1L12 3 5.2 9.8l2.1 2.1 3.2-3.2V15ZM3 15h3v4h12v-4h3v7H3v-7Z',
-  note: 'M5 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H5Zm2 5h10v2H7V7Zm0 5h10v2H7v-2Zm0 5h6v2H7v-2Z',
-  browser: 'M9 2a3 3 0 0 1 6 0v2h4a2 2 0 0 1 2 2v4h-2a3 3 0 1 0 0 6h2v4a2 2 0 0 1-2 2h-4v-2a3 3 0 1 0-6 0v2H5a2 2 0 0 1-2-2v-4h2a3 3 0 1 0 0-6H3V6a2 2 0 0 1 2-2h4V2Z',
-};
-
+type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more';
 export function InterfaceIcon({ name }: { name: IconName }) {
-  return <svg className="ui-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    {name === 'sun' ? <><circle cx="12" cy="12" r="5" /><path d="M11 0h2v4h-2V0Zm0 20h2v4h-2v-4ZM0 11h4v2H0v-2Zm20 0h4v2h-4v-2ZM3 2l3 3-1.4 1.4-3-3L3 2Zm15 15 3 3-1.4 1.4-3-3L18 17ZM2 20l3-3 1.4 1.4-3 3L2 20ZM17 5l3-3 1.4 1.4-3 3L17 5Z" /></> : <path d={paths[name]} fillRule="evenodd" />}
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  return <svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+    {name === 'edit' && <><path {...common} d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L4 18v2Z" /><path {...common} d="m14.8 6.2 3 3" /></>}
+    {name === 'move' && <><path {...common} d="M12 3v18M3 12h18" /><path {...common} d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" /></>}
+    {name === 'trash' && <><path {...common} d="M4 7h16M10 3h4l1 4H9l1-4ZM6 7l1 14h10l1-14M10 11v6M14 11v6" /></>}
+    {name === 'back' && <path {...common} d="m14 5-7 7 7 7M7 12h13" />}
+    {name === 'search' && <><circle {...common} cx="10.5" cy="10.5" r="6.5" /><path {...common} d="m16 16 5 5" /></>}
+    {name === 'sun' && <><circle {...common} cx="12" cy="12" r="4" /><path {...common} d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></>}
+    {name === 'moon' && <path {...common} d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" />}
+    {name === 'link' && <><path {...common} d="m9.5 14.5 5-5" /><path {...common} d="M7.5 17.5H6a4 4 0 0 1 0-8h3M16.5 6.5H18a4 4 0 0 1 0 8h-3" /></>}
+    {name === 'upload' && <><path {...common} d="M12 15V3M7 8l5-5 5 5M4 15v5h16v-5" /></>}
+    {name === 'note' && <><path {...common} d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path {...common} d="M14 3v5h5M8 12h7M8 16h5" /></>}
+    {name === 'browser' && <><rect {...common} x="3" y="4" width="18" height="16" rx="2" /><path {...common} d="M3 9h18M7 6.5h.01M10 6.5h.01M13 6.5h.01" /></>}
+    {name === 'settings' && <><circle {...common} cx="12" cy="12" r="3" /><path {...common} d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20h-2.6v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6V11.3h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.6v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1V13h-.1a1.7 1.7 0 0 0-1.6 1Z" /></>}
+    {name === 'more' && <><circle {...common} cx="5" cy="12" r="1" /><circle {...common} cx="12" cy="12" r="1" /><circle {...common} cx="19" cy="12" r="1" /></>}
   </svg>;
 }

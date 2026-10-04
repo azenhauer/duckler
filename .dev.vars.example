@@ -1,0 +1,8 @@
+# Copy to .dev.vars only for local Pages runtime testing. Never commit .dev.vars.
+# Disabled until trusted invite-based authentication is implemented.
+DUCKLER_API_ENABLED=false
+DUCKLER_ENVIRONMENT=development
+DUCKLER_ORIGIN=http://localhost:8788
+DUCKLER_SESSION_IDLE_SECONDS=1800
+DUCKLER_SESSION_ABSOLUTE_SECONDS=86400
+# Configure a local D1 binding named DUCKLER_DB separately. Do not set VITE_* secrets.

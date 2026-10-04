@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +32,7 @@ try {
   await card.hover();
   const edit = actions.getByRole('button', { name: 'Edit Spec checklist' });
   await edit.waitFor({ state: 'visible' });
-  assert.equal(await actions.evaluate(el => getComputedStyle(el).opacity), '1');
+  await expect.poll(() => actions.evaluate(el => getComputedStyle(el).opacity)).toBe('1');
   const cardBox = await card.boundingBox(), actionBox = await actions.boundingBox();
   assert.ok(actionBox.y + actionBox.height <= cardBox.y, 'Controls sit above the card');
   assert.equal(await edit.evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
@@ -61,6 +61,17 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await editor.getByRole('button', { name: 'Close details' }).click();
+  const badge = card.locator('..').getByRole('button', { name: 'Collection Inbox', exact: true });
+  await badge.click();
+  await page.getByRole('menuitem', { name: 'Remove from collection', exact: true }).click();
+  await expect(badge).toHaveCount(0);
+  await expect(card).toBeVisible();
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(badge).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('button', { name: 'All notes', exact: true }).click();
+  await expect(badge).toBeVisible();
   assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
   assert.ok((await page.locator('link[data-browser-icon]').getAttribute('href')).endsWith('duck-tab-light.png'));
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -70,7 +81,7 @@ try {
   await page.evaluate(() => document.fonts.ready);
   const grid = await page.locator('.library-grid').boundingBox();
   assert.ok(Math.abs(grid.x + grid.width / 2 - 720) < 3, 'Library cards should be centered');
-  assert.equal(await page.locator('.card-tile').first().evaluate(el => getComputedStyle(el).borderRadius), '22px');
+  assert.equal(await page.locator('.card-tile').first().evaluate(el => getComputedStyle(el).borderRadius), '7px');
   const cards = await page.locator('.library-card').evaluateAll(elements => elements.map(el => ({ x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y, width: el.getBoundingClientRect().width })));
   assert.equal(cards[0].y, cards[1].y, 'Two starter cards should sit side by side');
   assert.ok(Math.abs((cards[0].x + cards[1].x + cards[1].width) / 2 - 720) < 3);

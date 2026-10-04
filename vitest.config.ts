@@ -12,6 +12,7 @@ export default defineConfig({
       'functions/**/*.test.js',
       'scripts/**/*.test.ts',
       'packages/shared/src/**/*.test.{ts,tsx}',
+      'packages/backend/src/**/*.test.ts',
     ],
   },
 });

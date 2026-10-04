@@ -1,12 +1,51 @@
 const $ = selector => document.querySelector(selector);
 let page, currentTab, mode = 'bookmark', saving = false;
+let collectionOptions = [], selectedCollectionIds = [], selectedCollectionNames = [];
 const showStatus = (text, error = false) => { $('#status').textContent = text; $('#status').classList.toggle('error', error); $('#status').setAttribute('role', error ? 'alert' : 'status'); };
 const request = async message => {
   const response = await chrome.runtime.sendMessage(message);
   if (!response?.ok) throw new Error(response?.error || 'The extension request failed.');
   return response;
 };
+function setupCollectionPicker() {
+  const input = $('#capture-collection');
+  if (!input) return;
+  input.hidden = true;
+  const label = input.closest('label');
+  if (!label) return;
+  label.classList.add('collection-picker'); label.firstChild.textContent = 'Collections';
+  const toggle = document.createElement('button'); toggle.type = 'button'; toggle.id = 'collection-picker-toggle'; toggle.className = 'collection-picker-toggle'; toggle.textContent = 'Choose collections'; toggle.setAttribute('aria-expanded', 'false');
+  const chips = document.createElement('div'); chips.id = 'collection-chips'; chips.className = 'collection-chips'; chips.setAttribute('aria-live', 'polite');
+  const popover = document.createElement('div'); popover.id = 'collection-picker-popover'; popover.className = 'collection-picker-popover'; popover.hidden = true;
+  const search = document.createElement('input'); search.id = 'collection-search'; search.type = 'search'; search.placeholder = 'Search collections'; search.setAttribute('aria-label', 'Search collections');
+  const list = document.createElement('div'); list.id = 'collection-list'; list.className = 'collection-list'; list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', 'Collections');
+  const createRow = document.createElement('div'); createRow.className = 'collection-create';
+  const createInput = document.createElement('input'); createInput.id = 'new-collection-name'; createInput.maxLength = 200; createInput.placeholder = 'New collection name';
+  const createButton = document.createElement('button'); createButton.id = 'create-collection'; createButton.type = 'button'; createButton.textContent = '+ Create new collection'; createRow.append(createInput, createButton);
+  popover.append(search, list, createRow); label.append(toggle, chips, popover);
+  const render = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    const visible = collectionOptions.filter(item => item.name.toLocaleLowerCase().startsWith(query) || item.name.toLocaleLowerCase().includes(query));
+    list.replaceChildren();
+    if (!visible.length) { const empty = document.createElement('span'); empty.className = 'collection-empty'; empty.textContent = collectionOptions.length ? 'No matching collections' : 'No collections yet'; list.append(empty); }
+    for (const item of visible) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'collection-option'; button.setAttribute('role', 'option'); const selected = selectedCollectionIds.includes(item.id) || selectedCollectionNames.includes(item.name); button.setAttribute('aria-selected', String(selected)); button.innerHTML = `<span class="collection-checkmark">${selected ? '✓' : ''}</span><span>${item.name}</span>${item.cardCount ? `<small>${item.cardCount}</small>` : ''}`;
+      button.addEventListener('click', () => { if (selectedCollectionIds.includes(item.id)) selectedCollectionIds = selectedCollectionIds.filter(id => id !== item.id); else selectedCollectionIds.push(item.id); selectedCollectionNames = selectedCollectionIds.map(id => collectionOptions.find(option => option.id === id)?.name).filter(Boolean); render(); }); list.append(button);
+    }
+    chips.replaceChildren();
+    for (const name of selectedCollectionNames) { const chip = document.createElement('span'); chip.className = 'collection-chip'; chip.textContent = name; chips.append(chip); }
+    toggle.textContent = selectedCollectionNames.length ? `${selectedCollectionNames.length} selected` : 'Choose collections';
+  };
+  toggle.addEventListener('click', () => { popover.hidden = !popover.hidden; toggle.setAttribute('aria-expanded', String(!popover.hidden)); if (!popover.hidden) search.focus(); });
+  search.addEventListener('input', render);
+  createButton.addEventListener('click', () => { const name = createInput.value.trim(); if (!name) return; const existing = collectionOptions.find(item => item.name.toLocaleLowerCase() === name.toLocaleLowerCase()); const item = existing || { id: `local-${crypto.randomUUID()}`, name, cardCount: 0 }; if (!existing) collectionOptions = [...collectionOptions, item]; if (!selectedCollectionIds.includes(item.id)) selectedCollectionIds.push(item.id); selectedCollectionNames = [...new Set([...selectedCollectionNames, item.name])]; createInput.value = ''; render(); });
+  document.addEventListener('click', event => { if (!label.contains(event.target)) { popover.hidden = true; toggle.setAttribute('aria-expanded', 'false'); } });
+  render();
+  return render;
+}
 async function initialize() {
+  setupCollectionPicker();
+  void request({ type: 'list-collections' }).then(response => { if (Array.isArray(response.collections)) { collectionOptions = response.collections; $('#collection-search')?.dispatchEvent(new Event('input')); } }).catch(() => {});
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab = tab;
   if (!tab?.id || !/^https?:\/\//i.test(tab.url || '')) throw new Error('Open a website to save a link or screenshot. You can still write a note.');
@@ -64,7 +103,9 @@ $('#save-page').addEventListener('click', async () => {
   saving = true; $('#save-page').disabled = true; $('#save-page').textContent = 'Saving…';
   try {
     await request({ type: 'queue-capture', capture: { kind: mode === 'note' ? 'text' : mode,
-      collectionName: $('#capture-collection').value.trim(),
+      collectionIds: selectedCollectionIds.filter(id => !id.startsWith('local-')),
+      collectionNames: selectedCollectionNames,
+      collectionName: selectedCollectionNames[0] || '',
       title: $('#capture-title').value.trim() || (mode === 'note' ? note.slice(0, 160) : mode === 'text' ? page.selection.slice(0, 1000) : page.title || page.url),
       sourceUrl: page?.url || '', note: mode === 'text' ? page.selection + (note ? '\n\n' + note : '') : note,
       tags: $('#tags').value.split(',').map(tag => tag.trim()).filter(Boolean) } });

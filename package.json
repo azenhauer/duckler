@@ -12,12 +12,16 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:security": "vitest run packages/backend/src",
     "pages:preview": "npx wrangler pages dev apps/web/dist",
     "pages:deploy": "npx wrangler pages deploy apps/web/dist --project-name=duckler",
-    "typecheck": "tsc -b && npm run typecheck --workspace @visual-library/extension",
+    "typecheck": "tsc -b && npm run typecheck --workspace @visual-library/extension && tsc -p functions/tsconfig.json --noEmit",
     "test:integration": "vitest run apps/extension apps/web/src/lib/extension*",
     "test:ui": "node scripts/ui-smoke.mjs",
     "test:canvas:ui": "node scripts/canvas-smoke.mjs",
+    "test:canvas:tools": "node scripts/canvas-tools-smoke.mjs",
+    "test:canvas:capacity": "node scripts/canvas-capacity-smoke.mjs",
+    "test:membership:ui": "node scripts/membership-smoke.mjs",
     "test:extension:browser": "node scripts/extension-smoke.mjs"
   },
   "devDependencies": {

@@ -21,6 +21,40 @@ beforeEach(async () => {
 });
 
 describe('App', () => {
+  it('removes a badge relationship, restores it with Undo and permits retry after failed Undo', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    const card = await screen.findByRole('article', { name: 'Open Spec checklist' });
+    const badges = within(card.parentElement!);
+    fireEvent.click(badges.getByRole('button', { name: 'Collection Inbox' }));
+    fireEvent.click(badges.getByRole('menuitem', { name: 'Remove from collection' }));
+    await screen.findByRole('button', { name: 'Undo' });
+    expect(badges.queryByRole('button', { name: 'Collection Inbox' })).not.toBeInTheDocument();
+    expect(badges.getByRole('button', { name: 'Collection Research' })).toBeInTheDocument();
+    const failure = vi.spyOn(cardDb.collections, 'put').mockRejectedValueOnce(new Error('Storage full'));
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await screen.findByText("Couldn't update card. Try again.");
+      expect(badges.queryByRole('button', { name: 'Collection Inbox' })).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    } finally { failure.mockRestore(); }
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
+    expect(badges.getByRole('button', { name: 'Collection Inbox' })).toBeInTheDocument();
+    const stored = (await readCards()).find(item => item.title === 'Spec checklist')!;
+    expect((await cardDb.collections.toArray()).filter(item => item.cardIds.includes(stored.id))).toHaveLength(2);
+  });
+
+  it('exposes editable PlayStation appearance presets in Settings and persists changes', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
+    expect(screen.getByRole('region', { name: 'System colors' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PS Blue' }));
+    expect(document.querySelector('.app-shell')).toHaveStyle({ '--ui-accent-primary': '#47a5ff' });
+    const background = screen.getByLabelText('Background');
+    fireEvent.change(background, { target: { value: '#101010' } });
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('duckler-appearance-v1') ?? '{}').values.background).toBe('#101010'));
+  });
   it('opens the add menu on hover and edits a card only after Save', async () => {
     render(<App />);
     fireEvent.mouseEnter(screen.getByRole('button', { name: 'Add card' }).parentElement!);
@@ -308,5 +342,3 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Open canvas' })).toBeInTheDocument();
   });
 });
-
-

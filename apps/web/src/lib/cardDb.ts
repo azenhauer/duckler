@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
-import type { CardRecord, CollectionRecord, CanvasLayout } from '@visual-library/shared';
-import { createCardFromInput, createCollectionFromInput } from '@visual-library/shared';
+import type { CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent } from '@visual-library/shared';
+import { createCardFromInput, createCollectionFromInput, createCanvasPlacement, canvasCardPosition, validateCanvasContent } from '@visual-library/shared';
 import { type Capture, hashBytes, MAX_CAPTURE_BYTES, validateCapture } from '../../../../packages/shared/src/captureProtocol';
 
 type ExtensionReceipt = { id: string; hash: string; libraryId: string; savedAt: string };
@@ -10,6 +10,10 @@ class VisualLibraryDatabase extends Dexie {
   collections!: Table<CollectionRecord, string>;
   extensionReceipts!: Table<ExtensionReceipt, string>;
   canvasLayouts!: Table<CanvasLayout, string>;
+  canvases!: Table<CanvasDocument, string>;
+  canvasPlacements!: Table<CanvasPlacement, string>;
+  canvasElements!: Table<CanvasElement, string>;
+  canvasConnectors!: Table<CanvasConnector, string>;
 
   constructor() {
     super('visual-library-db');
@@ -19,6 +23,7 @@ class VisualLibraryDatabase extends Dexie {
     });
     this.version(3).stores({ extensionReceipts: '&id, libraryId' });
     this.version(4).stores({ canvasLayouts: '&collectionId, updatedAt' });
+    this.version(5).stores({ canvases: '&id, updatedAt', canvasPlacements: '&id, canvasId, cardId', canvasElements: '&id, canvasId, anchorPlacementId', canvasConnectors: '&id, canvasId, sourceId, targetId' });
   }
 }
 
@@ -50,10 +55,32 @@ export const removeCard = async (cardId: string): Promise<void> => {
   });
 };
 
+// Change one relationship against current storage, never restore a collection snapshot.
+export const setCardCollectionMembership = async (
+  cardId: string, collectionId: string, included: boolean,
+): Promise<CollectionRecord> => cardDb.transaction('rw', cardDb.cards, cardDb.collections, async () => {
+  const card = await cardDb.cards.get(cardId);
+  const collection = await cardDb.collections.get(collectionId);
+  if (!card) throw new Error('Card no longer exists');
+  if (!collection) throw new Error('Collection no longer exists');
+  if (collection.cardIds.includes(cardId) === included) return collection;
+  const updated = {
+    ...collection,
+    cardIds: included ? [...collection.cardIds, cardId] : collection.cardIds.filter(id => id !== cardId),
+    updatedAt: new Date().toISOString(),
+  };
+  await cardDb.collections.put(updated);
+  return updated;
+});
+
 export const deleteCollection = async (collectionId: string): Promise<void> => {
-  await cardDb.transaction('rw', cardDb.collections, cardDb.canvasLayouts, async () => {
+  await cardDb.transaction('rw', [cardDb.collections, cardDb.canvasLayouts, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors], async () => {
     await cardDb.collections.delete(collectionId);
     await cardDb.canvasLayouts.delete(collectionId);
+    await cardDb.canvases.delete(collectionId);
+    await cardDb.canvasPlacements.where('canvasId').equals(collectionId).delete();
+    await cardDb.canvasElements.where('canvasId').equals(collectionId).delete();
+    await cardDb.canvasConnectors.where('canvasId').equals(collectionId).delete();
   });
 };
 
@@ -85,12 +112,85 @@ export async function importExtensionBytes(bytes: Uint8Array, expected: { id: st
       createdAt: capture.createdAt, capturePayloadHash: expected.hash,
     };
     if (!existing) await cardDb.cards.add(created);
-    if (capture.collectionName) {
-      const collection = await cardDb.collections.filter(item => item.name.toLowerCase() === capture.collectionName!.toLowerCase()).first();
-      await cardDb.collections.put(collection ? { ...collection, cardIds: [...new Set([...collection.cardIds, created.id])], updatedAt: new Date().toISOString() }
-        : createCollectionFromInput({ name: capture.collectionName, cardIds: [created.id] }));
+    const selectedIds = new Set(capture.collectionIds ?? []);
+    for (const collectionName of [...(capture.collectionNames ?? []), ...(capture.collectionName ? [capture.collectionName] : [])]) {
+      const collection = await cardDb.collections.filter(item => item.name.toLowerCase() === collectionName.toLowerCase()).first();
+      if (collection) selectedIds.add(collection.id);
+      else {
+        const createdCollection = createCollectionFromInput({ name: collectionName, cardIds: [created.id] });
+        await cardDb.collections.put(createdCollection);
+        selectedIds.add(createdCollection.id);
+      }
+    }
+    for (const collectionId of selectedIds) {
+      const collection = await cardDb.collections.get(collectionId);
+      if (collection && !collection.cardIds.includes(created.id)) await cardDb.collections.put({ ...collection, cardIds: [...collection.cardIds, created.id], updatedAt: new Date().toISOString() });
     }
     await cardDb.extensionReceipts.add({ id: capture.id, hash: expected.hash, libraryId: expected.libraryId, savedAt: new Date().toISOString() });
     return { card: created, duplicate: Boolean(existing) };
+  });
+}
+
+
+const canvasTables = () => [cardDb.collections, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors, cardDb.canvasLayouts];
+export async function readCanvasState(collectionId: string): Promise<CanvasState> {
+  return cardDb.transaction('rw', canvasTables(), async () => {
+    const collection = await cardDb.collections.get(collectionId);
+    if (!collection) throw new Error('Collection no longer exists');
+    const legacy = await cardDb.canvasLayouts.get(collectionId);
+    const now = new Date().toISOString();
+    let document = await cardDb.canvases.get(collectionId) ?? { id: collectionId, title: collection.name, createdAt: now, updatedAt: now, revision: 0, seenCardIds: [] };
+    const placements = await cardDb.canvasPlacements.where('canvasId').equals(collectionId).toArray();
+    const unseen = [...new Set(collection.cardIds)].filter(id => !document.seenCardIds.includes(id)).slice(0, Math.max(0, 200 - placements.length));
+    const added = unseen.map((id, index) => createCanvasPlacement(collectionId, id, canvasCardPosition(id, placements.length + index, legacy)));
+    if (added.length) {
+      await cardDb.canvasPlacements.bulkPut(added);
+      document = { ...document, seenCardIds: [...document.seenCardIds, ...unseen], revision: document.revision + 1, updatedAt: now };
+    }
+    document = { ...document, title: collection.name };
+    await cardDb.canvases.put(document);
+    const elements = await cardDb.canvasElements.where('canvasId').equals(collectionId).toArray();
+    const connectors = await cardDb.canvasConnectors.where('canvasId').equals(collectionId).toArray();
+    const content = { placements: [...placements, ...added], elements, connectors };
+    validateCanvasContent(collectionId, content);
+    const viewport = legacy?.viewport;
+    return { document, ...content, viewport: viewport && [viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) && viewport.zoom >= .15 && viewport.zoom <= 2 ? viewport : undefined };
+  });
+}
+
+// A complete gesture is one atomic command. Revision checks also protect undo against other tabs.
+export async function commitCanvasContent(canvasId: string, expectedRevision: number, content: CanvasContent): Promise<CanvasDocument> {
+  validateCanvasContent(canvasId, content);
+  return cardDb.transaction('rw', canvasTables(), async () => {
+    if (!await cardDb.collections.get(canvasId)) throw new Error('Collection no longer exists');
+    const document = await cardDb.canvases.get(canvasId);
+    if (!document || document.revision !== expectedRevision) throw new Error('Canvas changed elsewhere. Reload before changing it.');
+    for (const [table, objects] of [
+      [cardDb.canvasPlacements, content.placements], [cardDb.canvasElements, content.elements], [cardDb.canvasConnectors, content.connectors],
+    ] as const) {
+      // Preserve independent object records; write/delete only the objects changed by this command.
+      const current = await table.where('canvasId').equals(canvasId).toArray();
+      const incoming = new Map(objects.map(object => [object.id, object]));
+      const deleted = current.filter(object => !incoming.has(object.id)).map(object => object.id);
+      if (deleted.length) await table.bulkDelete(deleted);
+      const previous = new Map(current.map(object => [object.id, JSON.stringify(object)]));
+      for (const object of objects) {
+        const other = await table.get(object.id);
+        if (other && other.canvasId !== canvasId) throw new Error('Invalid canvas reference');
+        if (previous.get(object.id) !== JSON.stringify(object)) await (table as Table<CanvasPlacement | CanvasElement | CanvasConnector, string>).put(object);
+      }
+    }
+    const next = { ...document, revision: document.revision + 1, updatedAt: new Date().toISOString() };
+    await cardDb.canvases.put(next);
+    return next;
+  });
+}
+
+export async function saveCanvasViewport(canvasId: string, viewport: CanvasState['viewport']): Promise<void> {
+  if (!viewport || ![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) || viewport.zoom < .15 || viewport.zoom > 2) throw new Error('Invalid canvas viewport');
+  await cardDb.transaction('rw', cardDb.collections, cardDb.canvasLayouts, async () => {
+    if (!await cardDb.collections.get(canvasId)) throw new Error('Collection no longer exists');
+    const layout = await cardDb.canvasLayouts.get(canvasId);
+    await cardDb.canvasLayouts.put({ ...layout, collectionId: canvasId, positions: layout?.positions ?? {}, viewport, updatedAt: new Date().toISOString() });
   });
 }

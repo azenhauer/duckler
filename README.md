@@ -70,3 +70,10 @@ The remaining M7 release gate is external/manual: open an exported archive in an
 ## Browser extension
 
 For local unpacked installation and capture workflow instructions, see [apps/extension/README.md](./apps/extension/README.md). The extension is a development MVP; real Chrome/Edge acceptance testing is still pending.
+
+
+## Security implementation status
+
+The first private API foundation is implemented in `packages/backend` and `functions/api`, with a migration in `migrations`. It is disabled by default and is not connected to the local-first UI. Invite-only passkey/magic-link authentication, media security, sharing and privacy release gates remain pending. See [security foundation and setup](docs/security-foundation.md).
+
+Run `npm run test:security` for the real-SQL isolation/security tests. These tests require Node 22.13 or newer; Node 24 is the verified development/CI runtime. Cloudflare's app build can still use its documented Node 20 build setting; running the full security test suite requires the newer development runtime.

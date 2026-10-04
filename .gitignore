@@ -6,3 +6,11 @@ coverage
 .wrangler
 npm-debug.log*
 .tmp/
+
+# Server runtime configuration and credentials
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example

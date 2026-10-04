@@ -24,6 +24,7 @@ import {
   saveCard,
   saveCardWithCollections,
   saveCollection,
+  setCardCollectionMembership,
 } from './lib/cardDb';
 import {
   connectGoogleDrive,
@@ -38,6 +39,9 @@ import { ExtensionSetup } from './components/ExtensionSetup';
 import { Dialog } from './components/Dialog';
 import { CardEditor } from './components/CardEditor';
 import { CardActions } from './components/CardActions';
+import { CollectionBadge } from './components/CollectionBadge';
+import { AppearanceSettings } from './components/AppearanceSettings';
+import { APPEARANCE_STORAGE_KEY, appearanceStyle, loadAppearance } from './lib/appearance';
 import { NavigationIcon } from './components/NavigationIcon';
 import { InterfaceIcon } from './components/InterfaceIcon';
 import { CanvasGallery } from './components/CanvasGallery';
@@ -124,6 +128,7 @@ function App() {
     const saved = localStorage.getItem('duckler-theme-mode') ?? localStorage.getItem('visual-library-theme');
     return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'dark';
   });
+  const [appearance, setAppearance] = useState(loadAppearance);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [collectionMenuOpen, setCollectionMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -133,6 +138,7 @@ function App() {
   const [extensionStatus, setExtensionStatus] = useState(() => getExtensionConnection() ? 'Connecting extension…' : '');
   const [cardSize, setCardSize] = useState(() => localStorage.getItem('duckler-card-size') ?? 'comfortable');
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [quickAddPosition, setQuickAddPosition] = useState<{ left: number; top: number } | null>(null);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<{ usageMb: number; quotaMb: number; persisted: boolean } | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -142,6 +148,15 @@ function App() {
   const [composerSaving, setComposerSaving] = useState(false);
   const [composerError, setComposerError] = useState('');
   const [newlyCreatedCardId, setNewlyCreatedCardId] = useState<string | null>(null);
+  const [removingCardIds, setRemovingCardIds] = useState<string[]>([]);
+  const [undoMembership, setUndoMembership] = useState<{ cardId: string; collection: CollectionRecord } | null>(null);
+  const [membershipSaving, setMembershipSaving] = useState(false);
+  const membershipSavingRef = useRef(false);
+  useEffect(() => {
+    if (!undoMembership || membershipSaving) return;
+    const timeout = window.setTimeout(() => setUndoMembership(null), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [undoMembership, membershipSaving]);
   const composerSavingRef = useRef(false);
   const searchBarRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLElement>(null);
@@ -152,9 +167,16 @@ function App() {
   const cardComposerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
   const collectionMenuRef = useRef<HTMLDivElement | null>(null);
+  const collectionsRef = useRef<CollectionRecord[]>([]);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const imagePickerRef = useRef<HTMLInputElement | null>(null);
   const cardComposerWasOpenRef = useRef(false);
+
+  useEffect(() => { collectionsRef.current = collections; }, [collections]);
+
+  useEffect(() => {
+    localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(appearance));
+  }, [appearance]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('visual-library-theme');
@@ -358,7 +380,7 @@ function App() {
         setCards(nextCards);
         if (nextCollections.length) setCollections(nextCollections);
       });
-    }, setExtensionStatus);
+    }, setExtensionStatus, () => collectionsRef.current.map(collection => ({ id: collection.id, name: collection.name, cardCount: collection.cardIds.length })));
     return () => { disposed = true; stop(); };
   }, [extensionConnectionVersion]);
 
@@ -456,7 +478,7 @@ function App() {
   }, [cardComposerOpen]);
 
   useEffect(() => {
-    if (!addMenuOpen && !collectionMenuOpen && !profileOpen) {
+    if (!addMenuOpen && !collectionMenuOpen && !profileOpen && !quickAddPosition) {
       return;
     }
 
@@ -473,6 +495,7 @@ function App() {
       if (profileOpen && !profileMenuRef.current?.contains(event.target)) {
         setProfileOpen(false);
       }
+      if (quickAddPosition) setQuickAddPosition(null);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') {
@@ -488,6 +511,7 @@ function App() {
       if (profileOpen) {
         setProfileOpen(false);
       }
+      if (quickAddPosition) setQuickAddPosition(null);
     };
 
     document.addEventListener('pointerdown', closeOnOutsideClick);
@@ -496,7 +520,7 @@ function App() {
       document.removeEventListener('pointerdown', closeOnOutsideClick);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [addMenuOpen, collectionMenuOpen, profileOpen]);
+  }, [addMenuOpen, collectionMenuOpen, profileOpen, quickAddPosition]);
 
   useEffect(() => {
     localStorage.setItem('visual-library-capture-queue', JSON.stringify(captureQueue));
@@ -761,17 +785,56 @@ function App() {
   const handleDelete = async (cardId: string) => {
     const card = cards.find(item => item.id === cardId);
     if (!card || !window.confirm(`Delete “${card.title}” permanently? This cannot be undone.`)) return;
-    setCollections((current) =>
-      current.map((collection) => ({
-        ...collection,
-        cardIds: collection.cardIds.filter((id) => id !== cardId),
-        updatedAt: new Date().toISOString(),
-      })),
-    );
-    setSelectedCardIds((current) => current.filter((id) => id !== cardId));
-    await removeCard(cardId);
-    setCards((current) => current.filter((card) => card.id !== cardId));
+    setRemovingCardIds(current => current.includes(cardId) ? current : [...current, cardId]);
     if (selectedId === cardId) setSelectedId(null);
+    await new Promise(resolve => window.setTimeout(resolve, 180));
+    try {
+      setCollections((current) =>
+        current.map((collection) => ({
+          ...collection,
+          cardIds: collection.cardIds.filter((id) => id !== cardId),
+          updatedAt: new Date().toISOString(),
+        })),
+      );
+      setSelectedCardIds((current) => current.filter((id) => id !== cardId));
+      await removeCard(cardId);
+      setCards((current) => current.filter((card) => card.id !== cardId));
+    } finally {
+      setRemovingCardIds(current => current.filter(id => id !== cardId));
+    }
+  };
+
+  const changeMembership = async (cardId: string, collectionId: string, included: boolean) => {
+    if (membershipSavingRef.current) return;
+    const collection = collections.find(item => item.id === collectionId);
+    if (!collection || collection.cardIds.includes(cardId) === included) return;
+    const previousUndo = undoMembership;
+    const applyRelationship = (item: CollectionRecord, present: boolean) => ({
+      ...item,
+      cardIds: present ? [...new Set([...item.cardIds, cardId])] : item.cardIds.filter(id => id !== cardId),
+    });
+    membershipSavingRef.current = true;
+    setMembershipSaving(true);
+    setShareNotice(null);
+    setCollections(current => current.map(item => item.id === collectionId ? applyRelationship(item, included) : item));
+    try {
+      const saved = await setCardCollectionMembership(cardId, collectionId, included);
+      setCollections(current => current.map(item => item.id === collectionId ? saved : item));
+      setUndoMembership(included ? null : { cardId, collection: saved });
+    } catch (error) {
+      setCollections(current => current.map(item => item.id === collectionId ? applyRelationship(item, !included) : item));
+      setUndoMembership(previousUndo);
+      setShareNotice(error instanceof Error && ['Card no longer exists', 'Collection no longer exists'].includes(error.message)
+        ? error.message : "Couldn't update card. Try again.");
+    } finally {
+      membershipSavingRef.current = false;
+      setMembershipSaving(false);
+    }
+  };
+
+  const handleRemoveFromCollection = (cardId: string, collectionId: string) => changeMembership(cardId, collectionId, false);
+  const handleUndoMembership = async () => {
+    if (undoMembership) await changeMembership(undoMembership.cardId, undoMembership.collection.id, true);
   };
 
   const handleBulkAddToCollection = async (collectionId: string) => {
@@ -828,6 +891,15 @@ function App() {
     setComposerSourceOpen(type === 'bookmark');
     setComposerCollectionsOpen(false);
     setCardComposerOpen(true);
+  };
+
+  const openQuickAddMenu = (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('input,textarea,select,button,a,[contenteditable="true"],article,.card-collection-pills')) return;
+    if ('preventDefault' in event) event.preventDefault();
+    const point = 'clientX' in event ? { x: event.clientX, y: event.clientY } : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    setAddMenuOpen(false);
+    setQuickAddPosition({ left: Math.max(12, Math.min(point.x, window.innerWidth - 250)), top: Math.max(12, Math.min(point.y, window.innerHeight - 220)) });
   };
 
   const syncStatus = createDriveStatus(driveConnected, syncState);
@@ -943,7 +1015,7 @@ function App() {
   </button>;
 
   return (
-    <main className="app-shell" aria-busy={!libraryLoaded} style={{ '--profile-accent': profileCardColor } as CSSProperties}>
+    <main className="app-shell" aria-busy={!libraryLoaded} onContextMenu={openQuickAddMenu} onKeyDown={event => { if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) openQuickAddMenu(event); }} style={{ '--profile-accent': profileCardColor, ...appearanceStyle(appearance.values) } as CSSProperties}>
       <button type="button" className="mobile-menu-toggle" onClick={() => setMobileSidebarOpen((current) => !current)} aria-label="Toggle navigation">
         ☰
       </button>
@@ -961,17 +1033,17 @@ function App() {
         </div>
 
         <label className="sidebar-search" aria-label="Search library">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 11.1l4.3 4.3 1.4-1.4-4.3-4.3A6.5 6.5 0 1 1 10.5 4Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" fill="currentColor"/></svg>
+          <InterfaceIcon name="search" />
           <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search your library" />
         </label>
 
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <button type="button" className="nav-item active">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Zm2 1.5v10h12V7H6Zm2 2h8v2H8V9Zm0 4h6v2H8v-2Z" fill="currentColor"/></svg>
+            <NavigationIcon name="library" />
             <span>Library</span>
           </button>
           <button type="button" className="nav-item">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v9A2.5 2.5 0 0 1 16.5 19h-9A2.5 2.5 0 0 1 5 16.5v-9Zm2.5-.5a.5.5 0 0 0-.5.5v9c0 .3.2.5.5.5h9a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-9Zm1.5 2h6v2h-6V9Zm0 4h4v2h-4v-2Z" fill="currentColor"/></svg>
+            <NavigationIcon name="canvas" />
             <span>Canvases</span>
           </button>
         </nav>
@@ -1130,7 +1202,7 @@ function App() {
                   const menu = event.currentTarget;
                   window.setTimeout(() => { if (!menu.matches(':hover')) menu.open = false; }, 140);
                 }}>
-              <summary aria-label="View options" title="View options"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg></summary>
+              <summary aria-label="View options" title="View options"><InterfaceIcon name="more" /></summary>
               <div className="library-options-popover">
                 <label className="option-field">
                   <span>Type</span>
@@ -1308,7 +1380,7 @@ function App() {
               : null;
 
             return (
-              <div className={`library-card ${newlyCreatedCardId === card.id ? 'is-new' : ''}`} key={card.id}>
+              <div className={`library-card ${newlyCreatedCardId === card.id ? 'is-new' : ''} ${removingCardIds.includes(card.id) ? 'is-removing' : ''}`} key={card.id}>
                 <div className="tile-header">
                   <input
                     type="checkbox"
@@ -1363,14 +1435,14 @@ function App() {
                 </div>
               </article>
               {collections.some(collection => collection.cardIds.includes(card.id)) && <div className="card-collection-pills">
-                {collections.filter(collection => collection.cardIds.includes(card.id)).map(collection => <button type="button" key={collection.id} onClick={() => navigateTo('library', collection.id)}><NavigationIcon name="collections" />{collection.name}</button>)}
+                {collections.filter(collection => collection.cardIds.includes(card.id)).map(collection => <CollectionBadge key={collection.id} collection={collection} onOpen={() => navigateTo('library', collection.id)} onRemove={() => void handleRemoveFromCollection(card.id, collection.id)} />)}
               </div>}
               </div>
             );
           })}
         </div>}
 
-        {activeView === 'library' && selectedCard ? (
+        {(activeView === 'library' || activeView === 'canvas') && selectedCard ? (
           <CardEditor key={selectedCard.id} card={selectedCard} collections={collections} onClose={() => setSelectedId(null)}
             onTrash={() => { void handleToggleTrash(selectedCard.id); setSelectedId(null); }}
             onDelete={() => { void handleDelete(selectedCard.id); }}
@@ -1409,7 +1481,7 @@ function App() {
         )}
 
         {activeView === 'canvas' && (selectedCanvas
-          ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} />
+          ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} />
           : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} />)}
 
         <div className="sync-panel panel">
@@ -1553,8 +1625,18 @@ function App() {
             {(['light', 'dark', 'system'] as const).map(mode => <button type="button" key={mode} aria-pressed={themeMode === mode} onClick={() => setThemeMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
           </div>
         </div>
+        <AppearanceSettings value={appearance} onChange={setAppearance} />
       </Dialog>}
       {extensionSetupOpen && <ExtensionSetup onClose={() => setExtensionSetupOpen(false)} onConnected={() => setExtensionConnectionVersion(current => current + 1)} />}
+      {undoMembership && <div className="membership-undo" role="status"><span>Removed from {undoMembership.collection.name}</span><button type="button" disabled={membershipSaving} onClick={() => void handleUndoMembership()}>Undo</button></div>}
+      {quickAddPosition && <div className="quick-add-context" role="menu" aria-label="Quick add" style={{ left: quickAddPosition.left, top: quickAddPosition.top }}>
+        <strong>Quick add</strong>
+        <button type="button" role="menuitem" onClick={() => { navigateTo('library'); setQuickAddPosition(null); setCollectionMenuOpen(true); }}><NavigationIcon name="collections" />Collection</button>
+        <button type="button" role="menuitem" onClick={() => { navigateTo('canvas'); setQuickAddPosition(null); }}><NavigationIcon name="canvas" />Canvas</button>
+        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); handleQuickAddCard('bookmark'); }}><InterfaceIcon name="link" />Link</button>
+        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); imagePickerRef.current?.click(); }}><InterfaceIcon name="upload" />Upload</button>
+        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); handleQuickAddCard('text'); }}><InterfaceIcon name="note" />Note</button>
+      </div>}
       <div className={`add-menu ${addMenuOpen ? 'is-open' : ''}`} ref={addMenuRef} onMouseEnter={() => setAddMenuOpen(true)} onMouseLeave={event => {
         const menu = event.currentTarget;
         window.setTimeout(() => { if (!menu.matches(':hover')) setAddMenuOpen(false); }, 140);

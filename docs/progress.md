@@ -62,6 +62,7 @@ Verification evidence from that earlier scaffold:
 
 ## UX refinement and extension hardening (October 2026)
 
+- Local reskin pass in progress (not committed): the existing navigation and card architecture now has an isolated Sony / PlayStation-era token layer, a smooth center-lit CRT charcoal surface without texture overlays, restrained interaction motion, angled card selection details, external card action styling, and matching extension popup material. Settings includes live editable appearance presets and per-user color tokens; review is pending before commit.
 - Card selection, edit, move, and delete controls now sit in a reserved row above the card. Hover/focus reveals background-free icons; touch keeps them visible. Move and permanent delete are direct buttons, with only a destination picker for movement. Moving atomically replaces prior collection memberships; permanent deletion retains its confirmation.
 - The floating + menu opens on hover or keyboard focus, with a pointer bridge to its menu. Cards reveal an explicit Edit button and larger options target on hover/focus; touch keeps both visible. Card editing now uses the supplied compact pill-toolbar reference, a large note area, optional source/collection controls, and explicit Save. Card edits and collection membership commit atomically; closing without Save discards edits.
 - Screenshot review and toolbar capture now offer editable Title and optional Collection fields without the extra explanatory subtitles. Collection names travel in the validated capture payload; import atomically creates or reuses the named collection alongside the card and receipt. Repeated deliveries preserve later membership edits. The compact toolbar layout keeps Save and footer controls within the visible popup.
@@ -71,7 +72,7 @@ Verification evidence from that earlier scaffold:
 - npm workspaces remain the monorepo toolchain. Both extension and app build locally.
 - The refs workspace is centered, defaults to dark, uses bundled/offline-cached Inter, and uses the supplied duck artwork without a header wordmark.
 - Cards have natural image proportions, rounded corners, compact captions and external collection pills. Profile hover is read-only; editing and connections live in Settings.
-- Home always keeps search and distinct animated Collections/Canvas launchers, with filled icons and the complete bottom dock. Empty libraries remain empty; filtering controls are text-first and only appear inside all notes or a collection. Internal pages have back navigation.
+- Home always keeps search and distinct animated Collections/Canvas launchers, with reconstructed outline icons and the complete bottom dock. Empty libraries remain empty; filtering controls are text-first and only appear inside all notes or a collection. Internal pages have back navigation.
 - Search follows scrolling with a floating treatment and limited card clearance (6 px desktop, 3 px phone). Reduced-motion preferences disable ornamental movement.
 - Browser checks cover 320/360/390/414/768/1024 px, landscape, menu bounds, editor Save visibility, modal dismissal, empty state and scroll behavior. Automated unit/integration coverage passes for durable capture queues, defensive origins, receipt replay and atomic note/collection saves.
 - Google Drive authorization and synchronization implementation were not changed in this pass.
@@ -93,3 +94,47 @@ To finish the M5b validation gate, provide:
 3. A second device or browser profile for the cross-device sync test.
 
 After those are available, run the desktop + notebook sequence described in the specification: create/open the library, edit offline, reconnect in either order, and verify convergence with preserved conflicts.
+
+
+## Completion specification kickoff — October 4, 2026
+
+- Added the supplied feature and security/privacy specifications to docs as requirement references, with scope and pending release gates in `docs/completion-roadmap.md`. They are product documents, not agent instructions or authorization to publish.
+- Preserved the pre-existing uncommitted reskin and extension work. This increment changes local collection removal and Undo only; it does not claim backend authorization or multi-user readiness.
+- Added `setCardCollectionMembership`, a transactional update against current IndexedDB records. Removing a relationship leaves the card and other memberships intact. Undo adds only that relationship and preserves later collection edits. Missing cards/collections fail rather than being recreated.
+- Removal and Undo update optimistically; persistence failures restore the affected relationship, show a compact error and retain failed Undo for retry. Undo expires after seven seconds when idle, with timer cleanup and protection against overlapping badge/Undo requests.
+- Added four storage regression tests, an app integration test with failed Undo/retry and a focused Chromium acceptance test. Updated an existing appearance assertion to its actual accessible name and existing UI smoke expectations for hover animation completion and the current 7 px reskin corners.
+
+Verification:
+- `npm test`: 91/91 passed across 16 files.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed for extension, web and shared package; existing large-chunk advisory remains.
+- `npm run dev`: app running at http://localhost:5177 (5176 was occupied).
+- `DUCKLER_PREVIEW_URL=http://localhost:5177 node scripts/membership-smoke.mjs`: passed in real headless Chromium, including preserving a collection rename after removal, seven-second expiry, other memberships and reload persistence. Repeat with `npm run test:membership:ui` and the preview URL environment variable.
+- `npm run test:ui` against that server: removal/Undo/reload checks passed, but the broader suite stops on the existing profile preview blur assertion. Current reskin computes `blur(13px) saturate(1.15)` on the popup; the test expects `none`. Styling was preserved and this unrelated layout gate remains open.
+- Initial sandboxed test execution could not access the Windows ancestor directory used by the build helper; the authorized local verification succeeded with elevated tool execution.
+
+Next: accessible badge popovers and a shared searchable picker with inline creation. Backend identity/isolation, secure private media, sharing and Brazil-specific operational/legal review remain pending as recorded in the roadmap.
+
+
+## Security foundation increment — October 4, 2026
+
+- Implemented the first private API backend in a reusable TypeScript npm workspace (`packages/backend`) and a Cloudflare Pages route (`functions/api/[[path]].ts`). Kept the existing personal UI/Drive model intact; no automatic migration, external provisioning or deployment.
+- Added a real SQLite/D1-compatible migration for private users, hashed server sessions, owner-scoped cards/collections and indexed many-to-many membership. Composite owner foreign keys reject cross-user memberships even through direct database writes; API reads/searches/updates/deletes always filter by session owner. D1 has no PostgreSQL RLS; direct privileged database reads remain an operational trust boundary.
+- Added 256-bit opaque Secure/HttpOnly/SameSite=Strict host cookies, hash-only session storage, idle/absolute expiry, disabled-account denial, logout and revoke-all-session invalidation. Session issuance is an internal helper only; there is no username login, public session issuance, authentication bypass or open registration.
+- Added exact-origin mutation checks, cross-site rejection, streaming JSON limits, strict fields, safe URL schemes, generic errors, private/no-store responses, API-only CSP and production HSTS. Excluded API navigation from offline shell fallback. Added ignored server env/secret files and a disabled configuration example.
+- The API fails closed without all required settings and a database binding. It remains disabled by default until invite-based trusted authentication is implemented. Uploads/sharing and other private object routes are unavailable.
+- Added commit-pinned, read-only GitHub Actions checks for tests, type checks, lint, builds and runtime dependency scanning. Remote CI/branch protections have not yet been exercised.
+- Documented scope, configuration, runtime requirements and open security/privacy gates in `docs/security-foundation.md`; updated the completion roadmap and README.
+
+Verification:
+- `npm run test:security`: 14/14 passed against a real in-memory SQLite database with a D1 transport adapter; includes cross-user denial, membership constraints, session expiry/revocation, CSRF/origins, unsafe configuration, invalid input, cache headers and error redaction.
+- `npm test`: 105/105 passed in 17 files, including existing local feature tests.
+- `npm run typecheck`: passed, including the Pages TypeScript entry point.
+- `npm run lint`: passed.
+- `npm run build`: passed for extension, app, shared and backend workspaces; existing Vite chunk-size advisory remains.
+- Bundled `functions/api/[[path]].ts` with the existing esbuild runtime successfully for the browser/Worker target (local output in ignored `.tmp`). This is compile verification, not a deployed Cloudflare/D1 acceptance test.
+- Existing local app responded HTTP 200 at http://localhost:5177. Its UI still uses the personal local library.
+- `git diff --check`: passed.
+
+Remaining: trusted invite-only passkey/magic-link onboarding, rate limits/audit/reauthentication, frontend/extension identity and account-switch cache isolation, private uploads, sharing, remaining objects, account rights, full app CSP and operational/Brazil/minors release gates. Do not describe this increment as complete authentication, a secure multi-user release or legal compliance.

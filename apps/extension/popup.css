@@ -78,6 +78,39 @@ body:not(.settings-page) #note-text { min-height:88px; }
 body:not(.settings-page) .tag-field { margin:10px 0 14px; }
 body:not(.settings-page) .tag-field input { min-height:38px; padding:9px 12px; }
 body:not(.settings-page) footer { margin-top:8px; padding-top:8px; }
+
+/* Duckler / PlayStation system material */
+:root { --ps-bg:#0b0d0f; --ps-surface:#14181c; --ps-alt:#1a1f24; --ps-text:#e8ebed; --ps-muted:#a8b0b7; --ps-line:#536978; --ps-accent:#7cbcff; --ps-glow:#4a9eff; }
+body { color:var(--ps-text); background:radial-gradient(ellipse at 50% 40%,#171b1f 0%,#111417 42%,#0c0f11 72%,#080a0c 100%); }
+body::before { display:none; }
+main { position:relative; z-index:1; }
+.brand { min-height:38px; }.extension-mark { filter:drop-shadow(0 0 7px #4a9eff66); color:#b9d8f3; }
+.settings-link { color:var(--ps-muted); border:1px solid #53697852; border-radius:4px; background:#14181ccc; box-shadow:inset 0 1px 0 #ffffff0b; }
+.settings-link:hover { color:var(--ps-text); background:var(--ps-alt); }
+.tabs { border-bottom-color:#53697838; }.tab { border-radius:3px; color:var(--ps-muted); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }.tab.active { color:var(--ps-text); background:#1a1f2499; border-color:#53697838; box-shadow:0 0 11px #4a9eff1c; }
+.page-preview { background:transparent; }.eyebrow { color:var(--ps-accent); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }.page-preview h1 { font-weight:500; letter-spacing:.02em; }.page-preview p { color:var(--ps-muted); }
+.capture-modes { padding:3px; border:1px solid #53697832; border-radius:4px; background:#14181cc7; }.mode,.mode.active { margin:0; border-radius:3px; color:var(--ps-muted); transition:color 140ms ease,background-color 140ms ease,transform 140ms ease; }.mode.active { color:var(--ps-text); background:#1a1f24; box-shadow:inset 0 1px 0 #ffffff0b,0 0 10px #4a9eff16; }.mode:hover { color:var(--ps-text); transform:translateY(-1px); }.mode svg { stroke:var(--ps-accent); }
+textarea,input { border-color:#53697845; border-radius:4px; background:#14181ccc; color:var(--ps-text); box-shadow:inset 0 2px 8px #0004; }.note-label,.tag-field>span { color:var(--ps-muted); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.1em; text-transform:uppercase; }.capture-fields { gap:8px; }.capture-fields input { margin-top:5px!important; }.capture-fields label { font-size:10px; }.save-button { border-color:#9fc8e566; border-radius:3px; background:linear-gradient(180deg,#c6def1,#75a5ce); color:#07101a; box-shadow:0 0 12px #4a9eff18; }.save-button:hover { background:linear-gradient(180deg,#e3f2ff,#8dbbe2); }.region-button { border-radius:3px; border-color:#53697852; background:#14181c; color:var(--ps-accent); }
+.quiet-hint,#status,footer { color:var(--ps-muted); } footer { border-top-color:#53697838; }
+.subtle-button { border-radius:3px; border-color:#53697852; background:#14181c; }.subtle-button:hover { border-color:#8dbbe2; }
+.settings-page { max-width:640px; }.settings-page h1 { font-family:'Arial Narrow',Inter,sans-serif; letter-spacing:.04em; }.settings-page form,.settings-page section { border-top:1px solid #53697832; }
+.collection-picker { position:relative; display:block; min-width:0; }
+.collection-picker-toggle { width:100%; min-height:38px; padding:9px 12px; border:1px solid #53697845; border-radius:4px; background:#14181ccc; color:var(--ps-muted); text-align:left; font-size:13px; }
+.collection-picker-toggle[aria-expanded=true] { color:var(--ps-text); border-color:var(--ps-accent); }
+.collection-chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+.collection-chip { padding:3px 7px; border:1px solid #53697852; border-radius:3px; background:#1a1f24; color:var(--ps-text); font-size:10px; }
+.collection-picker-popover { position:absolute; right:0; left:0; top:calc(100% + 5px); z-index:20; display:grid; gap:7px; padding:8px; border:1px solid #53697866; border-radius:4px; background:#111416f5; box-shadow:0 18px 40px #000b; }
+.collection-picker-popover[hidden] { display:none; }
+.collection-picker-popover > input { min-height:34px; padding:7px 9px; }
+.collection-list { display:grid; gap:2px; max-height:150px; overflow:auto; }
+.collection-option { display:grid; grid-template-columns:18px 1fr auto; align-items:center; gap:6px; padding:7px; border:0; border-radius:3px; background:transparent; color:var(--ps-muted); text-align:left; font-size:11px; }
+.collection-option:hover,.collection-option[aria-selected=true] { background:#1a1f24; color:var(--ps-text); }
+.collection-checkmark { color:var(--ps-accent); font-weight:700; }
+.collection-option small { color:#7b8994; font-size:9px; }
+.collection-empty { padding:7px; color:var(--ps-muted); font-size:11px; }
+.collection-create { display:grid; gap:5px; padding-top:7px; border-top:1px solid #53697838; }
+.collection-create button { padding:7px; border:0; background:transparent; color:var(--ps-accent); text-align:left; font-size:11px; }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition-duration:80ms!important; } }
 #capture-title,#capture-collection { margin-bottom:12px; padding:10px 12px; font-size:13px; }
 body:not(.settings-page) .page-preview { margin-bottom:10px; }
 body:not(.settings-page) .tabs { margin-bottom:10px; }
@@ -87,3 +120,13 @@ body:not(.settings-page) #note-text { min-height:70px; }
 .capture-fields input { margin-top:6px; margin-bottom:0!important; }
 body:not(.settings-page) .page-preview h1 { display:none; }
 body:not(.settings-page) main { padding-top:12px; }
+
+.mode { position:relative; }
+.mode::after { content:''; position:absolute; right:12%; bottom:3px; left:12%; height:1px; background:var(--ps-accent); opacity:0; transform:scaleX(.35); transform-origin:center; transition:opacity 160ms ease,transform 160ms ease; }
+.mode.active::after { opacity:1; transform:scaleX(1); }
+.page-preview,.capture-modes,.capture-fields,.save-actions,#status { animation:popup-content-in 180ms ease both; }
+.capture-fields { animation-delay:35ms; }.save-actions { animation-delay:70ms; }
+@keyframes popup-content-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+#status { transition:opacity 160ms ease,color 160ms ease; }
+.save-button:active { filter:brightness(1.16); transform:translateY(0); }
+@media (prefers-reduced-motion:reduce) { .page-preview,.capture-modes,.capture-fields,.save-actions,#status { animation:none; }.mode::after { transition:none; }.save-button:active { transform:none; } }

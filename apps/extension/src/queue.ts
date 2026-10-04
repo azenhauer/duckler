@@ -3,13 +3,16 @@ import { CAPTURE_CHUNK_BYTES, MAX_CAPTURE_BYTES, MAX_QUEUE_BYTES, MAX_QUEUE_ITEM
 
 type QueueRow = CaptureMetadata & { bytes: Uint8Array };
 type Receipt = { id: string; hash: string; libraryId: string; receivedAt: string };
+export type CollectionMetadata = { id: string; name: string; cardCount?: number };
 export class CaptureQueue extends Dexie {
   captures!: Table<QueueRow, string>;
   receipts!: Table<Receipt, string>;
   settings!: Table<{ key: string; value: Pairing }, string>;
+  collectionMetadata!: Table<{ libraryId: string; collections: CollectionMetadata[] }, string>;
   constructor(name = 'duckler-extension-captures') {
     super(name);
     this.version(1).stores({ captures: '&id, createdAt, libraryId', receipts: '&id, receivedAt', settings: '&key' });
+    this.version(2).stores({ collectionMetadata: '&libraryId' });
   }
   async pairing() { return (await this.settings.get('pairing'))?.value; }
   async pair(pairing: Pairing) {
@@ -60,5 +63,11 @@ export class CaptureQueue extends Dexie {
   }
   async metadata() {
     return (await this.captures.orderBy('createdAt').toArray()).map(({ bytes: _bytes, ...meta }) => meta);
+  }
+  async saveCollectionMetadata(libraryId: string, collections: CollectionMetadata[]) {
+    await this.collectionMetadata.put({ libraryId, collections });
+  }
+  async readCollectionMetadata(libraryId: string) {
+    return (await this.collectionMetadata.get(libraryId))?.collections ?? [];
   }
 }

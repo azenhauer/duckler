@@ -51,13 +51,13 @@ try {
   assert.equal(await page.locator('.canvas-card-node').getByText('Only Research').count(), 0);
   await page.locator('.canvas-card-node').getByText('Only Studio').waitFor();
   const dragSharedCard = async (dx, dy) => {
-    const card = page.locator('.react-flow__node[data-id="shared-ref"]');
+    const card = page.locator('.react-flow__node:has(.canvas-card-node[data-card-id="shared-ref"])');
     const bounds = await card.boundingBox();
     await page.mouse.move(bounds.x + 35, bounds.y + 35);
     await page.mouse.down(); await page.mouse.move(bounds.x + 35 + dx, bounds.y + 35 + dy, { steps: 12 }); await page.mouse.up();
     await page.waitForFunction(async () => {
       const { cardDb } = await import('/src/lib/cardDb.ts');
-      return Boolean((await cardDb.canvasLayouts.get(document.querySelector('.canvas-panel').getAttribute('data-collection-id')))?.positions['shared-ref']);
+      return (await cardDb.canvasPlacements.where('canvasId').equals(document.querySelector('.canvas-panel').getAttribute('data-collection-id')).toArray()).some(item => item.cardId === 'shared-ref' && item.x !== 0);
     });
     return card.evaluate(el => el.style.transform);
   };
@@ -70,15 +70,15 @@ try {
   const researchTransform = await dragSharedCard(-50, 90);
   assert.notEqual(studioTransform, researchTransform, 'The shared card has independent positions');
   const layouts = await page.evaluate(async () => {
-    const { cardDb } = await import('/src/lib/cardDb.ts'); return cardDb.canvasLayouts.toArray();
+    const { cardDb } = await import('/src/lib/cardDb.ts'); return { layouts: await cardDb.canvasLayouts.toArray(), placements: await cardDb.canvasPlacements.toArray() };
   });
-  assert.notDeepEqual(layouts.find(layout => layout.collectionId === 'studio').positions['shared-ref'], layouts.find(layout => layout.collectionId === 'research').positions['shared-ref']);
-  assert.ok(layouts.every(layout => layout.viewport?.zoom > 0), 'Each canvas persists its viewport');
+  assert.notDeepEqual(layouts.placements.find(item => item.canvasId === 'studio' && item.cardId === 'shared-ref').x, layouts.placements.find(item => item.canvasId === 'research' && item.cardId === 'shared-ref').x);
+  assert.ok(layouts.layouts.every(layout => layout.viewport?.zoom > 0), 'Each canvas persists its viewport');
   await page.reload();
   await page.getByRole('button', { name: 'Open canvas', exact: true }).click();
   await page.getByRole('button', { name: 'Open canvas Studio', exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll('.react-flow__node-card').length === 2);
-  assert.equal(await page.locator('.react-flow__node[data-id="shared-ref"]').evaluate(el => el.style.transform), studioTransform, 'Studio positions survive reload');
+  assert.equal(await page.locator('.react-flow__node:has(.canvas-card-node[data-card-id="shared-ref"])').evaluate(el => el.style.transform), studioTransform, 'Studio positions survive reload');
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: fileURLToPath(new URL('canvas-mobile.png', output)), animations: 'disabled' });

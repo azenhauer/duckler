@@ -13,6 +13,8 @@ export type Capture = {
   sourceUrl?: string;
   note?: string;
   collectionName?: string;
+  collectionIds?: string[];
+  collectionNames?: string[];
   payload?: string;
   tags?: string[];
   createdAt: string;
@@ -52,12 +54,14 @@ export function validateCapture(value: unknown): Capture {
   const note = typeof c.note === 'string' ? c.note : '';
   if (note.length > 100_000) throw new Error('Capture note is too long.');
   if (c.collectionName !== undefined && (typeof c.collectionName !== 'string' || c.collectionName.length > 200)) throw new Error('Collection name must be at most 200 characters.');
+  const collectionIds = Array.isArray(c.collectionIds) ? c.collectionIds.filter((id): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,200}$/.test(id)).slice(0, 100) : [];
+  const collectionNames = Array.isArray(c.collectionNames) ? c.collectionNames.filter((name): name is string => typeof name === 'string' && Boolean(name.trim())).slice(0, 100).map(name => name.trim().slice(0, 200)) : [];
   const payload = typeof c.payload === 'string' ? c.payload : '';
   if (['image', 'screenshot'].includes(String(c.kind)) && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(payload)) {
     throw new Error('Image capture must contain PNG, JPEG, or WebP data.');
   }
   return {
-    id: c.id, kind: c.kind as Capture['kind'], title: c.title.trim(), sourceUrl, note, payload, collectionName: typeof c.collectionName === 'string' ? c.collectionName.trim() : undefined,
+    id: c.id, kind: c.kind as Capture['kind'], title: c.title.trim(), sourceUrl, note, payload, collectionName: typeof c.collectionName === 'string' ? c.collectionName.trim() : undefined, collectionIds, collectionNames,
     tags: Array.isArray(c.tags) ? c.tags.filter((tag): tag is string => typeof tag === 'string' && Boolean(tag.trim())).slice(0, 100).map(tag => tag.trim().slice(0, 100)) : [],
     createdAt: c.createdAt,
   };

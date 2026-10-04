@@ -1,5 +1,5 @@
 import { CAPTURE_CHUNK_BYTES, CAPTURE_PROTOCOL, bytesToBase64, type Pairing } from '../../../packages/shared/src/captureProtocol';
-import { CaptureQueue } from './queue';
+import { CaptureQueue, type CollectionMetadata } from './queue';
 
 export function validateSender(sender: { url?: string; frameId?: number; tab?: { id?: number } }, pairing: Pairing | undefined) {
   if (!pairing || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) || !sender.url || new URL(sender.url).origin !== pairing.origin) {
@@ -14,6 +14,10 @@ export async function bridgeRequest(queue: CaptureQueue, sender: Parameters<type
     throw new Error('Library connection does not match. Connect the extension again.');
   }
   if (message.type === 'hello' || (message.type === 'list' && authenticated)) {
+    if (message.type === 'hello' && Array.isArray(message.collections)) {
+      const collections = message.collections.filter((item): item is CollectionMetadata => Boolean(item) && typeof item === 'object' && typeof (item as Record<string, unknown>).id === 'string' && typeof (item as Record<string, unknown>).name === 'string').slice(0, 500);
+      await queue.saveCollectionMetadata(pairing.libraryId, collections);
+    }
     return { items: (await queue.metadata()).filter(item => item.libraryId === pairing.libraryId) };
   }
   if (!authenticated) throw new Error('Connect the library before requesting captures.');

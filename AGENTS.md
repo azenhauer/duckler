@@ -5,3 +5,5 @@
 - Prefer small, test-backed increments and keep shared packages reusable.
 - Run the app and tests locally before concluding work.
 - Keep instructions in this file aligned with the documented project milestones.
+
+- Follow the supplemental increments and multi-user release gates in `docs/completion-roadmap.md`; local functionality does not satisfy backend authorization or student-rollout acceptance.

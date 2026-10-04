@@ -8,8 +8,8 @@ export function CardActions({ title, collections, onEdit, onMove, onDelete }: { 
   const [error, setError] = useState('');
   return <div className="card-external-actions" role="group" aria-label={`Actions for ${title}`}>
     <button type="button" aria-label={`Edit ${title}`} title="Edit" onClick={onEdit}><InterfaceIcon name="edit" /></button>
-    <div className="card-move-control">
-      <button type="button" aria-label={`Move ${title} to collection`} title="Move to collection" aria-expanded={open} onClick={() => setOpen(!open)}><InterfaceIcon name="move" /></button>
+    <div className="card-move-control" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" aria-label={`Move ${title} to collection`} title="Move to collection" aria-expanded={open} onFocus={() => setOpen(true)} onClick={() => setOpen(true)}><InterfaceIcon name="move" /></button>
       {open && <div className="card-move-menu">
         {collections.length === 0 && <span>Create a collection first.</span>}
         {collections.map(collection => <button type="button" key={collection.id} disabled={moving} onClick={async () => {

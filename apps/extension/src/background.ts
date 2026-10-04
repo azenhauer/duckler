@@ -144,6 +144,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { extensionId: chrome.runtime.id, pairing };
       }
       case 'pairing-status': return { pairing: await queue.pairing(), extensionId: chrome.runtime.id };
+      case 'list-collections': {
+        const pairing = await queue.pairing();
+        return { collections: pairing ? await queue.readCollectionMetadata(pairing.libraryId) : [] };
+      }
       default: throw new Error('Unsupported capture request.');
     }
   };

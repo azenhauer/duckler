@@ -7,6 +7,8 @@ export type ExtensionCapture = {
   payload?: string;
   tags?: string[];
   collectionName?: string;
+  collectionIds?: string[];
+  collectionNames?: string[];
   createdAt?: string;
 };
 
@@ -56,6 +58,8 @@ export const parseExtensionCapture = (raw: string | null): ExtensionCapture | nu
     ? capture.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 100)
     : undefined;
   const collectionName = typeof capture.collectionName === 'string' ? capture.collectionName.trim().slice(0, 120) : undefined;
+  const collectionIds = Array.isArray(capture.collectionIds) ? capture.collectionIds.filter((id): id is string => typeof id === 'string' && id.length <= 200).slice(0, 100) : undefined;
+  const collectionNames = Array.isArray(capture.collectionNames) ? capture.collectionNames.filter((name): name is string => typeof name === 'string' && Boolean(name.trim())).slice(0, 100).map(name => name.trim().slice(0, 120)) : undefined;
   if (note && note.length > 100_000) throw new Error('The extension capture note is too large.');
   if (payload && payload.length > 1_500_000) throw new Error('The extension capture image is too large.');
   if ((capture.kind === 'image' || capture.kind === 'screenshot') && payload && !/^data:image\/(png|jpeg|webp);base64,/i.test(payload)) {
@@ -70,7 +74,7 @@ export const parseExtensionCapture = (raw: string | null): ExtensionCapture | nu
     note,
     payload,
     tags,
-    collectionName,
+    collectionName, collectionIds, collectionNames,
     createdAt: typeof capture.createdAt === 'string' ? capture.createdAt : undefined,
   };
 };
