@@ -45,7 +45,7 @@ For command-line publishing, authenticate once with `npx wrangler login`, build 
 
 `wrangler.jsonc` points Wrangler at `apps/web/dist`. Git-connected Pages deployments use the build settings above; no Cloudflare account or credentials are stored in this repository.
 
-Use npm for both dependency installation and the Pages build command. This repository keeps only `package-lock.json`; do not add a pnpm lockfile or configure a pnpm build command. If a Pages log says this project is configured to use npm, check the dashboard's build command and replace any old pnpm command with the npm command above, then retry the deployment. Wrangler's `vars` configure the Functions runtime; Vite's `VITE_*` values must also be supplied as build environment variables in Pages when needed.
+Use npm for both dependency installation and the Pages build command. This repository keeps only `package-lock.json`; do not add a pnpm lockfile or configure a pnpm build command. If a Pages log says this project is configured to use npm, check the dashboard's build command and replace any old pnpm command with the npm command above, then retry the deployment. Wrangler's `vars` configure the Functions runtime; keep Vite's `VITE_*` values only in the Pages build environment variables, not in Wrangler bindings. If publishing reports `Binding name 'VITE_GOOGLE_CLIENT_ID' already in use`, check for a duplicate secret/binding with that name in the affected Pages environment; keep one plain-text build variable and redeploy.
 
 ## Environment configuration
 

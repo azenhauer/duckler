@@ -15,6 +15,7 @@ describe('Pages deployment configuration', () => {
     for (const value of Object.values(config.vars ?? {})) {
       expect(typeof value).toBe('string');
     }
+    expect(Object.keys(config.vars ?? {}).filter((name) => name.startsWith('VITE_'))).toEqual([]);
   });
 
   it('uses npm consistently for the monorepo and lockfile', () => {
