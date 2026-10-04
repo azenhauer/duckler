@@ -3,4 +3,7 @@
   "name": "duckler",
   "compatibility_date": "2026-10-03",
   "pages_build_output_dir": "./apps/web/dist"
+  "vars": {
+    "VITE_GOOGLE_CLIENT_ID": 1017478034064-vui94p00vgo7trfbdvu19326f05cnc38.apps.googleusercontent.com"
+  }
 }
