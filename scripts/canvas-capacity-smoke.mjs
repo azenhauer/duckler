@@ -6,7 +6,6 @@ const baseURL = process.env.DUCKLER_PREVIEW_URL || 'http://localhost:5176';
 const sharedURL = '/@fs/' + fileURLToPath(new URL('../packages/shared/src/index.ts', import.meta.url)).replaceAll('\\', '/');
 const browser = await chromium.launch({ headless: true });
 let page;
-let profiler;
 try {
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = [];
@@ -27,7 +26,7 @@ try {
     const placements = state.placements.map((item, index) => ({ ...item, x: index % 20 * 260, y: Math.floor(index / 20) * 240 }));
     const elements = Array.from({ length: 500 }, (_, index) => ({ id: `element-${index}`, canvasId: 'capacity', kind: index % 2 ? 'stroke' : 'text', x: index % 25 * 210, y: Math.floor(index / 25) * 130, width: 180, height: 60, rotation: 0, zIndex: 1, style: defaultCanvasStyle, ...(index % 2 ? { points: [{ x: 0, y: 0 }, { x: 80, y: 50 }, { x: 180, y: 0 }] } : { text: `Annotation ${index}`, fontSize: 18 }) }));
     const connectors = placements.map((item, index) => ({ id: `edge-${index}`, canvasId: 'capacity', sourceId: item.id, targetId: placements[(index + 1) % placements.length].id, label: '', color: '#7cbcff' }));
-    await commitCanvasContent('capacity', state.document.revision, { placements, elements, connectors: [] });
+    await commitCanvasContent('capacity', state.document.revision, { placements, elements, connectors });
     await cardDb.canvasLayouts.put({ collectionId: 'capacity', positions: {}, viewport: { x: 40, y: 40, zoom: .6 }, updatedAt: new Date().toISOString() });
     let denied = false;
     try { await commitCanvasContent('capacity', state.document.revision + 1, { placements: [...placements, { ...placements[0], id: 'overflow' }], elements, connectors }); } catch (error) { denied = error.message === 'Canvas object limit reached'; }
@@ -35,8 +34,6 @@ try {
   }, sharedURL);
   await page.reload();
   await page.getByRole('button', { name: 'Open canvas', exact: true }).click();
-  profiler = await page.context().newCDPSession(page);
-  await profiler.send('Profiler.enable'); await profiler.send('Profiler.start');
   const started = Date.now();
   await page.getByRole('button', { name: 'Open canvas Capacity board', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Canvas Capacity board' })).toHaveAttribute('aria-busy', 'false', { timeout: 30000 });
@@ -56,8 +53,6 @@ try {
   assert.deepEqual(errors, []);
   console.log(`Canvas capacity passed: 200 placements, 500 mixed annotations, 200 connectors; opened in ${openedMs} ms; pan, culling and fit verified. Headless desktop fixture, not a device performance guarantee.`);
 } catch (error) {
-  const { profile } = await profiler.send('Profiler.stop');
-  console.error(profile.nodes.sort((a, b) => (b.hitCount ?? 0) - (a.hitCount ?? 0)).slice(0, 15).map(node => ({ function: node.callFrame.functionName, url: node.callFrame.url, hits: node.hitCount })));
   console.error(await page?.locator('.canvas-panel').innerText({ timeout: 3000 }).catch(() => 'Board did not respond'));
   throw error;
 } finally { await browser.close(); }

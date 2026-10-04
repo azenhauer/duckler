@@ -46,3 +46,7 @@ No collaboration, open registration, DMs or comments before the corresponding se
 ## Security implementation started — October 4, 2026
 
 The first private API foundation now exists; see [security foundation](security-foundation.md) for exact scope and configuration. Owner-scoped cards/collections/membership, hashed secure-cookie sessions, revocation/expiry, same-origin mutation protection, no-store API responses and real-SQL isolation tests are implemented. CI checks are configured. The API remains disabled by default; trusted onboarding/login and frontend migration are not implemented. All broader multi-user release gates above remain open.
+
+## Local Canvas implementation — October 4, 2026
+
+The user selected both core controls and expanded drawing tools. Both local tool sets are implemented and browser-tested; see [Canvas tools](canvas-tools.md). This includes independent references, geometry, drawing/text, card-attached annotations, connectors, atomic persistence, recovery, Undo/Redo and stale-tab protection. Canvas sync/export and server authorization remain separate pending work. Generated Home logo replacement awaits accessible image files.

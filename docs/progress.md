@@ -138,3 +138,14 @@ Verification:
 - `git diff --check`: passed.
 
 Remaining: trusted invite-only passkey/magic-link onboarding, rate limits/audit/reauthentication, frontend/extension identity and account-switch cache isolation, private uploads, sharing, remaining objects, account rights, full app CSP and operational/Brazil/minors release gates. Do not describe this increment as complete authentication, a secure multi-user release or legal compliance.
+
+## Core and expanded local Canvas — October 4, 2026
+
+- Added separate document, placement, annotation and connector stores with lazy migration of existing positions. Repeated placements reference the same card without copying content.
+- Implemented library click/drag insertion, individual/group movement, resize with optional image proportion lock, rotation, pan/zoom/fit, drawing, highlighting, shapes, editable text, connectors and labels.
+- Card-attached marks follow transforms, support detach/review, and recover together with removed placements. Card edits propagate through references; missing/trashed cards show placeholders.
+- Atomic command saves, 50-edit session Undo/Redo, cross-tab revision guards, rollback, strict object validation and limits protect saved content.
+- The capacity test identified repeated node measurement/context redraws. Batched measurements and stable node context resolved it: the complete 200-card/500-annotation/200-connector fixture opened in 1,410 ms in local headless Chromium, with culling, pan and fit verified.
+- `npm test`: 114/114 passed across 17 files. TypeScript, lint and all workspace builds passed. The existing Vite large-chunk advisory remains.
+- The running local app at http://localhost:5177 passed the Canvas gallery and expanded-tool Chromium checks, including group Undo, zoomed library drop, reload persistence, stale Undo from a real second tab and mobile viewport overflow checks.
+- Scope and usage are documented in `docs/canvas-tools.md`. Canvas sync/export, server-side ownership, real mobile/stylus acceptance and the generated Home logo assets remain pending; the security foundation stays disabled by default.

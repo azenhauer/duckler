@@ -63,7 +63,7 @@ This workspace includes the local-first library and the implemented M1–M7 mile
 
 The centered refs workspace defaults to dark mode and uses bundled Inter. Home always shows search and animated Collections/Canvas entry points, with the same shortcuts available in the bottom dock. Clicking the bottom avatar opens Settings; hovering it is read-only. The identity card has a customizable glass accent, without applying that texture to the whole popup. Empty libraries do not insert sample data.
 
-Canvas opens a collection gallery; each collection has its own cards, saved arrangement and viewport. Profile details and canvas layouts stay in the current browser and are not synced to Google Drive. Canvas layouts are not currently part of JSON/Obsidian exports. `npm run test:ui` and `npm run test:canvas:ui` verify the running app in isolated browser profiles.
+Canvas opens a collection gallery with independent card placements, drawing, text, resizing, rotation, connectors, card-attached annotations, recovery and Undo/Redo. See [Canvas tools](docs/canvas-tools.md) for controls and storage details. Profile details and Canvas content stay in the current browser and are not synced to Google Drive or included in JSON/Obsidian exports. `npm run test:canvas:ui`, `npm run test:canvas:tools` and `npm run test:canvas:capacity` verify the running app in isolated browser profiles.
 
 The remaining M7 release gate is external/manual: open an exported archive in an actual Obsidian vault and connect live sync conflict state to the conflict report. The exporter reports conflict status as unknown when no conflict snapshot is supplied.
 

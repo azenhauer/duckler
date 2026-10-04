@@ -27,8 +27,6 @@ function CardNode({ data, selected, id }: NodeProps<CanvasNode>) {
   const context = useCanvasNode();
   const placement = context.content.placements.find(item => item.id === data.objectId)!;
   const card = context.cards.get(data.cardId ?? '');
-  const updateInternals = useUpdateNodeInternals();
-  useEffect(() => { updateInternals(id); }, [id, updateInternals, placement?.rotation, placement?.width, placement?.height]);
   if (!placement) return null;
   const annotations = context.content.elements.filter(item => item.anchorPlacementId === placement.id);
   return <>
@@ -53,8 +51,6 @@ function CardNode({ data, selected, id }: NodeProps<CanvasNode>) {
 function ElementNode({ data, selected, id }: NodeProps<CanvasNode>) {
   const context = useCanvasNode();
   const element = context.content.elements.find(item => item.id === data.objectId);
-  const updateInternals = useUpdateNodeInternals();
-  useEffect(() => { updateInternals(id); }, [id, updateInternals, element?.rotation, element?.width, element?.height]);
   if (!element) return null;
   return <>
     <NodeResizer isVisible={selected && context.tool === 'select'} minWidth={10} minHeight={10} maxWidth={10000} maxHeight={10000} onResizeEnd={(_, geometry) => context.onResize(id, geometry)} />
@@ -64,6 +60,13 @@ function ElementNode({ data, selected, id }: NodeProps<CanvasNode>) {
   </>;
 }
 const nodeTypes = { card: CardNode, element: ElementNode };
+function CanvasInternals({ content }: { content: CanvasContent }) {
+  const updateInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    updateInternals([...content.placements, ...content.elements].map(item => item.id));
+  }, [content, updateInternals]);
+  return null;
+}
 const contentOf = (state: CanvasState): CanvasContent => ({ placements: state.placements, elements: state.elements, connectors: state.connectors });
 const blankContent: CanvasContent = { placements: [], elements: [], connectors: [] };
 const tools: { id: Tool; label: string }[] = [{ id: 'select', label: 'Select' }, { id: 'hand', label: 'Hand' }, { id: 'pen', label: 'Pen' }, { id: 'highlighter', label: 'Highlighter' }, { id: 'rectangle', label: 'Rectangle' }, { id: 'ellipse', label: 'Ellipse' }, { id: 'text', label: 'Text' }, { id: 'connector', label: 'Connector' }, { id: 'eraser', label: 'Eraser' }];
@@ -98,7 +101,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard 
   const [textDraft, setTextDraft] = useState<CanvasElement | null>(null);
   const [textValue, setTextValue] = useState('');
   const cardMap = useMemo(() => new Map(cards.map(card => [card.id, card])), [cards]);
-  const content = board ? contentOf(board) : blankContent;
+  const content = useMemo(() => board ? contentOf(board) : blankContent, [board]);
   const activeIds = selectedAnnotation ? [selectedAnnotation] : selected;
   const selectedPlacement = content.placements.find(item => !item.removed && selected.includes(item.id));
   const drawing = ['pen', 'highlighter', 'rectangle', 'ellipse', 'text'].includes(tool);
@@ -221,6 +224,14 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard 
     const globalIds = new Set(nodes.map(node => node.id)); return globalIds.has(connector.sourceId) && globalIds.has(connector.targetId);
   }).map(connector => ({ id: connector.id, source: connector.sourceId, target: connector.targetId, sourceHandle: 'source', targetHandle: 'target', label: connector.label, selected: selectedEdge === connector.id, style: { stroke: connector.color, strokeWidth: 2 } }));
   const hiddenCount = content.placements.filter(item => item.removed).length + content.elements.length - visibleCanvasElements(content).length + content.connectors.length - visibleCanvasConnectors(content).length;
+  // Pointer previews and node measurements must not invalidate every mounted card's context.
+  const callbacks = useRef<NodeContextValue | null>(null);
+  callbacks.current = { cards: cardMap, content, tool, aspect, onResize: updateGeometry, onEdit: onEditCard, onRestore: onRestoreCard, onText: openText,
+    onAnnotation: id => { if (tool === 'eraser') removeObjects([id], null); else setSelectedAnnotation(id); } };
+  const nodeContext = useMemo<NodeContextValue>(() => ({ cards: cardMap, content, tool, aspect,
+    onResize: (id, geometry) => callbacks.current?.onResize(id, geometry), onEdit: id => callbacks.current?.onEdit(id),
+    onRestore: id => callbacks.current?.onRestore(id), onText: element => callbacks.current?.onText(element), onAnnotation: id => callbacks.current?.onAnnotation(id),
+  }), [cardMap, content, tool, aspect]);
 
   return <div className="canvas-panel panel" role="region" aria-label={`Canvas ${collection.name}`} aria-busy={!board || saving} data-collection-id={collection.id} tabIndex={0} onKeyDown={historyKey} data-history={historyVersion}>
     {error && <p role="alert">{error} <button type="button" disabled={saving} onClick={() => { cancelGesture(); setReload(value => value + 1); }}>Reload canvas</button></p>}
@@ -280,8 +291,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard 
     </details>}
     <div ref={surface} className={`canvas-surface canvas-tool-${tool}`} onDragOver={event => { if (event.dataTransfer.types.includes(CANVAS_CARD_MIME)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
       onDrop={event => { event.preventDefault(); const cardId = event.dataTransfer.getData(CANVAS_CARD_MIME); if (flow.current) addCard(cardId, flow.current.screenToFlowPosition({ x: event.clientX, y: event.clientY })); }}>
-      {board && <NodeContext.Provider value={{ cards: cardMap, content, tool, aspect, onResize: updateGeometry, onEdit: onEditCard, onRestore: onRestoreCard, onText: openText,
-        onAnnotation: id => { if (tool === 'eraser') removeObjects([id], null); else setSelectedAnnotation(id); } }}>
+      {board && <NodeContext.Provider value={nodeContext}>
         <ReactFlow<CanvasNode> key={`${collection.id}-${reload}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView={!board.viewport} defaultViewport={board.viewport} minZoom={.15} maxZoom={2} onlyRenderVisibleElements
           deleteKeyCode={null} nodesDraggable={tool === 'select' && !saving} nodesConnectable={tool === 'connector' && !saving} elementsSelectable={['select', 'connector', 'eraser'].includes(tool)}
           panOnDrag={tool === 'hand' ? true : [1, 2]} selectionOnDrag={tool === 'select'} selectionKeyCode="Shift" multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
@@ -295,7 +305,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard 
           onMove={(_, next) => setViewport(next)} onMoveEnd={(_, next) => { setViewport(next);
             viewportWrites.current = viewportWrites.current.then(() => saveCanvasViewport(collection.id, next)).catch(() => setError('Canvas view could not be saved.'));
           }}>
-          <Background gap={24} color="#d6dbe1" /><Controls showInteractive={false} />
+          <CanvasInternals content={content} /><Background gap={24} color="#d6dbe1" /><Controls showInteractive={false} />
         </ReactFlow>
       </NodeContext.Provider>}
       {drawing && board && <div className="canvas-drawing-layer" aria-label="Canvas drawing surface" onPointerDown={beginGesture} onPointerMove={drawGesture} onPointerUp={endGesture} onPointerCancel={cancelGesture}>
