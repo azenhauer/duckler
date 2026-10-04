@@ -32,8 +32,11 @@ it('reviews screenshots without queuing until Save, and includes the added note'
   const { sendMessage, root } = await capture();
   expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual(['prepare-region-review']);
   (root.querySelector('textarea') as HTMLTextAreaElement).value = 'A useful reference';
+  (root.querySelector('#capture-title') as HTMLInputElement).value = 'Reference image';
+  (root.querySelector('#capture-collection') as HTMLInputElement).value = 'Inspiration';
+  expect(root.textContent).not.toContain('Your screenshot has not been sent');
   fireEvent.click(root.querySelector('button')!);
-  await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'queue-capture', capture: expect.objectContaining({ note: 'A useful reference', kind: 'screenshot' }) })));
+  await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'queue-capture', capture: expect.objectContaining({ title: 'Reference image', collectionName: 'Inspiration', note: 'A useful reference', kind: 'screenshot' }) })));
 });
 
 it('discards a screenshot without delivering it', async () => {

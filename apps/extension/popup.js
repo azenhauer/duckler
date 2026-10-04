@@ -12,6 +12,7 @@ async function initialize() {
   if (!tab?.id || !/^https?:\/\//i.test(tab.url || '')) throw new Error('Open a website to save a link or screenshot. You can still write a note.');
   const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ title: document.title, url: location.href, selection: window.getSelection()?.toString().trim() || '' }) });
   page = result.result;
+  $('#capture-title').value = page.title || tab.title || '';
   $('#page-title').textContent = page.title || tab.title || 'Untitled page';
   $('#page-domain').textContent = new URL(page.url).hostname.replace(/^www\./, '');
   $('#mode-selection').disabled = !page.selection;
@@ -29,7 +30,7 @@ function setMode(next) {
   for (const [id, selected] of [['mode-page', next === 'bookmark'], ['mode-selection', next === 'text'], ['mode-note', note]]) {
     $('#' + id).classList.toggle('active', selected); $('#' + id).setAttribute('aria-pressed', String(selected));
   }
-  if (note) $('#note-text').focus();
+  if (note) { if ($('#capture-title').value === page?.title) $('#capture-title').value = ''; $('#note-text').focus(); }
 }
 async function renderQueue() {
   const { items, budget } = await request({ type: 'list-captures' });
@@ -63,7 +64,8 @@ $('#save-page').addEventListener('click', async () => {
   saving = true; $('#save-page').disabled = true; $('#save-page').textContent = 'Saving…';
   try {
     await request({ type: 'queue-capture', capture: { kind: mode === 'note' ? 'text' : mode,
-      title: mode === 'note' ? note.slice(0, 160) : mode === 'text' ? page.selection.slice(0, 1000) : page.title || page.url,
+      collectionName: $('#capture-collection').value.trim(),
+      title: $('#capture-title').value.trim() || (mode === 'note' ? note.slice(0, 160) : mode === 'text' ? page.selection.slice(0, 1000) : page.title || page.url),
       sourceUrl: page?.url || '', note: mode === 'text' ? page.selection + (note ? '\n\n' + note : '') : note,
       tags: $('#tags').value.split(',').map(tag => tag.trim()).filter(Boolean) } });
     showStatus('Queued on this device. Ready for your library.');
@@ -101,7 +103,8 @@ $('#export-queue').addEventListener('click', async () => {
   } catch (error) { showStatus(error.message, true); }
 });
 void initialize().catch(error => {
-  $('#page-title').textContent = 'Keep a thought'; $('#page-domain').textContent = 'QUICK NOTE'; $('#mode-page').disabled = true; $('#mode-selection').disabled = true; $('#capture-region').disabled = true; setMode('note'); showStatus(error.message);
+  $('#page-title').textContent = 'Keep a thought'; $('#page-domain').textContent = 'QUICK NOTE'; $('#mode-page').disabled = true; $('#mode-selection').disabled = true; $('#capture-region').disabled = true; setMode('note'); showStatus('This page only supports notes.');
 });
 void renderQueue().catch(error => showStatus(error.message, true));
 void request({ type: 'pairing-status' }).then(({ pairing }) => { $('#connection-status').textContent = pairing ? 'Library connected' : 'Connect library'; }).catch(error => showStatus(error.message, true));
+

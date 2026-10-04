@@ -4,12 +4,24 @@ import { cardDb, importExtensionBytes } from './cardDb';
 import { hashBytes } from '../../../../packages/shared/src/captureProtocol';
 
 const capture = { id: 'capture-atomic-1', kind: 'text', title: 'Original thought', note: 'Save me', createdAt: '2026-10-04T12:00:00Z' };
-beforeEach(async () => { await cardDb.cards.clear(); await cardDb.extensionReceipts.clear(); });
+beforeEach(async () => { await cardDb.cards.clear(); await cardDb.collections.clear(); await cardDb.extensionReceipts.clear(); });
 const envelope = async () => {
   const bytes = new TextEncoder().encode(JSON.stringify(capture));
   return { bytes, metadata: { id: capture.id, hash: await hashBytes(bytes), libraryId: 'library-1' } };
 };
 describe('extension atomic import', () => {
+  it('creates or reuses the named collection and keeps duplicate imports idempotent', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ ...capture, collectionName: ' Inspiration ' }));
+    const metadata = { id: capture.id, hash: await hashBytes(bytes), libraryId: 'library-1' };
+    await importExtensionBytes(bytes, metadata);
+    await importExtensionBytes(bytes, metadata);
+    expect(await cardDb.collections.count()).toBe(1);
+    expect((await cardDb.collections.toArray())[0]).toMatchObject({ name: 'Inspiration', cardIds: [capture.id] });
+    const second = new TextEncoder().encode(JSON.stringify({ ...capture, id: 'capture-second', collectionName: 'inspiration' }));
+    await importExtensionBytes(second, { ...metadata, id: 'capture-second', hash: await hashBytes(second) });
+    expect(await cardDb.collections.count()).toBe(1);
+    expect((await cardDb.collections.toArray())[0].cardIds).toEqual([capture.id, 'capture-second']);
+  });
   it('commits a permanent receipt and preserves edits and trash on duplicate delivery', async () => {
     const { bytes, metadata } = await envelope();
     await Promise.all([importExtensionBytes(bytes, metadata), importExtensionBytes(bytes, metadata)]);

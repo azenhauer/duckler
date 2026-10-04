@@ -13,12 +13,17 @@
     const style = document.createElement('style');
     style.textContent = ':host{all:initial}*{box-sizing:border-box}.panel{width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:22px;background:#1d2025;color:#f5f5f7;border:1px solid #393d46;border-radius:18px;box-shadow:0 20px 70px #0008;font:14px/1.5 system-ui}h2{margin:0 0 14px;font-size:20px}img{display:block;width:100%;max-height:220px;object-fit:contain;background:#111;border-radius:10px;margin-bottom:16px}label{display:block;margin-bottom:6px}textarea{width:100%;min-height:90px;padding:12px;border:1px solid #3b404a;border-radius:10px;background:#272b32;color:inherit;font:inherit;resize:vertical}.actions{display:flex;gap:10px;margin-top:14px}button{padding:10px 16px;border:1px solid #484e59;border-radius:10px;background:#363c46;color:inherit;font:inherit;cursor:pointer}button:disabled{opacity:.5}button:focus-visible,textarea:focus-visible{outline:2px solid #b7c5db;outline-offset:2px}.error{color:#efa49a}';
     const panel = document.createElement('section');
+    style.textContent += 'input{width:100%;padding:10px 12px;margin-bottom:14px;border:1px solid #3b404a;border-radius:10px;background:#272b32;color:inherit;font:inherit}input:focus-visible{outline:2px solid #b7c5db;outline-offset:2px}.panel img{max-height:160px}.panel p:empty{display:none}';
     panel.className = 'panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Review screenshot');
     const heading = document.createElement('h2'); heading.textContent = 'Review screenshot';
     const image = document.createElement('img'); image.src = capture.payload; image.alt = 'Captured screenshot';
+    const titleLabel = document.createElement('label'); titleLabel.htmlFor = 'capture-title'; titleLabel.textContent = 'Title';
+    const title = document.createElement('input'); title.id = 'capture-title'; title.maxLength = 1000; title.value = capture.title || 'Screenshot';
+    const collectionLabel = document.createElement('label'); collectionLabel.htmlFor = 'capture-collection'; collectionLabel.textContent = 'Collection';
+    const collection = document.createElement('input'); collection.id = 'capture-collection'; collection.maxLength = 200; collection.placeholder = 'Collection name (optional)';
     const label = document.createElement('label'); label.htmlFor = 'capture-note'; label.textContent = 'Add a note';
     const note = document.createElement('textarea'); note.id = 'capture-note'; note.maxLength = 100000; note.placeholder = 'What caught your eye?';
-    const message = document.createElement('p'); message.setAttribute('role', 'status'); message.textContent = 'Save when ready. Your screenshot has not been sent.';
+    const message = document.createElement('p'); message.setAttribute('role', 'status');
     const actions = document.createElement('div'); actions.className = 'actions';
     const saveButton = document.createElement('button'); saveButton.textContent = 'Save screenshot';
     const discard = document.createElement('button'); discard.textContent = 'Discard';
@@ -27,9 +32,10 @@
     discard.addEventListener('click', close);
     saveButton.addEventListener('click', async () => {
       if (saveButton.disabled) return;
+      if (!title.value.trim()) { message.textContent = 'Enter a title.'; message.setAttribute('role', 'alert'); title.focus(); return; }
       saveButton.disabled = true; discard.disabled = true; saveButton.textContent = 'Saving…';
       try {
-        const response = await chrome.runtime.sendMessage({ type: 'queue-capture', capture: { ...capture, note: note.value.trim() } });
+        const response = await chrome.runtime.sendMessage({ type: 'queue-capture', capture: { ...capture, title: title.value.trim(), collectionName: collection.value.trim(), note: note.value.trim() } });
         if (!response?.ok) throw new Error(response?.error || 'Could not save this screenshot.');
         close(); toast('Screenshot queued · open your library to receive it');
       } catch (error) { message.textContent = error.message || 'Could not save this screenshot. Try again.'; message.className = 'error'; message.setAttribute('role', 'alert'); }
@@ -38,11 +44,11 @@
     panel.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !saveButton.disabled) { event.preventDefault(); close(); }
       if (event.key === 'Tab') {
-        if (event.shiftKey && root.activeElement === note) { event.preventDefault(); discard.focus(); }
-        else if (!event.shiftKey && root.activeElement === discard) { event.preventDefault(); note.focus(); }
+        if (event.shiftKey && root.activeElement === title) { event.preventDefault(); discard.focus(); }
+        else if (!event.shiftKey && root.activeElement === discard) { event.preventDefault(); title.focus(); }
       }
     });
-    actions.append(saveButton, discard); panel.append(heading, image, label, note, message, actions); root.append(style, panel); document.documentElement.append(reviewHost); note.focus();
+    actions.append(saveButton, discard); panel.append(heading, image, titleLabel, title, collectionLabel, collection, label, note, message, actions); root.append(style, panel); document.documentElement.append(reviewHost); title.focus(); title.select();
   };
   const toast = (text, error = false) => {
     toastHost?.remove();

@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { CardRecord, CollectionRecord, CanvasLayout } from '@visual-library/shared';
-import { createCardFromInput } from '@visual-library/shared';
+import { createCardFromInput, createCollectionFromInput } from '@visual-library/shared';
 import { type Capture, hashBytes, MAX_CAPTURE_BYTES, validateCapture } from '../../../../packages/shared/src/captureProtocol';
 
 type ExtensionReceipt = { id: string; hash: string; libraryId: string; savedAt: string };
@@ -72,7 +72,7 @@ export async function importExtensionBytes(bytes: Uint8Array, expected: { id: st
   if (bytes.length > MAX_CAPTURE_BYTES || await hashBytes(bytes) !== expected.hash) throw new Error('Capture checksum does not match. The item remains in the extension.');
   const capture: Capture = validateCapture(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
   if (capture.id !== expected.id) throw new Error('Capture ID does not match its envelope.');
-  return cardDb.transaction('rw', cardDb.cards, cardDb.extensionReceipts, async () => {
+  return cardDb.transaction('rw', cardDb.cards, cardDb.collections, cardDb.extensionReceipts, async () => {
     const receipt = await cardDb.extensionReceipts.get(capture.id);
     if (receipt && (receipt.hash !== expected.hash || receipt.libraryId !== expected.libraryId)) throw new Error('This capture ID has a conflicting payload or library.');
     const existing = await cardDb.cards.get(capture.id);
@@ -85,6 +85,11 @@ export async function importExtensionBytes(bytes: Uint8Array, expected: { id: st
       createdAt: capture.createdAt, capturePayloadHash: expected.hash,
     };
     if (!existing) await cardDb.cards.add(created);
+    if (capture.collectionName) {
+      const collection = await cardDb.collections.filter(item => item.name.toLowerCase() === capture.collectionName!.toLowerCase()).first();
+      await cardDb.collections.put(collection ? { ...collection, cardIds: [...new Set([...collection.cardIds, created.id])], updatedAt: new Date().toISOString() }
+        : createCollectionFromInput({ name: capture.collectionName, cardIds: [created.id] }));
+    }
     await cardDb.extensionReceipts.add({ id: capture.id, hash: expected.hash, libraryId: expected.libraryId, savedAt: new Date().toISOString() });
     return { card: created, duplicate: Boolean(existing) };
   });
