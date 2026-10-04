@@ -26,19 +26,23 @@ try {
   await page.getByRole('button', { name: 'All notes', exact: true }).click();
   await page.getByRole('article', { name: 'Open Spec checklist' }).waitFor();
   const card = page.getByRole('article', { name: 'Open Spec checklist' });
+  const actions = page.getByRole('group', { name: 'Actions for Spec checklist' });
   await page.mouse.move(0, 0);
-  assert.equal(await card.locator('.card-options').evaluate(el => getComputedStyle(el).opacity), '0');
+  assert.equal(await actions.evaluate(el => getComputedStyle(el).opacity), '0');
   await card.hover();
-  await card.getByRole('button', { name: 'Edit Spec checklist' }).waitFor({ state: 'visible' });
-  assert.equal(await card.locator('.card-hover-edit').evaluate(el => getComputedStyle(el).opacity), '1');
-  await card.getByLabel('Options for Spec checklist').click();
-  await card.getByRole('button', { name: 'Delete permanently' }).waitFor();
-  await card.getByLabel('Options for Spec checklist').click();
-  await card.getByRole('checkbox', { name: 'Select Spec checklist' }).check();
+  const edit = actions.getByRole('button', { name: 'Edit Spec checklist' });
+  await edit.waitFor({ state: 'visible' });
+  assert.equal(await actions.evaluate(el => getComputedStyle(el).opacity), '1');
+  const cardBox = await card.boundingBox(), actionBox = await actions.boundingBox();
+  assert.ok(actionBox.y + actionBox.height <= cardBox.y, 'Controls sit above the card');
+  assert.equal(await edit.evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
+  await actions.getByRole('button', { name: 'Move Spec checklist to collection' }).click();
+  await actions.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('checkbox', { name: 'Select Spec checklist' }).check();
   assert.equal(await page.getByRole('group', { name: 'Selected card actions' }).count(), 0);
   const secondCard = page.getByRole('article', { name: 'Open Design note' });
   await secondCard.hover();
-  await secondCard.getByRole('checkbox', { name: 'Select Design note' }).check();
+  await page.getByRole('checkbox', { name: 'Select Design note' }).check();
   const bulk = page.getByRole('group', { name: 'Selected card actions' });
   await bulk.waitFor();
   assert.equal(await bulk.evaluate(el => getComputedStyle(el).position), 'static');
@@ -46,7 +50,7 @@ try {
   await page.getByRole('button', { name: 'Add card' }).hover();
   await page.getByRole('button', { name: 'Link', exact: true }).waitFor();
   await card.hover();
-  await card.getByRole('button', { name: 'Edit Spec checklist' }).click();
+  await edit.click();
   const editor = page.getByRole('dialog', { name: 'Card details' });
   await editor.getByRole('textbox', { name: 'Note' }).waitFor();
   await page.screenshot({ path: fileURLToPath(new URL('card-editor.png', output)), fullPage: true });
@@ -198,3 +202,5 @@ try {
   assert.deepEqual(errors, []);
   console.log('Desktop/mobile layout, dark default, profile hover, avatar settings and keyboard dismissal passed.');
 } finally { await browser.close(); }
+
+

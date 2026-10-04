@@ -37,6 +37,7 @@ import { startExtensionBridge, getExtensionConnection } from './lib/extensionBri
 import { ExtensionSetup } from './components/ExtensionSetup';
 import { Dialog } from './components/Dialog';
 import { CardEditor } from './components/CardEditor';
+import { CardActions } from './components/CardActions';
 import { NavigationIcon } from './components/NavigationIcon';
 import { InterfaceIcon } from './components/InterfaceIcon';
 import { CanvasGallery } from './components/CanvasGallery';
@@ -773,22 +774,6 @@ function App() {
     if (selectedId === cardId) setSelectedId(null);
   };
 
-  const handleToggleCardCollectionMembership = async (collectionId: string, cardId: string) => {
-    const targetCollection = collections.find((collection) => collection.id === collectionId);
-    if (!targetCollection) {
-      return;
-    }
-
-    const nextCollection = {
-      ...targetCollection,
-      cardIds: toggleCardInCollection(targetCollection, cardId),
-      updatedAt: new Date().toISOString(),
-    };
-
-    setCollections((current) => current.map((collection) => (collection.id === collectionId ? nextCollection : collection)));
-    await saveCollection(nextCollection);
-  };
-
   const handleBulkAddToCollection = async (collectionId: string) => {
     const resolvedCollectionId = collectionId || selectedCollectionId || '';
     if (!resolvedCollectionId || selectedCardIds.length === 0) {
@@ -1324,6 +1309,25 @@ function App() {
 
             return (
               <div className={`library-card ${newlyCreatedCardId === card.id ? 'is-new' : ''}`} key={card.id}>
+                <div className="tile-header">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${card.title}`}
+                    checked={selectedCardIds.includes(card.id)}
+                    onChange={() => {
+                      setSelectedCardIds((current) =>
+                        current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id],
+                      );
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                </div>
+              <CardActions title={card.title} collections={collections} onEdit={() => setSelectedId(card.id)} onDelete={() => { void handleDelete(card.id); }} onMove={async collectionId => {
+                const updated = { ...card, updatedAt: new Date().toISOString() };
+                const nextCollections = collections.map(collection => ({ ...collection, cardIds: collection.id === collectionId ? [...new Set([...collection.cardIds, card.id])] : collection.cardIds.filter(id => id !== card.id), updatedAt: updated.updatedAt }));
+                await saveCardWithCollections(updated, nextCollections);
+                setCards(current => current.map(item => item.id === card.id ? updated : item)); setCollections(nextCollections);
+              }} />
               <article
                 className={`card-tile card-type-${card.type} ${selectedId === card.id ? 'selected' : ''} ${selectedCardIds.includes(card.id) ? 'is-checked' : ''}`}
                 tabIndex={0}
@@ -1339,34 +1343,8 @@ function App() {
                   }
                 }}
               >
-                <div className="tile-header">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${card.title}`}
-                    checked={selectedCardIds.includes(card.id)}
-                    onChange={() => {
-                      setSelectedCardIds((current) =>
-                        current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id],
-                      );
-                    }}
-                    onClick={(event) => event.stopPropagation()}
-                  />
-                </div>
-                <button type="button" className="card-hover-edit" aria-label={`Edit ${card.title}`} onClick={event => { event.stopPropagation(); setSelectedId(card.id); }}><InterfaceIcon name="note" />Edit</button>
-                <details className="card-options" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
-                  <summary aria-label={`Options for ${card.title}`}>•••</summary>
-                  <div className="card-options-menu">
-                    <button type="button" onClick={() => setSelectedId(card.id)}>Edit note</button>
-                    <strong>Collections</strong>
-                    {collections.length === 0 && <span>Create a collection to organize this card.</span>}
-                    {collections.map(collection => <label key={collection.id}>
-                      <input type="checkbox" checked={collection.cardIds.includes(card.id)} onChange={() => void handleToggleCardCollectionMembership(collection.id, card.id)} />
-                      {collection.name}
-                    </label>)}
-                    <button type="button" onClick={() => void handleToggleTrash(card.id)}>{card.trashed ? 'Restore' : 'Move to trash'}</button>
-                    <button type="button" className="danger" onClick={() => void handleDelete(card.id)}>Delete permanently</button>
-                  </div>
-                </details>
+
+
                 {card.type === 'image' && card.dataUrl ? <img src={card.dataUrl} alt={card.title} className="card-image" /> : null}
                 {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p></div> : null}
                 {card.type === 'bookmark' ? <div className="bookmark-card-preview">
@@ -1741,3 +1719,7 @@ function App() {
 }
 
 export default App;
+
+
+
+

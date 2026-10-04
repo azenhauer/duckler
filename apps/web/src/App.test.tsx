@@ -47,12 +47,15 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Spec checklist' }));
     expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
     fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
-    fireEvent.click(within(card).getByLabelText('Options for Design note'));
-    fireEvent.click(within(card).getByRole('checkbox', { name: 'Research' }));
+    const actions = within(card.parentElement!);
+    fireEvent.click(actions.getByRole('button', { name: 'Move Design note to collection' }));
+    fireEvent.click(actions.getByRole('button', { name: 'Research' }));
     await waitFor(async () => {
       const storedCard = (await readCards()).find(item => item.title === 'Design note')!;
       const research = (await cardDb.collections.toArray()).find(item => item.name === 'Research')!;
       expect(research.cardIds).toContain(storedCard.id);
+      const inbox = (await cardDb.collections.toArray()).find(item => item.name === 'Inbox')!;
+      expect(inbox.cardIds).not.toContain(storedCard.id);
     });
     expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
   });
@@ -62,12 +65,13 @@ describe('App', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
     const card = await screen.findByRole('article', { name: 'Open Design note' });
-    fireEvent.click(within(card).getByLabelText('Options for Design note'));
-    fireEvent.click(within(card).getByRole('button', { name: 'Delete permanently' }));
+    const actions = within(card.parentElement!);
+    fireEvent.click(actions.getByRole('button', { name: 'Move Design note to collection' }));
+    fireEvent.click(within(card.parentElement!).getByRole('button', { name: 'Delete permanently' }));
     expect(card).toBeInTheDocument();
     confirm.mockReturnValue(true);
     const id = (await readCards()).find(item => item.title === 'Design note')!.id;
-    fireEvent.click(within(card).getByRole('button', { name: 'Delete permanently' }));
+    fireEvent.click(within(card.parentElement!).getByRole('button', { name: 'Delete permanently' }));
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Open Design note' })).not.toBeInTheDocument());
     expect((await readCards()).some(item => item.id === id)).toBe(false);
     expect((await cardDb.collections.toArray()).some(item => item.cardIds.includes(id))).toBe(false);
@@ -239,7 +243,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByRole('article', { name: 'Open Quick capture' })).toBeInTheDocument();
-    expect(screen.getAllByRole('checkbox', { name: 'Inbox' }).some((checkbox) => (checkbox as HTMLInputElement).checked)).toBe(true);
+    const created = (await readCards()).find(card => card.title === 'Quick capture')!;
+    expect((await cardDb.collections.toArray()).find(collection => collection.name === 'Inbox')?.cardIds).toContain(created.id);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add card' })).not.toBeInTheDocument());
   });
 
@@ -303,3 +308,5 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Open canvas' })).toBeInTheDocument();
   });
 });
+
+
