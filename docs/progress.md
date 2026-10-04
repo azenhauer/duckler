@@ -36,7 +36,7 @@ Latest verification evidence:
 - JSON export is available for the current in-memory library state.
 - Milestone 2 adds flat collections, collection membership, multi-select bulk assignment, and collection filtering.
 - Milestone 3a includes an unpacked Chromium MV3 extension with a page/note capture popup, selection/link/page context menus, visible-region screenshot overlay and crop, shortcut, durable extension queue, queue export, app URL configuration, and local app import.
-- Milestone 3b includes a foreground handoff that opens the configured app with a stable capture ID; app storage prevents duplicate Cards on retries. App-side share captures also retain duplicate-safe processing.
+- Milestone 3b now includes exact-origin/library pairing, authenticated app-initiated Ports, bounded chunk transport with SHA-256 validation, and atomic card/receipt commits before extension ACK. Capture itself no longer opens app tabs or sends payloads in navigation URLs.
 - Milestone 4 adds a simple local canvas view with card nodes and viewport controls for the local-first visual library.
 - M5a includes a pure revision DAG reducer, conflict tracking, upload jobs, and fake Drive cursor/inventory state.
 - M5b adds a real OAuth hook for Google Drive via Google Identity Services and a visible configuration gate in the app UI when VITE_GOOGLE_CLIENT_ID is absent.
@@ -53,10 +53,24 @@ Latest verification evidence:
 
 - M5b is now validated with real Drive access and a second-browser confirmation: the app can sign in and sync correctly across devices.
 - Full Android share-sheet validation remains external and device-dependent, but the web app side is now ready for the real device test.
-- The browser extension has not yet been loaded in Chrome/Edge for real-browser validation. Screenshot DPR/zoom behavior, keyboard commands, context menus, real service-worker restart, and actual queue quota failure still require browser acceptance testing. M3b's exact-origin pairing, chunk transport, app-initiated Port/ACK flow, and atomic import/receipt remain unimplemented; current foreground deep-link handoff is functional but does not claim those guarantees.
+- Real Chrome/Edge capture acceptance remains pending: full Chromium could not launch in this Windows environment (`spawn UNKNOWN`). DPR/zoom screenshots, keyboard commands, context menus, live worker restart, and real storage quota behavior require acceptance testing. M3b pairing/transport/atomic ACK behavior is implemented and unit-tested; the generated MV3 development build is available at `apps/extension/dist/development`.
 - M7's final release gate remains open: the exported archive has not been opened in an actual Obsidian vault, and the current web app does not supply its live sync conflict state to the exporter. Exports mark conflict status as unknown rather than reporting a false zero.
 - Full background sync, archive backup, and direct two-way Obsidian vault editing remain outside the v1 scope.
 - Export remains local JSON and one-way Obsidian archive unless a later milestone adds archive-backed backups.
+
+## UX refinement and extension hardening (October 2026)
+
+- npm workspaces remain the monorepo toolchain. Both extension and app build locally.
+- The refs workspace is centered, defaults to dark, uses bundled/offline-cached Inter, and uses the supplied duck artwork without a header wordmark.
+- Cards have natural image proportions, rounded corners, compact captions and external collection pills. Profile hover is read-only; editing and connections live in Settings.
+- Home always keeps search and distinct animated Collections/Canvas launchers, with filled icons and the complete bottom dock. Empty libraries remain empty; filtering controls are text-first and only appear inside all notes or a collection. Internal pages have back navigation.
+- Search follows scrolling with a floating treatment and limited card clearance (6 px desktop, 3 px phone). Reduced-motion preferences disable ornamental movement.
+- Browser checks cover 320/360/390/414/768/1024 px, landscape, menu bounds, editor Save visibility, modal dismissal, empty state and scroll behavior. Automated unit/integration coverage passes for durable capture queues, defensive origins, receipt replay and atomic note/collection saves.
+- Google Drive authorization and synchronization implementation were not changed in this pass.
+- The extension popup now has a visible Settings label and a connection-settings footer link, with options-page fallback and explicit failures. Both generated extension builds retain the Manifest V3 options page.
+- The profile identity rectangle alone uses a glass texture and a locally saved, user-selectable accent color; hovering remains read-only.
+- Canvas opens a centered collection gallery. Each collection has its own live card membership, draggable positions and viewport stored separately in IndexedDB. These layouts remain local and are not yet included in Drive synchronization or the card JSON/Obsidian exports.
+- `npm run test:canvas:ui` verifies gallery bounds, collection isolation, dragging, viewport storage and persistence after a full browser reload in an isolated profile.
 
 ## Architectural note
 

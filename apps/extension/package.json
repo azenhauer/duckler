@@ -1,0 +1,12 @@
+{
+  "name": "@visual-library/extension",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:dev": "node build.mjs --dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": { "dexie": "^4.0.1" }
+}

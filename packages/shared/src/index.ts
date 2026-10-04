@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export * from './canvas';
 
 export const cardTypeSchema = z.enum(['bookmark', 'text', 'image']);
 export type CardType = z.infer<typeof cardTypeSchema>;
@@ -14,6 +15,7 @@ export const cardSchema = z.object({
   updatedAt: z.string(),
   dataUrl: z.string().optional(),
   blobId: z.string().optional(),
+  capturePayloadHash: z.string().optional(),
   trashed: z.boolean().default(false),
   searchText: z.string().default(''),
 });

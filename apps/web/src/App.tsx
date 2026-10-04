@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Background, Controls, ReactFlow, type Edge, type Node } from '@xyflow/react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import '@xyflow/react/dist/style.css';
 import JSZip from 'jszip';
 import {
@@ -23,6 +22,7 @@ import {
   readCollections,
   removeCard,
   saveCard,
+  saveCardWithCollections,
   saveCollection,
 } from './lib/cardDb';
 import {
@@ -33,35 +33,13 @@ import {
 import { clearPendingShareItems, readPendingShareItems, type PendingShareItem } from './lib/shareQueue';
 import { parseExtensionCapture, type ExtensionCapture } from './lib/extensionCapture';
 import { parseShareTargetFallback } from './lib/shareTargetFallback';
-
-const defaultCards = [
-  createCardFromInput({
-    type: 'bookmark',
-    title: 'Spec checklist',
-    sourceUrl: 'https://example.com/spec',
-    tags: ['reference', 'planning'],
-    note: 'Track the milestone and accepted behavior for the next release candidate.',
-  }),
-  createCardFromInput({
-    type: 'text',
-    title: 'Design note',
-    note: 'Keep the library local, searchable, and resilient before enabling sync.',
-    tags: ['research'],
-  }),
-];
-
-const defaultCollections = [
-  createCollectionFromInput({
-    name: 'Inbox',
-    description: 'Fresh items to review',
-    cardIds: defaultCards.map((card) => card.id),
-  }),
-  createCollectionFromInput({
-    name: 'Research',
-    description: 'Reference material',
-    cardIds: [defaultCards[0].id],
-  }),
-];
+import { startExtensionBridge, getExtensionConnection } from './lib/extensionBridge';
+import { ExtensionSetup } from './components/ExtensionSetup';
+import { Dialog } from './components/Dialog';
+import { NavigationIcon } from './components/NavigationIcon';
+import { InterfaceIcon } from './components/InterfaceIcon';
+import { CanvasGallery } from './components/CanvasGallery';
+import { CollectionCanvas } from './components/CollectionCanvas';
 
 const emptyForm = {
   type: 'bookmark' as CardRecord['type'],
@@ -79,7 +57,7 @@ const processedExtensionCaptureIds = new Set<string>();
 
 type TypeFilter = 'all' | 'image' | 'link' | 'text';
 type SortMode = 'newest' | 'oldest';
-type ActiveView = 'library' | 'collections' | 'canvas';
+type ActiveView = 'home' | 'library' | 'collections' | 'canvas';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -106,15 +84,22 @@ const createCardFromSharedItem = (item: PendingShareItem): CardRecord | null => 
 };
 
 function App() {
-  const [cards, setCards] = useState<CardRecord[]>(defaultCards);
-  const [collections, setCollections] = useState<CollectionRecord[]>(defaultCollections);
+  const [cards, setCards] = useState<CardRecord[]>([]);
+  const [collections, setCollections] = useState<CollectionRecord[]>([]);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
-  const [activeView, setActiveView] = useState<ActiveView>('library');
+  const [activeView, setActiveView] = useState<ActiveView>('home');
+  const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
+  const navigationHistory = useRef<{ view: ActiveView; collectionId: string | null; canvasId: string | null }[]>([]);
   const [profileName, setProfileName] = useState(() => localStorage.getItem('visual-library-profile-name') ?? 'My Library');
   const [profileTag, setProfileTag] = useState(() => localStorage.getItem('visual-library-profile-tag') ?? '');
   const [profilePhoto, setProfilePhoto] = useState(() => localStorage.getItem('visual-library-profile-photo') ?? '');
+  const [profileCardColor, setProfileCardColor] = useState(() => {
+    const saved = localStorage.getItem('duckler-profile-card-color');
+    return saved && /^#[\da-f]{6}$/i.test(saved) ? saved : '#779b91';
+  });
   const [profileMessage, setProfileMessage] = useState('');
   const [profileError, setProfileError] = useState(false);
   const displayProfileName = profileName.trim() || 'My Library';
@@ -132,10 +117,19 @@ function App() {
   const [driveMessage, setDriveMessage] = useState<string>('Local library is ready. Drive integration requires Google auth and a configured OAuth client.');
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isOffline, setIsOffline] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
+    const saved = localStorage.getItem('duckler-theme-mode') ?? localStorage.getItem('visual-library-theme');
+    return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'dark';
+  });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [collectionMenuOpen, setCollectionMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [extensionSetupOpen, setExtensionSetupOpen] = useState(false);
+  const [extensionConnectionVersion, setExtensionConnectionVersion] = useState(0);
+  const [extensionStatus, setExtensionStatus] = useState(() => getExtensionConnection() ? 'Connecting extension…' : '');
+  const [cardSize, setCardSize] = useState(() => localStorage.getItem('duckler-card-size') ?? 'comfortable');
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<{ usageMb: number; quotaMb: number; persisted: boolean } | null>(null);
@@ -143,6 +137,12 @@ function App() {
   const [collectionForm, setCollectionForm] = useState(emptyCollectionForm);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [cardComposerOpen, setCardComposerOpen] = useState(false);
+  const [composerSaving, setComposerSaving] = useState(false);
+  const [composerError, setComposerError] = useState('');
+  const [newlyCreatedCardId, setNewlyCreatedCardId] = useState<string | null>(null);
+  const composerSavingRef = useRef(false);
+  const searchBarRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLElement>(null);
   const [composerSourceOpen, setComposerSourceOpen] = useState(false);
   const [composerCollectionsOpen, setComposerCollectionsOpen] = useState(false);
   const [newCardCollectionIds, setNewCardCollectionIds] = useState<string[]>([]);
@@ -235,7 +235,7 @@ function App() {
     }
 
     void Promise.all([readCards(), readCollections(), readPendingShareItems()]).then(async ([storedCards, storedCollections, pendingSharedItems]) => {
-      const activeCollections = storedCollections.length > 0 ? storedCollections : defaultCollections;
+      const activeCollections = storedCollections;
       const shareItems = fallbackShare ? [...pendingSharedItems, fallbackShare] : pendingSharedItems;
       const importedCards = shareItems
         .map((item) => createCardFromSharedItem(item))
@@ -300,8 +300,9 @@ function App() {
 
       if (importedCards.length > 0) {
         const mergedCards = [...importedCards, ...(extensionCard ? [extensionCard] : []), ...storedCards];
-        setCards(mergedCards.length > 0 ? mergedCards : defaultCards);
+        setCards(mergedCards);
         setSelectedId(importedCards[0]?.id ?? null);
+        setActiveView('library');
         setShareNotice(`Imported ${importedCards.length} shared item${importedCards.length === 1 ? '' : 's'} from your share sheet.`);
         void clearPendingShareItems();
       } else {
@@ -309,17 +310,18 @@ function App() {
           const card = extensionCard;
           setCards((current) => [card, ...current.filter((existing) => existing.id !== card.id)]);
           setSelectedId(card.id);
+          setActiveView('library');
           setShareNotice(`Added “${card.title}” from Duckler Capture.`);
         } else if (extensionCaptureError || fallbackShareError) {
           setShareNotice(extensionCaptureError ?? fallbackShareError);
-        } else if (storedCards.length > 0) {
+        } else {
           setCards(storedCards);
         }
       }
 
     }).catch((error: unknown) => {
       setShareNotice(error instanceof Error ? `Extension capture could not be saved: ${error.message}` : 'Extension capture could not be saved.');
-    });
+    }).finally(() => setLibraryLoaded(true));
 
     const storedQueue = localStorage.getItem('visual-library-capture-queue');
     if (storedQueue) {
@@ -347,9 +349,71 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let disposed = false;
+    const stop = startExtensionBridge(() => {
+      void Promise.all([readCards(), readCollections()]).then(([nextCards, nextCollections]) => {
+        if (disposed) return;
+        setCards(nextCards);
+        if (nextCollections.length) setCollections(nextCollections);
+      });
+    }, setExtensionStatus);
+    return () => { disposed = true; stop(); };
+  }, [extensionConnectionVersion]);
+
+  useEffect(() => { localStorage.setItem('duckler-card-size', cardSize); }, [cardSize]);
+
+  useEffect(() => {
+    let frame = 0;
+    const content = contentRef.current;
+    const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    const update = () => {
+      frame = 0;
+      const search = searchBarRef.current;
+      if (!search) return;
+      const searchBounds = search.getBoundingClientRect();
+      const stickyTop = Number.parseFloat(getComputedStyle(search).top) || 20;
+      const docked = window.scrollY > 0 && searchBounds.top <= stickyTop + 1;
+      search.dataset.docked = String(docked);
+      for (const card of content?.querySelectorAll<HTMLElement>('.library-card') ?? []) {
+        const bounds = card.getBoundingClientRect();
+        const gap = bounds.top - searchBounds.bottom;
+        const proximity = docked && !motion?.matches ? Math.max(0, 1 - Math.abs(gap) / 110) : 0;
+        const side = bounds.left + bounds.width / 2 < searchBounds.left + searchBounds.width / 2 ? -1 : 1;
+        const distance = window.innerWidth <= 560 ? 3 : 6;
+        card.style.setProperty('--search-clearance', `${(side * distance * proximity).toFixed(2)}px`);
+      }
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+    motion?.addEventListener('change', schedule);
+    schedule();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      motion?.removeEventListener('change', schedule);
+      content?.querySelectorAll<HTMLElement>('.library-card').forEach(card => card.style.removeProperty('--search-clearance'));
+    };
+  }, [activeView, cards, cardSize, libraryLoaded, searchTerm, typeFilter, selectedCollectionId]);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('visual-library-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('duckler-theme-mode', themeMode);
+    const query = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const update = () => {
+      setTheme(themeMode === 'system' ? query?.matches ? 'dark' : 'light' : themeMode);
+      const icon = document.querySelector<HTMLLinkElement>('link[data-browser-icon]');
+      if (icon) icon.href = `/icons/duck-tab-${query?.matches ? 'dark' : 'light'}.png`;
+    };
+    update();
+    query?.addEventListener('change', update);
+    return () => query?.removeEventListener('change', update);
+  }, [themeMode]);
 
   useEffect(() => {
     localStorage.setItem('visual-library-profile-name', displayProfileName);
@@ -358,6 +422,8 @@ function App() {
   useEffect(() => {
     localStorage.setItem('visual-library-profile-tag', displayProfileTag);
   }, [displayProfileTag]);
+
+  useEffect(() => { localStorage.setItem('duckler-profile-card-color', profileCardColor); }, [profileCardColor]);
 
   useEffect(() => {
     if (!cardComposerOpen) {
@@ -375,7 +441,7 @@ function App() {
     titleField?.focus();
 
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !composerSavingRef.current) {
         setCardComposerOpen(false);
       }
     };
@@ -445,6 +511,39 @@ function App() {
   }, [bulkDestinationId, selectedCollectionId]);
 
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) ?? null;
+  const selectedCanvas = collections.find(collection => collection.id === selectedCanvasId) ?? null;
+  const isHome = activeView === 'home';
+  const activeCardCount = cards.filter(card => !card.trashed).length;
+  const showLibraryFilters = activeView === 'library';
+
+  const navigateTo = (view: ActiveView, collectionId: string | null = null) => {
+    if (view === 'home') navigationHistory.current = [];
+    else if (view !== activeView || collectionId !== (view === 'canvas' ? selectedCanvasId : selectedCollectionId)) {
+      navigationHistory.current.push({ view: activeView, collectionId: selectedCollectionId, canvasId: selectedCanvasId });
+    }
+    setActiveView(view);
+    setSelectedCollectionId(view === 'library' ? collectionId : null);
+    setSelectedCanvasId(view === 'canvas' ? collectionId : null);
+    setSelectedId(null);
+    setSelectedCardIds([]);
+    setSearchTerm('');
+    setTypeFilter('all');
+    setProfileOpen(false);
+    setCollectionMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+  const goBack = () => {
+    const previous = navigationHistory.current.pop() ?? { view: 'home' as const, collectionId: null, canvasId: null };
+    setActiveView(previous.view);
+    setSelectedCollectionId(previous.collectionId);
+    setSelectedCanvasId(previous.canvasId);
+    setSearchTerm('');
+    setTypeFilter('all');
+    setSelectedId(null);
+    setSelectedCardIds([]);
+    setCollectionMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
 
   const visibleCards = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -486,28 +585,6 @@ function App() {
 
   const trashedCards = useMemo(() => cards.filter((card) => card.trashed), [cards]);
   const selectedCard = cards.find((card) => card.id === selectedId) ?? null;
-  const canvasNodes = useMemo<Node[]>(() => {
-    return cards.slice(0, 6).map((card, index) => ({
-      id: card.id,
-      position: { x: (index % 3) * 220, y: Math.floor(index / 3) * 150 },
-      data: { label: card.title },
-      style: { width: 180, padding: 12, borderRadius: 12 },
-    }));
-  }, [cards]);
-
-  const canvasEdges = useMemo<Edge[]>(() => {
-    if (canvasNodes.length < 2) {
-      return [];
-    }
-
-    return canvasNodes.slice(1).map((node, index) => ({
-      id: `edge-${node.id}`,
-      source: canvasNodes[index].id,
-      target: node.id,
-      animated: true,
-    }));
-  }, [canvasNodes]);
-
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -531,51 +608,62 @@ function App() {
 
   const handleCreateCard = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (composerSavingRef.current) return;
 
     const trimmedTitle = form.title.trim();
     if (!trimmedTitle) {
       return;
     }
 
-    const card = createCardFromInput({
-      type: form.type,
-      title: trimmedTitle,
-      note: form.note.trim(),
-      sourceUrl: form.sourceUrl.trim() || undefined,
-      tags: form.tags
-        .split(',')
-        .map((part) => part.trim())
-        .filter(Boolean),
-      dataUrl: form.type === 'image' ? mediaPreview ?? undefined : undefined,
-    });
+    composerSavingRef.current = true;
+    setComposerSaving(true);
+    setComposerError('');
+    try {
+      const card = createCardFromInput({
+        type: form.type,
+        title: trimmedTitle,
+        note: form.note.trim(),
+        sourceUrl: form.sourceUrl.trim() || undefined,
+        tags: form.tags
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean),
+        dataUrl: form.type === 'image' ? mediaPreview ?? undefined : undefined,
+      });
 
-    setCards((current) => [card, ...current]);
-    setSelectedId(card.id);
-    setForm(emptyForm);
-    setMediaPreview(null);
-
-    const changedCollections = collections
-      .filter((collection) => newCardCollectionIds.includes(collection.id))
-      .map((collection) => ({
-        ...collection,
-        cardIds: toggleCardInCollection(collection, card.id),
-        updatedAt: new Date().toISOString(),
-      }));
-    if (changedCollections.length > 0) {
-      setCollections((current) =>
-        current.map((collection) =>
-          changedCollections.find((changed) => changed.id === collection.id) ?? collection,
-        ),
-      );
-      await Promise.all(changedCollections.map(saveCollection));
+      const changedCollections = collections
+        .filter((collection) => newCardCollectionIds.includes(collection.id))
+        .map((collection) => ({
+          ...collection,
+          cardIds: toggleCardInCollection(collection, card.id),
+          updatedAt: new Date().toISOString(),
+        }));
+      await saveCardWithCollections(card, changedCollections);
+      if (changedCollections.length > 0) {
+        setCollections((current) =>
+          current.map((collection) =>
+            changedCollections.find((changed) => changed.id === collection.id) ?? collection,
+          ),
+        );
+      }
+      setCards((current) => [card, ...current]);
+      setNewlyCreatedCardId(card.id);
+      setSelectedId(card.id);
+      setActiveView('library');
+      setForm(emptyForm);
+      setMediaPreview(null);
+      setCardComposerOpen(false);
+    } catch (error) {
+      setComposerError(error instanceof Error ? error.message : 'Could not save. Your draft is still here.');
+    } finally {
+      composerSavingRef.current = false;
+      setComposerSaving(false);
     }
-
-    await saveCard(card);
-    setCardComposerOpen(false);
   };
 
   const handleQueueCapture = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
+    if (composerSavingRef.current) return;
 
     const queued = enqueueCapture({
       kind: form.type,
@@ -762,6 +850,7 @@ function App() {
   };
 
   const handleQuickAddCard = (type: CardRecord['type'] = 'bookmark') => {
+    setComposerError('');
     setAddMenuOpen(false);
     setForm({ ...emptyForm, type });
     setNewCardCollectionIds(selectedCollectionId ? [selectedCollectionId] : []);
@@ -878,62 +967,12 @@ function App() {
     setProfileMessage('Profile photo removed.');
   };
 
+  const themeToggle = <button type="button" className="settings-button theme-toggle" onClick={() => setThemeMode(theme === 'light' ? 'dark' : 'light')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+    <InterfaceIcon name={theme === 'dark' ? 'sun' : 'moon'} />
+  </button>;
+
   return (
-    <main className="app-shell">
-      <header className="workspace-bar">
-        <button
-          type="button"
-          className="brand-row home-link"
-          aria-label="Duckler home"
-          onClick={() => {
-            setActiveView('library');
-            setSelectedCollectionId(null);
-            setSelectedId(null);
-            setSelectedCardIds([]);
-            setSearchTerm('');
-            setTypeFilter('all');
-            setSortMode('newest');
-            setProfileOpen(false);
-          }}
-        >
-          <div className="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M9 5.5c-3.3 0-6 2.6-6 6 0 3.1 2.2 5.7 5.1 6.1l1.8.3 1.4 3.3c.5 1.2 2.2 1.2 2.7 0l1.5-3.4 1.7-.2c3.2-.4 5.8-3.1 5.8-6.1 0-3.4-2.8-6-6.3-6-1.8 0-3.4.8-4.6 2-.6-.6-1.5-1-2.4-1Z" fill="currentColor" />
-            </svg>
-          </div>
-          <span className="brand-name">duckler</span>
-        </button>
-        <label className="sidebar-search workspace-search" aria-label="Search library">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 11.1l4.3 4.3 1.4-1.4-4.3-4.3A6.5 6.5 0 1 1 10.5 4Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" fill="currentColor"/></svg>
-          <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search library" />
-        </label>
-        <div className="workspace-tools">
-          <div className="sync-status" aria-live="polite" title={sidebarStatusText}>
-            <span className={`sync-dot ${syncStatus.connected ? 'online' : 'offline'}`} aria-hidden="true" />
-            <span>{sidebarStatusText}</span>
-          </div>
-          <button type="button" className="settings-button theme-toggle" onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-            <span aria-hidden="true">{theme === 'dark' ? '☼' : '☾'}</span>
-          </button>
-          <button type="button" className="secondary-button drive-action" onClick={() => void handleDriveConnection()} disabled={!isGoogleDriveConfigured() && !driveConnected} title={isGoogleDriveConfigured() || driveConnected ? 'Google Drive settings' : 'Configure VITE_GOOGLE_CLIENT_ID to enable Drive'}>
-            {driveConnected ? 'Drive settings' : 'Connect Drive'}
-          </button>
-          <details className="workspace-menu">
-            <summary aria-label="Storage settings" title="Storage settings">•••</summary>
-            {storageEstimate && (
-              <div className="workspace-menu-content">
-                <span>{storageEstimate.usageMb.toFixed(1)} MB of {storageEstimate.quotaMb.toFixed(1)} MB used</span>
-                <button type="button" className="mini-button" onClick={() => void handlePersistLocalStorage()}>
-                  {storageEstimate.persisted ? 'Storage protected' : 'Protect storage'}
-                </button>
-                <button type="button" className="mini-button" onClick={() => void handleClearLocalCache()}>
-                  Clear temporary data
-                </button>
-              </div>
-            )}
-          </details>
-        </div>
-      </header>
+    <main className="app-shell" aria-busy={!libraryLoaded} style={{ '--profile-accent': profileCardColor } as CSSProperties}>
       <button type="button" className="mobile-menu-toggle" onClick={() => setMobileSidebarOpen((current) => !current)} aria-label="Toggle navigation">
         ☰
       </button>
@@ -1014,7 +1053,7 @@ function App() {
             <span className={`sync-dot ${syncStatus.connected ? 'online' : 'offline'}`} aria-hidden="true" />
             <span>{sidebarStatusText}</span>
           </div>
-          <button type="button" className="settings-button" onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}>
+          <button type="button" className="settings-button" onClick={() => setThemeMode(theme === 'light' ? 'dark' : 'light')}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5a2.5 2.5 0 0 1 2.4 1.7l.4 1.3 1.4.4a2.5 2.5 0 0 1 1.5 3.2l-.6 1.4 1 1.2a2.5 2.5 0 0 1 0 3.2l-1 1.2.6 1.4a2.5 2.5 0 0 1-1.5 3.2l-1.4.4-.4 1.3A2.5 2.5 0 0 1 12 22.5a2.5 2.5 0 0 1-2.4-1.7l-.4-1.3-1.4-.4a2.5 2.5 0 0 1-1.5-3.2l.6-1.4-1-1.2a2.5 2.5 0 0 1 0-3.2l1-1.2-.6-1.4a2.5 2.5 0 0 1 1.5-3.2l1.4-.4.4-1.3A2.5 2.5 0 0 1 12 1.5Zm0 4.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" fill="currentColor"/></svg>
             <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
           </button>
@@ -1038,22 +1077,47 @@ function App() {
         </div>
       </aside>
 
-      <section className="content panel" data-view={activeView}>
-        <header className="page-header">
+      <section ref={contentRef} className={`content panel ${isHome ? 'home-view' : ''}`} data-view={activeView}>
+        <div ref={searchBarRef} className={`refs-search ${isHome ? 'home-search' : ''}`}>
+          <label className="sidebar-search workspace-search refs-search-field" aria-label="Search refs">
+            <InterfaceIcon name="search" />
+            <input value={searchTerm} onChange={event => {
+              if (isHome && event.target.value.trim()) navigateTo('library');
+              setSearchTerm(event.target.value);
+            }} placeholder="Search refs" />
+          </label>{themeToggle}
+        </div>
+        {isHome && <div className="home-launcher" aria-label="Explore library">
+          <button type="button" className="home-entry" aria-label="Open collections" onClick={() => navigateTo('collections')}>
+            <NavigationIcon name="collections" expanded /><span>Collections</span>
+          </button>
+          <button type="button" className="home-entry" aria-label="Open canvas" onClick={() => navigateTo('canvas')}>
+            <NavigationIcon name="canvas" expanded /><span>Canvas</span>
+          </button>
+          {activeCardCount > 0 && <button type="button" className="home-all-notes" aria-label="All notes" onClick={() => navigateTo('library')}>
+            All notes <span>{activeCardCount}</span><InterfaceIcon name="link" />
+          </button>}
+        </div>}
+        {!isHome && <header className="page-header">
+          <button type="button" className="page-back" aria-label="Go back" title="Back" onClick={goBack}><InterfaceIcon name="back" /></button>
+          <div>
           <h1>
             {activeView === 'library'
-              ? (selectedCollection?.name ?? 'Library')
+              ? (selectedCollection?.name ?? 'refs')
               : activeView === 'collections'
                 ? 'Collections'
-                : 'Canvases'}
-          </h1>
-        </header>
+                : selectedCanvas?.name ?? 'Canvases'}
+          </h1></div>
+        </header>}
 
-        {activeView === 'library' && (
+        {showLibraryFilters && (
           <div className="collection-shelf">
-            <div className="collection-menu" ref={collectionMenuRef}>
+            <div className="collection-menu" ref={collectionMenuRef} onMouseLeave={event => {
+              const menu = event.currentTarget;
+              window.setTimeout(() => { if (!menu.matches(':hover')) setCollectionMenuOpen(false); }, 140);
+            }}>
               <button type="button" className="collection-menu-trigger" aria-label="Choose collection" aria-expanded={collectionMenuOpen} aria-haspopup="true" onClick={() => setCollectionMenuOpen((open) => !open)}>
-                <span>{selectedCollection?.name ?? 'All cards'}</span>
+                <span>{selectedCollection?.name ?? 'All notes'}</span>
                 <span className="collection-menu-count">{selectedCollection?.cardIds.length ?? cards.filter((card) => !card.trashed).length}</span>
                 <span className="menu-chevron" aria-hidden="true">⌄</span>
               </button>
@@ -1062,11 +1126,10 @@ function App() {
                   type="button"
                   className={`collection-menu-item ${selectedCollectionId === null ? 'active' : ''}`}
                   onClick={() => {
-                    setSelectedCollectionId(null);
-                    setCollectionMenuOpen(false);
+                    navigateTo('library');
                   }}
                 >
-                  <span>All cards</span>
+                  <span>All notes</span>
                   <span>{cards.filter((card) => !card.trashed).length}</span>
                 </button>
                 {collections.map((collection) => (
@@ -1075,8 +1138,7 @@ function App() {
                       type="button"
                       className={`collection-menu-item ${selectedCollectionId === collection.id ? 'active' : ''}`}
                       onClick={() => {
-                        setSelectedCollectionId(collection.id);
-                        setCollectionMenuOpen(false);
+                        navigateTo('library', collection.id);
                       }}
                     >
                       <span>{collection.name}</span>
@@ -1093,8 +1155,11 @@ function App() {
             </div>
             <div className="toolbar">
               <div className="toolbar-actions">
-                <details className="library-options">
-              <summary>View options <span className="menu-chevron" aria-hidden="true">⌄</span></summary>
+                <details className="library-options" onMouseLeave={event => {
+                  const menu = event.currentTarget;
+                  window.setTimeout(() => { if (!menu.matches(':hover')) menu.open = false; }, 140);
+                }}>
+              <summary aria-label="View options" title="View options"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg></summary>
               <div className="library-options-popover">
                 <label className="option-field">
                   <span>Type</span>
@@ -1112,6 +1177,11 @@ function App() {
                     <option value="oldest">Oldest first</option>
                   </select>
                 </label>
+                <label className="option-field"><span>Card size</span>
+                  <select aria-label="Card size" value={cardSize} onChange={event => setCardSize(event.target.value)}>
+                    <option value="comfortable">Comfortable</option><option value="compact">Compact</option>
+                  </select>
+                </label>
                 <div className="library-option-actions">
                   <button type="button" onClick={handleExport}>Export JSON</button>
                   <button type="button" onClick={() => void handleObsidianExport()}>Export Obsidian</button>
@@ -1124,7 +1194,7 @@ function App() {
           </div>
         )}
 
-        {activeView === 'library' && (
+        {showLibraryFilters && (
           <nav className="media-filter-row" aria-label="Filter by media type">
             {([
               ['all', 'All items'],
@@ -1175,8 +1245,7 @@ function App() {
                     className="collection-tile-main"
                     aria-label={`Open collection ${collection.name}`}
                     onClick={() => {
-                      setSelectedCollectionId(collection.id);
-                      setActiveView('library');
+                      navigateTo('library', collection.id);
                     }}
                   >
                     <span className="collection-tile-preview" aria-hidden="true">
@@ -1186,11 +1255,11 @@ function App() {
                             ? <img src={card.dataUrl} alt="" />
                             : <span>{card.title.slice(0, 1).toUpperCase()}</span>}
                         </span>
-                      )) : <span className="collection-preview-empty">▱</span>}
+                      )) : <span className="collection-preview-empty"><NavigationIcon name="collections" /></span>}
                     </span>
                     <span className="collection-tile-info">
                       <span className="collection-tile-heading">
-                        <span className="collection-folder-icon" aria-hidden="true">▱</span>
+                        <span className="collection-folder-icon" aria-hidden="true"><NavigationIcon name="collections" /></span>
                         <strong>{collection.name}</strong>
                         <span className="collection-tile-count">{memberCount}</span>
                       </span>
@@ -1216,10 +1285,10 @@ function App() {
             })}
             {collections.length === 0 && (
               <div className="empty-view">
-                <span aria-hidden="true">▱</span>
+                <NavigationIcon name="collections" />
                 <p>No collections yet</p>
                 <button type="button" className="secondary-button" onClick={() => {
-                  setActiveView('library');
+                  navigateTo('library');
                   setCollectionMenuOpen(true);
                 }}>Create a collection</button>
               </div>
@@ -1250,7 +1319,12 @@ function App() {
           </div>
         )}
 
-        {activeView === 'library' && <div className="library-grid">
+        {activeView === 'library' && visibleCards.length === 0 && <div className="library-empty">
+          <span aria-hidden="true">✧</span><h2>{searchTerm ? 'No matches' : 'No cards yet'}</h2>
+          <p>{searchTerm ? 'Try a different search or clear your filters.' : ''}</p>
+          <button type="button" onClick={() => searchTerm ? setSearchTerm('') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : 'Connect your browser'}</button>
+        </div>}
+        {activeView === 'library' && <div className={`library-grid card-size-${cardSize}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
           {visibleCards.map((card) => {
             const sourceLabel = card.sourceUrl
               ? (() => {
@@ -1263,9 +1337,9 @@ function App() {
               : null;
 
             return (
+              <div className={`library-card ${newlyCreatedCardId === card.id ? 'is-new' : ''}`} key={card.id}>
               <article
-                key={card.id}
-                className={`card-tile ${selectedId === card.id ? 'selected' : ''}`}
+                className={`card-tile card-type-${card.type} ${selectedId === card.id ? 'selected' : ''} ${selectedCardIds.includes(card.id) ? 'is-checked' : ''}`}
                 tabIndex={0}
                 aria-label={`Open ${card.title}`}
                 onClick={() => setSelectedId(card.id)}
@@ -1293,42 +1367,60 @@ function App() {
                   />
                 </div>
                 {card.type === 'image' && card.dataUrl ? <img src={card.dataUrl} alt={card.title} className="card-image" /> : null}
-                {card.type !== 'image' ? <div className="text-card-preview"><span>{card.title}</span></div> : null}
+                {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p></div> : null}
+                {card.type === 'bookmark' ? <div className="bookmark-card-preview">
+                  <span className="card-kind">LINK <InterfaceIcon name="link" /></span>
+                  <h2>{card.title}</h2>{card.note && <p>{card.note}</p>}
+                  {sourceLabel && <span className="bookmark-domain">{sourceLabel}</span>}
+                </div> : null}
                 <div className="card-body">
-                  <h2>{card.title}</h2>
-                  {card.note ? <p className="card-note">{card.note}</p> : null}
-                  {sourceLabel ? <p className="card-source">{sourceLabel}</p> : null}
+                  {card.type === 'image' && card.note && <p className="card-caption">{card.note}</p>}
+                  {card.type !== 'bookmark' && <h2>{card.title}</h2>}
+                  <div className="card-footer-meta" hidden={card.type === 'image'}>
+                    <span>{card.type === 'image' ? 'Image' : card.type === 'text' ? 'Note' : 'Link'}</span>
+                    <time dateTime={card.createdAt}>{new Date(card.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time>
+                  </div>
+                  {card.tags.length > 0 && <div className="card-tag-list">{card.tags.slice(0, 3).map(tag => <span key={tag}>#{tag}</span>)}</div>}
                 </div>
               </article>
+              {collections.some(collection => collection.cardIds.includes(card.id)) && <div className="card-collection-pills">
+                {collections.filter(collection => collection.cardIds.includes(card.id)).map(collection => <button type="button" key={collection.id} onClick={() => navigateTo('library', collection.id)}><NavigationIcon name="collections" />{collection.name}</button>)}
+              </div>}
+              </div>
             );
           })}
         </div>}
 
         {activeView === 'library' && selectedCard ? (
-          <aside className="detail-panel" aria-label="Card details">
+          <Dialog label="Card details" className="card-reader" onClose={() => setSelectedId(null)}>
+          <aside className="detail-panel">
             <div className="detail-header">
               <div className="detail-preview">
                 {selectedCard.type === 'image' && selectedCard.dataUrl ? <img src={selectedCard.dataUrl} alt={selectedCard.title} /> : null}
-                {selectedCard.type !== 'image' ? <div className="detail-preview-text">{selectedCard.title}</div> : null}
+                {selectedCard.type !== 'image' ? <div className="detail-preview-text">
+                  <span className="card-kind">{selectedCard.type === 'text' ? 'NOTE' : 'LINK'}</span><h2>{selectedCard.title}</h2>
+                  {selectedCard.note && <p>{selectedCard.note}</p>}
+                  {selectedCard.sourceUrl && <a href={selectedCard.sourceUrl} target="_blank" rel="noopener noreferrer">Open source ↗</a>}
+                </div> : null}
               </div>
               <button type="button" className="close-detail" onClick={() => setSelectedId(null)} aria-label="Close details">×</button>
             </div>
 
             <div className="detail-field">
-              <label>Title</label>
-              <input value={selectedCard.title} onChange={(event) => void handleUpdateSelected({ title: event.target.value })} />
+              <label htmlFor="reader-title">Title</label>
+              <input id="reader-title" value={selectedCard.title} onChange={(event) => void handleUpdateSelected({ title: event.target.value })} />
             </div>
             <div className="detail-field">
-              <label>Source</label>
-              <input value={selectedCard.sourceUrl ?? ''} onChange={(event) => void handleUpdateSelected({ sourceUrl: event.target.value || undefined })} />
+              <label htmlFor="reader-source">Source</label>
+              <input id="reader-source" value={selectedCard.sourceUrl ?? ''} onChange={(event) => void handleUpdateSelected({ sourceUrl: event.target.value || undefined })} />
             </div>
             <div className="detail-field">
-              <label>Note</label>
-              <textarea value={selectedCard.note} onChange={(event) => void handleUpdateSelected({ note: event.target.value })} />
+              <label htmlFor="reader-note">Note</label>
+              <textarea id="reader-note" value={selectedCard.note} onChange={(event) => void handleUpdateSelected({ note: event.target.value })} />
             </div>
             <div className="detail-field">
-              <label>Tags</label>
-              <input value={selectedCard.tags.join(', ')} onChange={(event) => void handleUpdateSelected({ tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) })} />
+              <label htmlFor="reader-tags">Tags</label>
+              <input id="reader-tags" value={selectedCard.tags.join(', ')} onChange={(event) => void handleUpdateSelected({ tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) })} />
             </div>
 
             <div className="collection-assignment">
@@ -1349,7 +1441,7 @@ function App() {
               <button type="button" onClick={() => void handleToggleTrash(selectedCard.id)}>{selectedCard.trashed ? 'Restore' : 'Move to trash'}</button>
               <button type="button" className="danger" onClick={() => void handleDelete(selectedCard.id)}>Delete</button>
             </div>
-          </aside>
+          </aside></Dialog>
         ) : null}
 
         {captureQueue.length > 0 && (
@@ -1378,15 +1470,9 @@ function App() {
           </div>
         )}
 
-        <div className="canvas-panel panel">
-          <h2>Canvas</h2>
-          <div className="canvas-surface">
-            <ReactFlow nodes={canvasNodes} edges={canvasEdges} fitView minZoom={0.3} maxZoom={1.5} nodesDraggable>
-              <Background />
-              <Controls />
-            </ReactFlow>
-          </div>
-        </div>
+        {activeView === 'canvas' && (selectedCanvas
+          ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} />
+          : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} />)}
 
         <div className="sync-panel panel">
           <h2>Sync status</h2>
@@ -1421,28 +1507,41 @@ function App() {
           </div>
         )}
       </section>
-      <nav className="bottom-dock" aria-label="Main navigation">
-        <button type="button" className={`dock-item ${activeView === 'library' ? 'active' : ''}`} aria-current={activeView === 'library' ? 'page' : undefined} onClick={() => setActiveView('library')}>
-          <span className="dock-icon" aria-hidden="true">▦</span><span>Library</span>
+      <nav className={`bottom-dock ${isHome ? 'home-dock' : ''}`} aria-label="Main navigation">
+        <button type="button" className={`dock-item dock-home ${isHome ? 'active' : ''}`} aria-label="Duckler home" aria-current={isHome ? 'page' : undefined} onClick={() => { navigateTo('home'); setSortMode('newest'); }}>
+          <span className="brand-mark duckler-mark" aria-hidden="true" />
         </button>
-        <button type="button" className={`dock-item ${activeView === 'collections' ? 'active' : ''}`} aria-current={activeView === 'collections' ? 'page' : undefined} onClick={() => setActiveView('collections')}>
-          <span className="dock-icon" aria-hidden="true">▱</span><span>Collections</span>
+        <button type="button" className={`dock-item ${activeView === 'collections' ? 'active' : ''}`} aria-current={activeView === 'collections' ? 'page' : undefined} onClick={() => navigateTo('collections')}>
+          <NavigationIcon name="collections" /><span>Collections</span>
         </button>
-        <button type="button" className={`dock-item ${activeView === 'canvas' ? 'active' : ''}`} aria-current={activeView === 'canvas' ? 'page' : undefined} onClick={() => setActiveView('canvas')}>
-          <span className="dock-icon" aria-hidden="true">▧</span><span>Canvas</span>
+        <button type="button" className={`dock-item ${activeView === 'canvas' ? 'active' : ''}`} aria-current={activeView === 'canvas' ? 'page' : undefined} onClick={() => navigateTo('canvas')}>
+          <NavigationIcon name="canvas" /><span>Canvas</span>
         </button>
-        <div className="profile-menu" ref={profileMenuRef}>
-          {profileOpen && (
-            <div className="profile-popover" aria-label="Profile">
-              <div className="profile-popover-heading">
-                <span className="profile-avatar profile-avatar-large" aria-hidden="true">
-                  {profilePhoto ? <img src={profilePhoto} alt="" /> : displayProfileName.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <strong>{displayProfileName}</strong>
-                  <span>{displayProfileTag ? `@${displayProfileTag}` : driveConnected ? driveAccount : 'Local profile'}</span>
-                </div>
-              </div>
+        <div className="profile-menu" ref={profileMenuRef}
+          onMouseEnter={() => { if (!settingsOpen) setProfileOpen(true); }} onMouseLeave={() => setProfileOpen(false)}>
+          {profileOpen && <div className="profile-popover profile-preview" id="profile-preview" role="tooltip" aria-label="Profile preview">
+            <div className="profile-identity-card" role="group" aria-label="Profile card">
+            <span className="profile-avatar profile-avatar-large" aria-hidden="true">{profilePhoto ? <img src={profilePhoto} alt="" /> : displayProfileName.slice(0, 1).toUpperCase()}</span>
+            <strong>{displayProfileName}</strong>
+            {displayProfileTag && <span>@{displayProfileTag}</span>}
+            </div>
+            <p>{cards.filter(card => !card.trashed).length} cards · {collections.length} collections</p>
+          </div>}
+          <button type="button" className="profile-trigger" aria-label="Open settings" title="Settings" aria-haspopup="dialog" aria-describedby={profileOpen ? 'profile-preview' : undefined}
+            onFocus={() => { if (!settingsOpen) setProfileOpen(true); }} onBlur={() => setProfileOpen(false)} onClick={() => { setProfileOpen(false); setSettingsOpen(true); }}>
+            <span className="profile-avatar" aria-hidden="true">{profilePhoto ? <img src={profilePhoto} alt="" /> : displayProfileName.slice(0, 1).toUpperCase()}</span>
+          </button>
+        </div>
+      </nav>
+      {settingsOpen && <Dialog label="Settings" className="app-settings" onClose={() => setSettingsOpen(false)}>
+        <button className="close-detail" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
+        <h2>Settings</h2>
+        <div className="settings-profile-card profile-identity-card">
+          <span className="profile-avatar settings-avatar" aria-hidden="true">{profilePhoto ? <img src={profilePhoto} alt="" /> : displayProfileName.slice(0, 1).toUpperCase()}</span>
+          <strong>{displayProfileName}</strong>{displayProfileTag && <span>@{displayProfileTag}</span>}
+        </div>
+        <label className="profile-card-color"><span>Profile card color</span><input type="color" aria-label="Profile card color" value={profileCardColor} onChange={event => setProfileCardColor(event.target.value)} /></label>
+        <h3>Profile</h3>
               <label className="profile-name-field">
                 <span>Profile name</span>
                 <input
@@ -1483,61 +1582,76 @@ function App() {
                 )}
               </div>
               {profileMessage && <p className={`profile-message ${profileError ? 'error' : ''}`} role={profileError ? 'alert' : 'status'}>{profileMessage}</p>}
-              <div className="profile-sync-state">
-                <span className={`sync-dot ${syncStatus.connected ? 'online' : 'offline'}`} aria-hidden="true" />
-                <span>{sidebarStatusText}</span>
-              </div>
-              <button type="button" className="profile-drive-action" onClick={() => void handleDriveConnection()} disabled={!isGoogleDriveConfigured() && !driveConnected}>
-                {driveConnected ? 'Manage Drive connection' : 'Connect Google Drive'}
-              </button>
-            </div>
-          )}
-          <button
-            type="button"
-            className={`profile-trigger ${profileOpen ? 'active' : ''}`}
-            aria-label="Open profile"
-            aria-expanded={profileOpen}
-            aria-haspopup="true"
-            onClick={() => setProfileOpen((open) => !open)}
-          >
-            <span className="profile-avatar" aria-hidden="true">
-              {profilePhoto ? <img src={profilePhoto} alt="" /> : displayProfileName.slice(0, 1).toUpperCase()}
-            </span>
+
+        <div className="settings-section">
+          <button type="button" className="settings-nav-row" onClick={() => { setSettingsOpen(false); setExtensionSetupOpen(true); }}>
+            <span className="settings-row-icon" aria-hidden="true"><InterfaceIcon name="browser" /></span><span><strong>Browser extension</strong>{extensionStatus && <small>{extensionStatus}</small>}</span><InterfaceIcon name="link" />
           </button>
         </div>
-      </nav>
-      <div className={`add-menu ${addMenuOpen ? 'is-open' : ''}`} ref={addMenuRef}>
+        <div className="settings-section">
+          <button type="button" className="settings-nav-row" onClick={() => void handleDriveConnection()} disabled={!isGoogleDriveConfigured() && !driveConnected} title={isGoogleDriveConfigured() || driveConnected ? 'Google Drive settings' : 'Configure VITE_GOOGLE_CLIENT_ID to enable Drive'}>
+            {driveConnected ? 'Drive settings' : 'Connect Drive'}
+          </button>
+        </div>
+          <details className="workspace-menu" onMouseLeave={event => {
+            const menu = event.currentTarget;
+            window.setTimeout(() => { if (!menu.matches(':hover')) menu.open = false; }, 140);
+          }}>
+            <summary aria-label="Storage settings" title="Storage settings">•••</summary>
+            {storageEstimate && (
+              <div className="workspace-menu-content">
+                <span>{storageEstimate.usageMb.toFixed(1)} MB of {storageEstimate.quotaMb.toFixed(1)} MB used</span>
+                <button type="button" className="mini-button" onClick={() => void handlePersistLocalStorage()}>
+                  {storageEstimate.persisted ? 'Storage protected' : 'Protect storage'}
+                </button>
+                <button type="button" className="mini-button" onClick={() => void handleClearLocalCache()}>
+                  Clear temporary data
+                </button>
+              </div>
+            )}
+          </details>
+        <div className="settings-appearance">
+          <span>Theme</span><div className="theme-segment" role="group" aria-label="Theme">
+            {(['light', 'dark', 'system'] as const).map(mode => <button type="button" key={mode} aria-pressed={themeMode === mode} onClick={() => setThemeMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
+          </div>
+        </div>
+      </Dialog>}
+      {extensionSetupOpen && <ExtensionSetup onClose={() => setExtensionSetupOpen(false)} onConnected={() => setExtensionConnectionVersion(current => current + 1)} />}
+      <div className={`add-menu ${addMenuOpen ? 'is-open' : ''}`} ref={addMenuRef} onMouseLeave={event => {
+        const menu = event.currentTarget;
+        window.setTimeout(() => { if (!menu.matches(':hover')) setAddMenuOpen(false); }, 140);
+      }}>
         <button ref={cardComposerTriggerRef} type="button" className="floating-add-button" aria-label="Add card" aria-expanded={addMenuOpen} aria-haspopup="true" title="Add card" onClick={() => setAddMenuOpen((open) => !open)}>+</button>
         {addMenuOpen && <div className="add-menu-popover" aria-label="Create">
           <div className="add-menu-group">
             <button type="button" onClick={() => {
-              setActiveView('library');
+              navigateTo('library');
               setAddMenuOpen(false);
               setCollectionMenuOpen(true);
             }}>
-              <span className="add-menu-icon" aria-hidden="true">▱</span>
+              <span className="add-menu-icon" aria-hidden="true"><NavigationIcon name="collections" /></span>
               <span>Collection</span>
             </button>
             <button type="button" onClick={() => {
-              setActiveView('canvas');
+              navigateTo('canvas');
               setAddMenuOpen(false);
             }}>
-              <span className="add-menu-icon" aria-hidden="true">▧</span>
+              <span className="add-menu-icon" aria-hidden="true"><NavigationIcon name="canvas" /></span>
               <span>Canvas</span>
             </button>
           </div>
           <div className="add-menu-group">
             <button type="button" onClick={() => handleQuickAddCard('bookmark')}>
-              <span className="add-menu-icon" aria-hidden="true">↗</span>
+              <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="link" /></span>
               <span>Link</span>
             </button>
             <label className="add-menu-action">
-              <span className="add-menu-icon" aria-hidden="true">↥</span>
+              <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="upload" /></span>
               <span>Upload</span>
               <input ref={imagePickerRef} type="file" accept="image/*" onChange={handleFileChange} />
             </label>
             <button type="button" onClick={() => handleQuickAddCard('text')}>
-              <span className="add-menu-icon" aria-hidden="true">≡</span>
+              <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="note" /></span>
               <span>Note</span>
             </button>
           </div>
@@ -1545,10 +1659,10 @@ function App() {
       </div>
       {cardComposerOpen && (
         <div
-          className="composer-backdrop"
+          className={`composer-backdrop ${composerSaving ? 'is-saving' : ''}`}
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (event.target === event.currentTarget && !composerSaving) {
               setCardComposerOpen(false);
             }
           }}
@@ -1557,6 +1671,7 @@ function App() {
             className="card-composer"
             role="dialog"
             aria-modal="true"
+            aria-busy={composerSaving}
             aria-labelledby="card-composer-title"
             onSubmit={handleCreateCard}
             onKeyDown={(event) => {
@@ -1578,9 +1693,8 @@ function App() {
             }}
           >
             <header className="composer-topbar">
-              <button type="button" className="composer-close" aria-label="Close add card" onClick={() => setCardComposerOpen(false)}>×</button>
+              <button type="button" className="composer-close" aria-label="Close add card" disabled={composerSaving} onClick={() => setCardComposerOpen(false)}>×</button>
               <h2 id="card-composer-title" className="visually-hidden">Add card</h2>
-              <div className="composer-toolbar">
                 <label className="composer-type-control">
                   <span className="visually-hidden">Card type</span>
                   <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as CardRecord['type'] })}>
@@ -1589,25 +1703,27 @@ function App() {
                     <option value="image">Image</option>
                   </select>
                 </label>
-                <button type="button" className={`composer-tool ${composerSourceOpen ? 'active' : ''}`} aria-pressed={composerSourceOpen} onClick={() => setComposerSourceOpen((open) => !open)}>
-                  <span aria-hidden="true">↗</span> Source
+              <div className="composer-toolbar">
+                <button type="button" className={`composer-tool ${composerSourceOpen ? 'active' : ''}`} title="Source" aria-pressed={composerSourceOpen} onClick={() => setComposerSourceOpen((open) => !open)}>
+                  <span aria-hidden="true"><InterfaceIcon name="link" /></span> Source
                 </button>
-                <button type="button" className="composer-tool" onClick={() => composerNoteRef.current?.focus()}>
-                  <span aria-hidden="true">▤</span> Note
+                <button type="button" className="composer-tool" title="Note" onClick={() => composerNoteRef.current?.focus()}>
+                  <span aria-hidden="true"><InterfaceIcon name="note" /></span> Note
                 </button>
-                <button type="button" className={`composer-tool ${composerCollectionsOpen ? 'active' : ''}`} aria-expanded={composerCollectionsOpen} onClick={() => setComposerCollectionsOpen((open) => !open)}>
-                  <span aria-hidden="true">▱</span> Collections{newCardCollectionIds.length ? ` · ${newCardCollectionIds.length}` : ''}
+                <button type="button" className={`composer-tool ${composerCollectionsOpen ? 'active' : ''}`} title="Collections" aria-expanded={composerCollectionsOpen} onClick={() => setComposerCollectionsOpen((open) => !open)}>
+                  <span aria-hidden="true"><NavigationIcon name="collections" /></span> Collections{newCardCollectionIds.length ? ` · ${newCardCollectionIds.length}` : ''}
                 </button>
                 {form.type === 'image' && (
                   <label className="composer-tool composer-upload">
-                    <span aria-hidden="true">↥</span> Image
+                    <span aria-hidden="true"><InterfaceIcon name="upload" /></span> Image
                     <input type="file" accept="image/*" onChange={handleFileChange} />
                   </label>
                 )}
-                <button type="submit" className="primary-button composer-save">Save</button>
               </div>
+              <button type="submit" className="primary-button composer-save" disabled={composerSaving}>{composerSaving && <span className="save-spinner" aria-hidden="true" />}{composerSaving ? 'Saving…' : 'Save'}</button>
             </header>
             <div className="composer-writing-area">
+              {composerError && <p className="composer-error" role="alert">{composerError}</p>}
               {composerSourceOpen && (
                 <label className="composer-source-field">
                   <span className="visually-hidden">Source URL</span>
@@ -1655,7 +1771,7 @@ function App() {
                 <input placeholder="Add tags" value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} />
               </label>
               {mediaPreview && form.type === 'image' ? <img src={mediaPreview} alt="Image preview" className="preview" /> : null}
-              <button type="button" className="composer-queue" onClick={handleQueueCapture}>Save for later</button>
+              <button type="button" className="composer-queue" disabled={composerSaving} onClick={handleQueueCapture}>Save for later</button>
             </div>
           </form>
         </div>

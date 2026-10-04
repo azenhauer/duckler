@@ -1,22 +1,9 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Duckler Capture Settings</title>
-    <link rel="stylesheet" href="popup.css">
-  </head>
-  <body>
-    <main>
-      <header><div><strong>Duckler Capture</strong><span>Settings</span></div></header>
-      <form id="settings-form">
-        <label for="app-url">Duckler app URL</label>
-        <input id="app-url" type="url" placeholder="http://localhost:5176/" required>
-        <p>Captured items open in Duckler through this URL. Use an HTTP(S) address.</p>
-        <button class="primary" type="submit">Save settings</button>
-      </form>
-      <p id="status" role="status" aria-live="polite"></p>
-    </main>
-    <script src="options.js"></script>
-  </body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Duckler Capture Settings</title><link rel="stylesheet" href="popup.css"></head>
+<body class="settings-page"><main>
+<header class="brand"><span class="extension-mark" role="img" aria-label="Duckler Capture"></span></header>
+<h1>Connect your library</h1><p class="quiet-hint">In the app, open your profile → Settings → Browser extension and copy the setup code here.</p>
+<p id="status" role="status" aria-live="polite"></p>
+<form id="settings-form" novalidate><label for="pairing-code">Library setup code</label><textarea id="pairing-code" rows="5" required placeholder="Paste the code from your library"></textarea><button id="confirm-connection" type="submit" class="save-button">Confirm library connection</button></form>
+<section id="connection-details" hidden><p id="connected-origin"></p><label for="confirmation-code">Confirmation code — paste this back in your library</label><textarea id="confirmation-code" rows="5" readonly></textarea><button id="copy-confirmation" class="subtle-button">Copy confirmation code</button></section>
+<p id="queue-summary" class="quiet-hint"></p><button id="open-library" class="subtle-button">Open library ↗</button>
+</main><script src="options.js"></script></body></html>

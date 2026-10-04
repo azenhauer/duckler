@@ -1,0 +1,173 @@
+import { CAPTURE_PORT, MAX_QUEUE_BYTES, bytesToBase64, cropBounds, parsePairing } from '../../../packages/shared/src/captureProtocol';
+import { CaptureQueue } from './queue';
+import { bridgeRequest, validateSender } from './bridge';
+import { isAllowedLibraryOrigin } from './origin';
+
+const queue = new CaptureQueue();
+const trustedPorts = new Set<chrome.runtime.Port>();
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Capture could not be saved.';
+const badge = async (error = false) => {
+  const count = await queue.captures.count();
+  await chrome.action.setBadgeText({ text: error ? '!' : count ? String(count) : '' });
+  await chrome.action.setBadgeBackgroundColor({ color: error ? '#bd4939' : '#62735d' });
+};
+const notify = async () => {
+  await badge();
+  for (const port of trustedPorts) {
+    try { port.postMessage({ type: 'queue-changed' }); } catch { trustedPorts.delete(port); }
+  }
+};
+const ready = (async () => {
+  // Preserve older installations, including screenshots, before removing the old storage entry.
+  const legacy = await chrome.storage.local.get('duckler-capture-queue');
+  for (const item of legacy['duckler-capture-queue'] ?? []) await queue.enqueue(item);
+  await chrome.storage.local.remove('duckler-capture-queue');
+  await badge();
+})();
+
+const save = async (capture: Record<string, unknown>) => {
+  await ready;
+  const item = await queue.enqueue({ ...capture, id: capture.id ?? crypto.randomUUID(), createdAt: capture.createdAt ?? new Date().toISOString() });
+  await notify();
+  return item;
+};
+const openLibrary = async () => {
+  const pairing = await queue.pairing();
+  const url = pairing?.origin ?? (await chrome.storage.local.get('duckler-app-url'))['duckler-app-url'] ?? 'https://duckler.pages.dev';
+  const target = new URL(url);
+  if (!['https:', 'http:'].includes(target.protocol)) throw new Error('Invalid library address.');
+  const [existing] = (await chrome.tabs.query({})).filter(tab => {
+    try { return tab.url && new URL(tab.url).origin === target.origin; } catch { return false; }
+  });
+  if (existing?.id) {
+    await chrome.tabs.update(existing.id, { active: true });
+    if (existing.windowId) await chrome.windows.update(existing.windowId, { focused: true });
+  } else await chrome.tabs.create({ url: target.href });
+};
+
+async function captureRegion(sender: chrome.runtime.MessageSender, request: Record<string, unknown>) {
+  const tabId = sender.tab?.id, windowId = sender.tab?.windowId;
+  if (!Number.isInteger(tabId) || !Number.isInteger(windowId) || sender.frameId !== 0 || !sender.documentId) throw new Error('Start a screenshot from a regular website.');
+  const expected = request.viewport as { width: number; height: number };
+  const rect = request.rect as { left: number; top: number; right: number; bottom: number };
+  const check = async () => {
+    const [active] = await chrome.tabs.query({ active: true, windowId });
+    const focused = await chrome.windows.get(windowId!);
+    if (active?.id !== tabId || active.url !== request.url || !focused.focused) throw new Error('The active page changed. Try the screenshot again.');
+    const result = await chrome.tabs.sendMessage(tabId!, { type: 'check-capture-viewport', viewport: expected, url: request.url }, { documentId: sender.documentId });
+    if (!result?.ok) throw new Error('The page moved or resized. Try the screenshot again.');
+  };
+  await check();
+  const screenshot = await chrome.tabs.captureVisibleTab(windowId!, { format: 'png' });
+  await check();
+  const bitmap = await createImageBitmap(await (await fetch(screenshot)).blob());
+  try {
+    const bounds = cropBounds(rect, expected, { width: bitmap.width, height: bitmap.height });
+    const canvas = new OffscreenCanvas(bounds.width, bounds.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not crop this screenshot.');
+    ctx.drawImage(bitmap, bounds.left, bounds.top, bounds.width, bounds.height, 0, 0, bounds.width, bounds.height);
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return await save({ kind: 'screenshot', title: `Screenshot — ${sender.tab?.title || 'Captured area'}`.slice(0, 1000), sourceUrl: request.url, payload: `data:image/png;base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` });
+  } finally { bitmap.close(); }
+}
+
+const menus = () => chrome.contextMenus.removeAll(() => {
+  for (const [id, title, contexts] of [
+    ['page', 'Save page to Duckler', ['page']], ['link', 'Save link to Duckler', ['link']],
+    ['selection', 'Save text to Duckler', ['selection']], ['image', 'Save image to Duckler', ['image']],
+  ] as const) chrome.contextMenus.create({ id: `duckler-save-${id}`, title, contexts: [...contexts] });
+});
+chrome.runtime.onInstalled.addListener(menus);
+chrome.runtime.onStartup.addListener(menus);
+
+async function beginRegion(tabId: number) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  const result = await chrome.tabs.sendMessage(tabId, { type: 'start-region-capture' });
+  if (!result?.ok) throw new Error(result?.error || 'Use screenshot upload for this page.');
+}
+async function feedback(tabId: number, text: string, error = false) {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    await chrome.tabs.sendMessage(tabId, { type: 'capture-feedback', text, error });
+  } catch { await badge(error); }
+}
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== 'capture-visible-area' || !tab?.id) return;
+  void beginRegion(tab.id).catch(() => badge(true));
+});
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (!tab?.id) return;
+  void (async () => {
+    let capture: Record<string, unknown>;
+    if (info.menuItemId === 'duckler-save-image') {
+      // activeTab permits same-origin image reads; cross-origin images get an explicit screenshot fallback.
+      const imageUrl = new URL(info.srcUrl!);
+      if (imageUrl.origin !== new URL(tab.url!).origin) throw new Error('This image needs access to another website. Use Capture region or upload it to Duckler.');
+      const response = await fetch(imageUrl.href, { credentials: 'omit', signal: AbortSignal.timeout(15000) });
+      const blob = await response.blob();
+      if (!response.ok || !['image/png', 'image/jpeg', 'image/webp'].includes(blob.type) || blob.size > 10 * 1024 * 1024) throw new Error('Could not read this image. Use Capture region instead.');
+      capture = { kind: 'image', title: tab.title || 'Saved image', sourceUrl: info.pageUrl, payload: `data:${blob.type};base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` };
+    } else if (info.menuItemId === 'duckler-save-link') {
+      capture = { kind: 'bookmark', title: info.linkUrl, sourceUrl: info.linkUrl };
+    } else {
+      capture = { kind: info.selectionText ? 'text' : 'bookmark', title: info.selectionText?.slice(0, 1000) || tab.title || info.pageUrl,
+        note: info.selectionText || '', sourceUrl: info.pageUrl || tab.url };
+    }
+    await save(capture);
+    await feedback(tab.id!, 'Saved on this device · ready for your library');
+  })().catch(error => feedback(tab.id!, errorMessage(error), true));
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return false;
+  const respond = async () => {
+    await ready;
+    switch (message?.type) {
+      case 'queue-capture': return { item: await save(message.capture) };
+      case 'list-captures': {
+        const rows = await queue.captures.orderBy('createdAt').reverse().toArray();
+        return { items: rows.map(row => ({ ...JSON.parse(new TextDecoder().decode(row.bytes)), byteLength: row.byteLength })), budget: MAX_QUEUE_BYTES };
+      }
+      case 'delete-capture': await queue.captures.delete(message.id); await notify(); return {};
+      case 'deliver-capture': case 'open-library': await openLibrary(); return {};
+      case 'start-region': await beginRegion(message.tabId); return {};
+      case 'capture-region': return { item: await captureRegion(sender, message) };
+      case 'pair-library': {
+        if (sender.tab || !sender.url?.startsWith(chrome.runtime.getURL('options.html'))) throw new Error('Confirm the connection in extension settings.');
+        const pairing = parsePairing(message.pairing);
+        const allowed = chrome.runtime.getManifest().externally_connectable?.matches ?? [];
+        if (!isAllowedLibraryOrigin(pairing.origin, allowed)) throw new Error('This extension build does not support that library address.');
+        await queue.pair(pairing);
+        return { extensionId: chrome.runtime.id, pairing };
+      }
+      case 'pairing-status': return { pairing: await queue.pairing(), extensionId: chrome.runtime.id };
+      default: throw new Error('Unsupported capture request.');
+    }
+  };
+  void respond().then(result => sendResponse({ ok: true, ...result }), error => sendResponse({ ok: false, error: errorMessage(error) }));
+  return true;
+});
+
+chrome.runtime.onConnectExternal.addListener(port => {
+  if (port.name !== CAPTURE_PORT || !port.sender) { port.disconnect(); return; }
+  let authenticated = false;
+  let chain = Promise.resolve();
+  port.onDisconnect.addListener(() => trustedPorts.delete(port));
+  port.onMessage.addListener(message => {
+    chain = chain.then(async () => {
+      try {
+        await ready;
+        const result = await bridgeRequest(queue, port.sender!, message, authenticated);
+        if (message.type === 'hello') { authenticated = true; trustedPorts.add(port); }
+        port.postMessage({ requestId: message.requestId, ok: true, ...result });
+        if (message.type === 'ack') await badge();
+      } catch (error) {
+        try { port.postMessage({ requestId: message.requestId, ok: false, error: errorMessage(error) }); } catch { /* disconnected; queue survives */ }
+        if (!authenticated) port.disconnect();
+      }
+    });
+  });
+  // Reject hostile connections before any metadata is exposed.
+  void queue.pairing().then(pairing => validateSender(port.sender!, pairing)).catch(() => port.disconnect());
+});

@@ -8,10 +8,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['library-icon.svg'],
+      includeAssets: ['duckler-logo.svg'],
       manifest: {
-        name: 'Personal Visual Library',
-        short_name: 'Visual Library',
+        name: 'Duckler Library',
+        short_name: 'Duckler',
         description: 'Local-first visual library for bookmarks, notes, images and capture queue items.',
         theme_color: '#141516',
         background_color: '#141516',
@@ -20,11 +20,12 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/library-icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
+            src: '/icons/duck-192.png',
+            sizes: '192x192',
+            type: 'image/png',
             purpose: 'any maskable',
           },
+          { src: '/icons/duck-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
         share_target: {
           action: '/share-target/',
@@ -39,7 +40,7 @@ export default defineConfig({
         },
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
       },
     }),
   ],

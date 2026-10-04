@@ -12,19 +12,19 @@ This repository is a TypeScript monorepo for the Personal Visual Library describ
 ## Setup
 
 ```bash
-corepack enable
-corepack prepare pnpm@9.15.0 --activate
-pnpm install
+npm install
 ```
 
 ## Common commands
 
 ```bash
-pnpm dev
-pnpm build
-pnpm test
-pnpm lint
-pnpm format
+npm run dev
+npm run build
+npm test
+npm run lint
+npm run typecheck
+npm run build:extension:dev
+npm run test:ui
 ```
 
 ## Deploy to Cloudflare Pages
@@ -32,7 +32,7 @@ pnpm format
 The Pages project is configured to build the static PWA from the monorepo root. The Cloudflare Pages build settings are:
 
 - **Root directory:** `/`
-- **Build command:** `corepack pnpm install --frozen-lockfile && corepack pnpm --dir apps/web build`
+- **Build command:** `npm ci && npm run build --workspace @visual-library/web`
 - **Build output directory:** `apps/web/dist`
 - **Build environment variable:** `NODE_VERSION=20`
 - **Production build variable (optional):** `VITE_GOOGLE_CLIENT_ID`
@@ -41,7 +41,7 @@ Create a Pages project connected to this repository and add `VITE_GOOGLE_CLIENT_
 
 Cloudflare Pages serves the PWA and its service worker, applies the static response headers in `apps/web/public/_headers`, and routes share-target POST requests through `functions/share-target/`. The fallback safely redirects supported URL/text shares to the app; shared image files should be added through the app's Upload action. The service worker normally stores share metadata in the offline inbox; the Pages Function covers the case where the app does not yet control the page.
 
-For command-line publishing, authenticate once with `corepack pnpm dlx wrangler login`, build with `corepack pnpm --dir apps/web build`, then run `corepack pnpm pages:deploy`. `corepack pnpm pages:preview` serves the built site locally with Pages Functions enabled.
+For command-line publishing, authenticate once with `npx wrangler login`, build with `npm run build --workspace @visual-library/web`, then run `npm run pages:deploy`. `npm run pages:preview` serves the built site locally with Pages Functions enabled.
 
 `wrangler.jsonc` points Wrangler at `apps/web/dist`. Git-connected Pages deployments use the build settings above; no Cloudflare account or credentials are stored in this repository.
 
@@ -59,7 +59,9 @@ Without this value, the app remains in local-only mode and surfaces the exact co
 
 This workspace includes the local-first library and the implemented M1–M7 milestone features: card schemas, local persistence, search, collections, capture queue processing, canvas references, Google Drive sync, recovery controls, and a one-way Obsidian archive export.
 
-The library includes a local profile area for a display name, user tag, and photo (JPEG/PNG/WebP, up to 1 MiB). These profile details are stored in the current browser only and are not synced to Google Drive.
+The centered refs workspace defaults to dark mode and uses bundled Inter. Home always shows search and animated Collections/Canvas entry points, with the same shortcuts available in the bottom dock. Clicking the bottom avatar opens Settings; hovering it is read-only. The identity card has a customizable glass accent, without applying that texture to the whole popup. Empty libraries do not insert sample data.
+
+Canvas opens a collection gallery; each collection has its own cards, saved arrangement and viewport. Profile details and canvas layouts stay in the current browser and are not synced to Google Drive. Canvas layouts are not currently part of JSON/Obsidian exports. `npm run test:ui` and `npm run test:canvas:ui` verify the running app in isolated browser profiles.
 
 The remaining M7 release gate is external/manual: open an exported archive in an actual Obsidian vault and connect live sync conflict state to the conflict report. The exporter reports conflict status as unknown when no conflict snapshot is supplied.
 
