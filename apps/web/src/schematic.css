@@ -380,3 +380,11 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 @keyframes sx-leave-fade { to { opacity: 0; } }
 @keyframes sx-leave-dialog { to { transform: translateY(8px) scale(.985); } }
 @media (prefers-reduced-motion: reduce) { .is-leaving { display: none !important; } .home-entry .home-artwork, .b-button { transition: none !important; } }
+
+/* Nested collections: children sit indented under their parent with a leader line. */
+.collection-tile.is-child { margin-left: 34px; position: relative; }
+.collection-tile.is-child::before { content: ''; position: absolute; left: -22px; top: -12px; width: 18px; height: 50%; border-left: 1px dashed var(--sx-line-soft); border-bottom: 1px dashed var(--sx-line-soft); pointer-events: none; }
+.collection-parent-field { position: absolute; right: 44px; top: 10px; z-index: 2; }
+.collection-parent-field select { max-width: 150px; padding: 3px 6px; border: 1px solid var(--sx-line-soft); border-radius: 0; background: var(--ui-surface); color: var(--ui-text-muted); font: 700 .6rem/1.2 var(--sx-label); letter-spacing: .08em; text-transform: uppercase; opacity: .55; transition: opacity 100ms linear; }
+.collection-tile:hover .collection-parent-field select, .collection-parent-field select:focus { opacity: 1; }
+.collection-menu-row.is-child { padding-left: 16px; } .collection-menu-row.is-child .collection-menu-item::before { content: "└ "; color: var(--ui-text-muted); }

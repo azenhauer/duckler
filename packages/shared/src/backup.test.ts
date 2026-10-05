@@ -49,3 +49,21 @@ describe('library backup', () => {
     expect(() => parseLibraryBackup('{nope')).toThrow(/JSON/);
   });
 });
+
+describe('collection hierarchy', () => {
+  it('keeps one valid nesting level and drops deeper or dangling parents on restore', async () => {
+    const { collectionParentError, orderCollectionTree } = await import('./index');
+    const root = { ...collection, id: 'root', name: 'Root', cardIds: [] };
+    const child = { ...collection, id: 'child', name: 'Child', cardIds: [], parentId: 'root' };
+    const grandchild = { ...collection, id: 'grand', name: 'Grand', cardIds: [], parentId: 'child' };
+    const orphan = { ...collection, id: 'orphan', name: 'Orphan', cardIds: [], parentId: 'missing' };
+    const parsed = parseLibraryBackup(JSON.stringify({ cards: [], collections: [root, child, grandchild, orphan] }));
+    expect(parsed.collections.find(item => item.id === 'child')?.parentId).toBe('root');
+    expect(parsed.collections.find(item => item.id === 'grand')?.parentId).toBeUndefined();
+    expect(parsed.collections.find(item => item.id === 'orphan')?.parentId).toBeUndefined();
+    expect(collectionParentError([root, child], 'root', 'child')).toMatch(/one level/);
+    expect(collectionParentError([root, child], 'child', 'child')).toMatch(/itself/);
+    expect(collectionParentError([root, { ...child, parentId: undefined }], 'child', 'root')).toBeNull();
+    expect(orderCollectionTree([child, root]).map(item => `${item.depth}:${item.collection.id}`)).toEqual(['0:root', '1:child']);
+  });
+});

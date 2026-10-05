@@ -10,7 +10,9 @@ import {
   createObsidianExportArchive,
   dedupeQueueItems,
   enqueueCapture,
+  collectionParentError,
   createLibraryBackup,
+  orderCollectionTree,
   parseLibraryBackup,
   toggleCardInCollection,
   type CaptureQueueItem,
@@ -846,9 +848,23 @@ function App() {
     setCollectionMenuOpen(false);
   };
 
+  // One level of nesting: moving a collection never changes its cards or memberships.
+  const handleSetCollectionParent = async (collectionId: string, parentId: string | null) => {
+    const problem = collectionParentError(collectionsRef.current, collectionId, parentId);
+    if (problem) { setShareNotice(problem); return; }
+    const target = collectionsRef.current.find(item => item.id === collectionId);
+    if (!target || (target.parentId ?? null) === parentId) return;
+    const { parentId: _old, ...rest } = target;
+    const next = { ...rest, ...(parentId ? { parentId } : {}), updatedAt: new Date().toISOString() };
+    setCollections(current => current.map(item => item.id === collectionId ? next : item));
+    try { await saveCollection(next); }
+    catch { setCollections(current => current.map(item => item.id === collectionId ? target : item)); setShareNotice("Couldn't move collection"); }
+  };
+
   const handleDeleteCollection = async (collectionId: string) => {
     await deleteCollection(collectionId);
-    setCollections((current) => current.filter((collection) => collection.id !== collectionId));
+    setCollections((current) => current.filter((collection) => collection.id !== collectionId)
+      .map(collection => collection.parentId === collectionId ? (({ parentId: _parent, ...rest }) => rest)(collection) : collection));
     if (selectedCollectionId === collectionId) {
       setSelectedCollectionId(null);
     }
@@ -1320,8 +1336,8 @@ function App() {
                   <span>All notes</span>
                   <span>{cards.filter((card) => !card.trashed).length}</span>
                 </button>
-                {collections.map((collection) => (
-                  <div key={collection.id} className="collection-menu-row">
+                {orderCollectionTree(collections).map(({ collection, depth }) => (
+                  <div key={collection.id} className={`collection-menu-row ${depth ? 'is-child' : ''}`}>
                     <button
                       type="button"
                       className={`collection-menu-item ${selectedCollectionId === collection.id ? 'active' : ''}`}
@@ -1417,7 +1433,7 @@ function App() {
         {activeView === 'collections' && (
           <div className="collection-grid" aria-label="Your collections">
             {searchTerm.trim() && !visibleCollections.length && <p className="search-empty">No collections match “{searchTerm.trim()}”.</p>}
-            {visibleCollections.map((collection) => {
+            {orderCollectionTree(visibleCollections).map(({ collection, depth }) => {
               const memberCards = collection.cardIds
                 .map((cardId) => cards.find((card) => card.id === cardId && !card.trashed))
                 .filter((card): card is CardRecord => Boolean(card))
@@ -1427,7 +1443,7 @@ function App() {
               ).length;
 
               return (
-                <article key={collection.id} className="collection-tile">
+                <article key={collection.id} className={`collection-tile ${depth ? 'is-child' : ''}`} data-depth={depth}>
                   <button
                     type="button"
                     className="collection-tile-main"
@@ -1460,6 +1476,13 @@ function App() {
                       </span>
                     </span>
                   </button>
+                  <label className="collection-parent-field" title="Nest inside another collection">
+                    <span className="visually-hidden">Parent of {collection.name}</span>
+                    <select aria-label={`Parent of ${collection.name}`} value={collection.parentId ?? ''} onChange={event => void handleSetCollectionParent(collection.id, event.target.value || null)}>
+                      <option value="">Top level</option>
+                      {collections.filter(item => !collectionParentError(collections, collection.id, item.id)).map(item => <option key={item.id} value={item.id}>Inside {item.name}</option>)}
+                    </select>
+                  </label>
                   <button
                     type="button"
                     className="collection-tile-delete"

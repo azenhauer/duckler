@@ -56,9 +56,41 @@ export const collectionSchema = z.object({
   cardIds: z.array(z.string().min(1)).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Parent collection for one level of nesting. Parents are always top-level. */
+  parentId: z.string().min(1).optional(),
 });
 
 export type CollectionRecord = z.infer<typeof collectionSchema>;
+
+/** Why a collection cannot move under `parentId`, or null when the move is allowed (one nesting level, no cycles). */
+export const collectionParentError = (collections: Pick<CollectionRecord, 'id' | 'parentId'>[], id: string, parentId: string | null): string | null => {
+  if (parentId === null) return null;
+  if (parentId === id) return 'A collection cannot contain itself';
+  const parent = collections.find(item => item.id === parentId);
+  if (!parent) return 'Collection no longer exists';
+  if (parent.parentId) return 'Collections can only be nested one level deep';
+  if (collections.some(item => item.parentId === id)) return 'A collection with sub-collections cannot be nested';
+  return null;
+};
+
+/** Removes parent links that are missing, self-referencing or deeper than one level (used after restore or sync). */
+export const normalizeCollectionHierarchy = <T extends Pick<CollectionRecord, 'id' | 'parentId'>>(collections: T[]): T[] => {
+  const byId = new Map(collections.map(item => [item.id, item]));
+  return collections.map(item => {
+    if (!item.parentId) return item;
+    const parent = byId.get(item.parentId);
+    const valid = parent && parent.id !== item.id && !parent.parentId;
+    if (valid) return item;
+    const { parentId: _dropped, ...rest } = item;
+    return rest as T;
+  });
+};
+
+/** Top-level collections each followed by their children, for tree display and export order. */
+export const orderCollectionTree = <T extends Pick<CollectionRecord, 'id' | 'parentId'>>(collections: T[]): { collection: T; depth: 0 | 1 }[] => {
+  const roots = collections.filter(item => !item.parentId || !collections.some(other => other.id === item.parentId));
+  return roots.flatMap(root => [{ collection: root, depth: 0 as const }, ...collections.filter(item => item.parentId === root.id).map(child => ({ collection: child, depth: 1 as const }))]);
+};
 
 export type CreateCollectionInput = {
   id?: string;

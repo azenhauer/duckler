@@ -76,6 +76,9 @@ export const setCardCollectionMembership = async (
 export const deleteCollection = async (collectionId: string): Promise<void> => {
   await cardDb.transaction('rw', [cardDb.collections, cardDb.canvasLayouts, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors], async () => {
     await cardDb.collections.delete(collectionId);
+    // Sub-collections of a deleted parent move to the top level; their cards are untouched.
+    const children = await cardDb.collections.filter(item => item.parentId === collectionId).toArray();
+    if (children.length) await cardDb.collections.bulkPut(children.map(({ parentId: _parent, ...rest }) => ({ ...rest, updatedAt: new Date().toISOString() })));
     await cardDb.canvasLayouts.delete(collectionId);
     await cardDb.canvases.delete(collectionId);
     await cardDb.canvasPlacements.where('canvasId').equals(collectionId).delete();

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { cardSchema, collectionSchema, normalizeSourceUrl, type CardRecord, type CollectionRecord } from './index';
+import { cardSchema, collectionSchema, normalizeCollectionHierarchy, normalizeSourceUrl, type CardRecord, type CollectionRecord } from './index';
 import { validateCanvasContent, type CanvasContent, type CanvasDocument, type CanvasViewport } from './canvas';
 
 export const LIBRARY_BACKUP_FORMAT = 2;
@@ -51,7 +51,7 @@ export function parseLibraryBackup(json: string): LibraryBackup {
   try { raw = JSON.parse(json); } catch { throw new Error('Backup is not valid JSON'); }
   const parsed = backupSchema().safeParse(raw);
   if (!parsed.success) throw new Error('Backup contents are not valid');
-  const { collections } = parsed.data;
+  const collections = normalizeCollectionHierarchy(parsed.data.collections);
   // Imported text is untrusted: keep only http(s) source links and raster image data URLs.
   const cards = parsed.data.cards.map(card => {
     if (card.dataUrl !== undefined && !/^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(card.dataUrl)) throw new Error('Backup contains an unsupported image');
