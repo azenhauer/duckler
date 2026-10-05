@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
@@ -25,6 +25,16 @@ try {
   const confirmation = await options.locator('#confirmation-code').inputValue();
   await library.getByRole('textbox', { name: 'Paste the confirmation code' }).fill(confirmation);
   await library.getByRole('button', { name: 'Connect extension', exact: true }).click();
+  await expect(library.locator('.notice').filter({ hasText: 'Extension connected' })).toBeVisible();
+  await library.getByRole('button', { name: 'Open settings' }).click();
+  await expect(library.getByRole('button', { name: /Browser extension/ })).toContainText('Extension connected');
+  await library.getByRole('button', { name: /Browser extension/ }).click();
+  await expect(library.getByRole('dialog', { name: 'Connect your browser' })).toContainText('Extension connected');
+  await library.keyboard.press('Escape');
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${id}/popup.html`);
+  assert.equal(await popup.locator('body').evaluate(element => getComputedStyle(element).width), '440px');
+  await popup.close();
   // Exercise the actual worker and connected web receiver; no browser APIs mocked.
   const response = await options.evaluate(() => chrome.runtime.sendMessage({ type: 'queue-capture', capture: { kind: 'text', title: 'Extension delivery check', note: 'Real Chromium worker, real local receiver.', tags: ['test'] } }));
   assert.equal(response.ok, true, JSON.stringify(response));

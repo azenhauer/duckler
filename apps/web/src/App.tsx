@@ -453,13 +453,20 @@ function App() {
 
   useEffect(() => {
     let disposed = false;
+    let connectionNotified = false;
     const stop = startExtensionBridge(() => {
       void Promise.all([readCards(), readCollections()]).then(([nextCards, nextCollections]) => {
         if (disposed) return;
         setCards(nextCards);
         if (nextCollections.length) setCollections(nextCollections);
       });
-    }, setExtensionStatus, () => collectionsRef.current.map(collection => ({ id: collection.id, name: collection.name, cardCount: collection.cardIds.length })));
+    }, setExtensionStatus, () => collectionsRef.current.map(collection => ({ id: collection.id, name: collection.name, cardCount: collection.cardIds.length })), () => {
+      setExtensionStatus('Extension connected');
+      if (!connectionNotified) {
+        connectionNotified = true;
+        notify({ title: 'Extension connected', detail: 'Duckler Capture is ready to send captures to this library.' });
+      }
+    });
     return () => { disposed = true; stop(); };
   }, [extensionConnectionVersion]);
 
@@ -1955,7 +1962,7 @@ function App() {
             </section>
             <div className="account-menu-actions">
               <button type="button" onClick={() => { setAccountMenuOpen(false); setSettingsOpen(true); }}>All settings</button>
-              <button type="button" onClick={() => { setAccountMenuOpen(false); setExtensionSetupOpen(true); }}>Browser extension</button>
+              <button type="button" onClick={() => { setAccountMenuOpen(false); setExtensionSetupOpen(true); }}>Browser extension{extensionStatus && <small>{extensionStatus}</small>}</button>
               {isGoogleDriveConfigured() && <button type="button" onClick={() => { setAccountMenuOpen(false); void handleDriveConnection(); }}>{driveConnected ? 'Disconnect Google Drive' : 'Connect Google Drive'}</button>}
             </div>
           </div>}
@@ -2047,7 +2054,7 @@ function App() {
         <CardStyleSettings value={cardStyle.style} onChange={cardStyle.setStyle} />
         {sounds.settings}
       </Dialog>}
-      {extensionSetupOpen && <ExtensionSetup onClose={() => setExtensionSetupOpen(false)} onConnected={() => setExtensionConnectionVersion(current => current + 1)} />}
+      {extensionSetupOpen && <ExtensionSetup connectionStatus={extensionStatus} onClose={() => setExtensionSetupOpen(false)} onConnected={() => { setExtensionStatus('Connecting extension…'); setExtensionConnectionVersion(current => current + 1); }} />}
       {undoMembership && <div className="membership-undo" role="status"><span>Removed from {undoMembership.collection.name}</span><button type="button" disabled={membershipSaving} onClick={() => void handleUndoMembership()}>Undo</button></div>}
       {quickAddPosition && <div ref={quickAddRef} className="quick-add-context" role="menu" aria-label="Quick add" tabIndex={-1} style={{ left: quickAddPosition.left, top: quickAddPosition.top }}
         onPointerEnter={() => { quickAddHovered.current = true; scheduleQuickAddClose(null); }}
@@ -2222,7 +2229,6 @@ function App() {
 }
 
 export default App;
-
 
 
 

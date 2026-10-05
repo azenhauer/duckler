@@ -34,7 +34,7 @@ export function acceptExtensionConnection(raw: string) {
   localStorage.setItem(CONNECTION_KEY, JSON.stringify({ ...pairing, extensionId: value.extensionId }));
 }
 
-export function startExtensionBridge(onChange: () => void, onStatus: (text: string) => void, getCollections?: () => Array<{ id: string; name: string; cardCount: number }>): () => void {
+export function startExtensionBridge(onChange: () => void, onStatus: (text: string) => void, getCollections?: () => Array<{ id: string; name: string; cardCount: number }>, onConnected?: () => void): () => void {
   const connection = getExtensionConnection();
   if (!connection) return () => {};
   const runtime = window.chrome?.runtime;
@@ -98,7 +98,11 @@ export function startExtensionBridge(onChange: () => void, onStatus: (text: stri
         pending.clear();
         if (!stopped) { onStatus('Extension unavailable · reconnecting'); retry = setTimeout(connect, 5000); }
       });
-      void request({ type: 'hello', collections: getCollections?.() ?? [] }).then(response => drain(response.items)).catch(error => { if (!stopped) onStatus(error.message); });
+      void request({ type: 'hello', collections: getCollections?.() ?? [] }).then(response => {
+        if (stopped) return;
+        onConnected?.();
+        return drain(response.items);
+      }).catch(error => { if (!stopped) onStatus(error.message); });
     } catch { if (!stopped) { onStatus('Extension unavailable'); retry = setTimeout(connect, 5000); } }
   };
   connect();
