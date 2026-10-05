@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "npm@10.8.2",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "npm run dev --workspace @visual-library/web",
     "build": "npm run build --workspaces --if-present",
@@ -26,16 +29,16 @@
     "test:extension:browser": "node scripts/extension-smoke.mjs"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.287",
     "@playwright/test": "^1.56.0",
-    "esbuild": "^0.24.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.1",
+    "@types/chrome": "^0.0.287",
     "@types/node": "^20.14.12",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^7.5.0",
     "@typescript-eslint/parser": "^7.5.0",
+    "esbuild": "^0.24.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-react": "^7.0.0",
@@ -49,5 +52,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.4.299",
+    "tesseract.js": "^7.0.0"
   }
 }

@@ -361,7 +361,7 @@ html:not([data-theme='dark']) .top-actions { box-shadow: 4px 4px 0 color-mix(in 
 .profile-bio-field small { color: var(--ui-text-muted); font-weight: 400; margin-left: 6px; }
 
 /* Worn finish: scuffed print on panels (static texture, drawn once). */
-.bottom-dock, .top-actions, .refs-search, .card-tile, .collection-tile, .card-editor, .app-settings, .canvas-float, .profile-popover, .add-menu-popover {
+.card-tile, .collection-tile, .card-editor, .app-settings, .canvas-float, .profile-popover, .add-menu-popover {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.18 .5' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -2.2 1.25'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23w)' opacity='.035'/%3E%3C/svg%3E") !important;
   background-blend-mode: normal;
 }
@@ -388,3 +388,6 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 .collection-parent-field select { max-width: 150px; padding: 3px 6px; border: 1px solid var(--sx-line-soft); border-radius: 0; background: var(--ui-surface); color: var(--ui-text-muted); font: 700 .6rem/1.2 var(--sx-label); letter-spacing: .08em; text-transform: uppercase; opacity: .55; transition: opacity 100ms linear; }
 .collection-tile:hover .collection-parent-field select, .collection-parent-field select:focus { opacity: 1; }
 .collection-menu-row.is-child { padding-left: 16px; } .collection-menu-row.is-child .collection-menu-item::before { content: "└ "; color: var(--ui-text-muted); }
+
+/* Dock, top controls and search stay clean: no worn texture. */
+.bottom-dock, .top-actions, .refs-search { background-image: none !important; }
