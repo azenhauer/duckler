@@ -104,6 +104,14 @@ export async function importExtensionBytes(bytes: Uint8Array, expected: { id: st
   if (bytes.length > MAX_CAPTURE_BYTES || await hashBytes(bytes) !== expected.hash) throw new Error('Capture checksum does not match. The item remains in the extension.');
   const capture: Capture = validateCapture(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
   if (capture.id !== expected.id) throw new Error('Capture ID does not match its envelope.');
+  // Parse/render before opening the IndexedDB transaction: PDF work is asynchronous.
+  let pdfContent: Awaited<ReturnType<typeof import('./pdf')['readPdfFile']>> | undefined;
+  if (capture.kind === 'pdf' && !await cardDb.extensionReceipts.get(capture.id)) {
+    const binary = atob(capture.payload!.split(',')[1]);
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    const { readPdfFile } = await import('./pdf');
+    pdfContent = await readPdfFile(new File([bytes], `${capture.title.slice(0, 250)}.pdf`, { type: 'application/pdf' }));
+  }
   return cardDb.transaction('rw', cardDb.cards, cardDb.collections, cardDb.extensionReceipts, async () => {
     const receipt = await cardDb.extensionReceipts.get(capture.id);
     if (receipt && (receipt.hash !== expected.hash || receipt.libraryId !== expected.libraryId)) throw new Error('This capture ID has a conflicting payload or library.');
@@ -111,12 +119,13 @@ export async function importExtensionBytes(bytes: Uint8Array, expected: { id: st
     if (receipt) return { card: existing, duplicate: true };
     if (existing && existing.capturePayloadHash !== expected.hash) throw new Error('A different card already uses this capture ID.');
     const created = existing ?? {
-      ...createCardFromInput({ id: capture.id, type: capture.kind === 'image' || capture.kind === 'screenshot' ? 'image' : capture.kind === 'text' ? 'text' : 'bookmark',
+      ...createCardFromInput({ id: capture.id, type: capture.kind === 'pdf' ? 'pdf' : capture.kind === 'image' || capture.kind === 'screenshot' ? 'image' : capture.kind === 'text' ? 'text' : 'bookmark',
         title: capture.title, sourceUrl: capture.sourceUrl, note: capture.note, tags: capture.tags,
-        dataUrl: ['image', 'screenshot'].includes(capture.kind) ? capture.payload : undefined }),
+        dataUrl: pdfContent?.thumbnail ?? (['image', 'screenshot'].includes(capture.kind) ? capture.payload : undefined) }),
+      ...(pdfContent ? { pdf: pdfContent.pdf } : {}),
       createdAt: capture.createdAt, capturePayloadHash: expected.hash,
     };
-    if (!existing) await cardDb.cards.add(created);
+    if (!existing) await cardDb.cards.add({ ...created, searchText: buildSearchText(created) });
     const selectedIds = new Set(capture.collectionIds ?? []);
     for (const collectionName of [...(capture.collectionNames ?? []), ...(capture.collectionName ? [capture.collectionName] : [])]) {
       const collection = await cardDb.collections.filter(item => item.name.toLowerCase() === collectionName.toLowerCase()).first();

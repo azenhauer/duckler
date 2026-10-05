@@ -8,7 +8,7 @@ export const CAPTURE_PORT = 'duckler-capture-v1';
 
 export type Capture = {
   id: string;
-  kind: 'bookmark' | 'text' | 'image' | 'screenshot';
+  kind: 'bookmark' | 'text' | 'image' | 'screenshot' | 'pdf';
   title: string;
   sourceUrl?: string;
   note?: string;
@@ -43,7 +43,7 @@ export function validateCapture(value: unknown): Capture {
   if (!value || typeof value !== 'object') throw new Error('Capture data is missing.');
   const c = value as Record<string, unknown>;
   if (typeof c.id !== 'string' || !c.id || c.id.length > 200 || typeof c.title !== 'string'
-    || !c.title.trim() || c.title.length > 1000 || !['bookmark', 'text', 'image', 'screenshot'].includes(String(c.kind))) {
+    || !c.title.trim() || c.title.length > 1000 || !['bookmark', 'text', 'image', 'screenshot', 'pdf'].includes(String(c.kind))) {
     throw new Error('Capture type and title are required.');
   }
   if (typeof c.createdAt !== 'string' || !Number.isFinite(Date.parse(c.createdAt))) throw new Error('Invalid capture time.');
@@ -57,6 +57,7 @@ export function validateCapture(value: unknown): Capture {
   const collectionIds = Array.isArray(c.collectionIds) ? c.collectionIds.filter((id): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,200}$/.test(id)).slice(0, 100) : [];
   const collectionNames = Array.isArray(c.collectionNames) ? c.collectionNames.filter((name): name is string => typeof name === 'string' && Boolean(name.trim())).slice(0, 100).map(name => name.trim().slice(0, 200)) : [];
   const payload = typeof c.payload === 'string' ? c.payload : '';
+  if (c.kind === 'pdf' && !/^data:application\/pdf;base64,[A-Za-z0-9+/]+={0,2}$/.test(payload)) throw new Error('PDF capture must contain PDF data.');
   if (['image', 'screenshot'].includes(String(c.kind)) && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(payload)) {
     throw new Error('Image capture must contain PNG, JPEG, or WebP data.');
   }

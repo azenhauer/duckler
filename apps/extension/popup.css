@@ -32,6 +32,7 @@ blockquote { font:400 17px/1.6 Inter,sans-serif; }
 /* Compact interpretation of the dark, rounded capture panel. */
 :root { color:#f5f5f7; background:#17191c; --line:#33363d; --surface:#22252a; --muted:#a0a6b3; --selected:#34373f; }
 body { width:440px; background:radial-gradient(ellipse at top left,#24272c88,transparent 65%),#17191c; }
+#pdf-field { grid-column: 1 / -1; }
 main { padding:22px 24px 18px; }
 .extension-mark { width:36px; height:34px; }
 .settings-link { gap:6px; padding:9px 10px; min-height:40px; border:1px solid var(--line); border-radius:12px; background:#22252a80; font-size:11px; }

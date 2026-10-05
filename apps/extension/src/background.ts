@@ -4,6 +4,7 @@ import { bridgeRequest, validateSender } from './bridge';
 import { isAllowedLibraryOrigin } from './origin';
 import { isSettingsSender } from './settingsSender';
 import { screenshotTitle, type RegionHint } from './naming';
+import { fetchPdf } from './pdf';
 
 const queue = new CaptureQueue();
 const trustedPorts = new Set<chrome.runtime.Port>();
@@ -128,6 +129,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const respond = async () => {
     await ready;
     switch (message?.type) {
+      case 'capture-pdf': {
+        if (sender.url !== chrome.runtime.getURL('popup.html')) throw new Error('Save PDFs from the extension popup.');
+        const tab = await chrome.tabs.get(message.tabId);
+        if (!tab.url || !tab.active) throw new Error('Open the PDF’s website and try again.');
+        const payload = await fetchPdf(String(message.url), tab.url);
+        return { item: await save({ ...message.capture, kind: 'pdf', sourceUrl: message.url, payload }) };
+      }
       case 'queue-capture': return { item: await save(message.capture) };
       case 'list-captures': {
         const rows = await queue.captures.orderBy('createdAt').reverse().toArray();

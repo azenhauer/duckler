@@ -49,21 +49,31 @@ async function initialize() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab = tab;
   if (!tab?.id || !/^https?:\/\//i.test(tab.url || '')) throw new Error('Open a website to save a link or screenshot. You can still write a note.');
-  const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ title: document.title, url: location.href, selection: window.getSelection()?.toString().trim() || '' }) });
-  page = result.result;
+  page = { title: tab.title || '', url: tab.url, selection: '', pdfLinks: [] };
+  try {
+    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ title: document.title, url: location.href, selection: window.getSelection()?.toString().trim() || '',
+      pdfLinks: [...document.querySelectorAll('a[href]')].filter(link => /\.pdf(?:$|[?#])/i.test(link.href) || link.type === 'application/pdf' || /\.pdf$/i.test(link.download)).slice(0, 100).map(link => ({ url: link.href, title: link.textContent.trim() })) }) });
+    if (result?.result) page = result.result;
+  } catch { /* Browser PDF viewers may not allow page scripts; use the tab URL. */ }
+  const pdfOptions = $('#pdf-links');
+  for (const link of page.pdfLinks || []) { const option = document.createElement('option'); option.value = link.url; option.label = link.title; pdfOptions.append(option); }
+  $('#pdf-url').value = /\.pdf(?:$|[?#])/i.test(page.url) ? page.url : page.pdfLinks?.[0]?.url || '';
   $('#capture-title').value = page.title || tab.title || '';
   $('#page-title').textContent = page.title || tab.title || 'Untitled page';
   $('#page-domain').textContent = new URL(page.url).hostname.replace(/^www\./, '');
   $('#mode-selection').disabled = !page.selection;
   if (page.selection) setMode('text');
+  else if (/\.pdf(?:$|[?#])/i.test(page.url)) setMode('pdf');
 }
 function setMode(next) {
   mode = next;
   const note = next === 'note';
+  $('#pdf-field').hidden = next !== 'pdf';
+  $('#mode-pdf').classList.toggle('active', next === 'pdf'); $('#mode-pdf').setAttribute('aria-pressed', String(next === 'pdf'));
   $('#selection-preview').hidden = next !== 'text';
   $('#selection-preview').textContent = page?.selection || '';
   $('#preview-kind').textContent = note ? 'Note' : next === 'text' ? 'Highlight' : 'Link';
-  $('#save-page').textContent = 'Save ' + (note ? 'note' : next === 'text' ? 'highlight' : 'link');
+  $('#save-page').textContent = 'Save ' + (note ? 'note' : next === 'pdf' ? 'PDF' : next === 'text' ? 'highlight' : 'link');
   $('#save-page').disabled = saving || (!note && !page);
   $('#note-text').placeholder = note ? 'Write something worth keeping…' : 'What caught your eye? (optional)';
   for (const [id, selected] of [['mode-page', next === 'bookmark'], ['mode-selection', next === 'text'], ['mode-note', note]]) {
@@ -80,7 +90,7 @@ async function renderQueue() {
   for (const item of items) {
     const row = document.createElement('li'), details = document.createElement('div'), title = document.createElement('strong'), meta = document.createElement('small');
     title.textContent = item.title; meta.textContent = (item.kind === 'text' ? 'Highlight' : item.kind) + ' · ' + new Date(item.createdAt).toLocaleDateString();
-    if (item.payload) { const image = document.createElement('img'); image.src = item.payload; image.alt = ''; row.append(image); }
+    if (item.payload && item.kind !== 'pdf') { const image = document.createElement('img'); image.src = item.payload; image.alt = ''; row.append(image); }
     details.append(title, meta);
     const remove = document.createElement('button'); remove.textContent = '×'; remove.setAttribute('aria-label', 'Remove ' + item.title);
     remove.addEventListener('click', async () => { try { await request({ type: 'delete-capture', id: item.id }); await renderQueue(); } catch (error) { showStatus(error.message, true); } });
@@ -96,13 +106,15 @@ document.querySelectorAll('.tab').forEach(button => button.addEventListener('cli
 $('#mode-page').addEventListener('click', () => setMode('bookmark'));
 $('#mode-selection').addEventListener('click', () => setMode('text'));
 $('#mode-note').addEventListener('click', () => setMode('note'));
+$('#mode-pdf').addEventListener('click', () => setMode('pdf'));
 $('#save-page').addEventListener('click', async () => {
   if (saving) return;
   const note = $('#note-text').value.trim();
   if (mode === 'note' && !note) { showStatus('Write a note before saving.', true); return; }
+  if (mode === 'pdf' && !$('#pdf-url').value.trim()) { showStatus('Choose or paste a PDF download URL.', true); return; }
   saving = true; $('#save-page').disabled = true; $('#save-page').textContent = 'Saving…';
   try {
-    await request({ type: 'queue-capture', capture: { kind: mode === 'note' ? 'text' : mode,
+    await request({ type: mode === 'pdf' ? 'capture-pdf' : 'queue-capture', tabId: currentTab?.id, url: $('#pdf-url').value.trim(), capture: { kind: mode === 'note' ? 'text' : mode,
       collectionIds: selectedCollectionIds.filter(id => !id.startsWith('local-')),
       collectionNames: selectedCollectionNames,
       collectionName: selectedCollectionNames[0] || '',
