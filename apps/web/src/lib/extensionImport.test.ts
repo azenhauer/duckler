@@ -17,6 +17,14 @@ describe('extension atomic import', () => {
     expect(await cardDb.cards.get(capture.id)).toMatchObject({ note: 'Original highlighted text', caption: 'My interpretation' });
     expect((await cardDb.cards.get(capture.id))?.searchText).toContain('my interpretation');
   });
+  it('never stores the autofill page excerpt on the card (I3b zero retention)', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ ...capture, pageExcerpt: 'Private page text that is only for classification.' }));
+    await importExtensionBytes(bytes, { id: capture.id, hash: await hashBytes(bytes), libraryId: 'library-1' });
+    const card = await cardDb.cards.get(capture.id);
+    expect(card).toBeDefined();
+    expect(JSON.stringify(card)).not.toContain('Private page text');
+    expect(card?.searchText).not.toContain('private page text');
+  });
   it('creates or reuses the named collection and keeps duplicate imports idempotent', async () => {
     const bytes = new TextEncoder().encode(JSON.stringify({ ...capture, collectionName: ' Inspiration ' }));
     const metadata = { id: capture.id, hash: await hashBytes(bytes), libraryId: 'library-1' };

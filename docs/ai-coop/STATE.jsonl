@@ -1,0 +1,3 @@
+{"k":"init","a":"user","t":"0","st":"ok","did":["protocol created (clip-autofill scope)"],"next":"1.1 add optional pageExcerpt to capture schema in packages/shared/src/captureProtocol.ts + AutofillResult type","files":["packages/shared/src/captureProtocol.ts","packages/shared/src/index.ts"],"head":"e203a66","tests":"none","ctx":0,"blk":null,"dec":[],"ts":"2026-10-05T00:00Z"}
+{"k":"drift","a":"cc","t":"1.1","st":"ok","did":["L.head e203a66 != HEAD 2706bcf: 15+ committed non-autofill rounds (OCR/PDF, UI, extension side panel); no autofill code yet"],"next":"1.1","files":["packages/shared/src/captureProtocol.ts"],"head":"2706bcf","tests":"pass","ctx":0,"blk":null,"dec":["D5","D6"],"ts":"2026-10-05T16:31Z"}
+{"k":"start","a":"cc","t":"1.1","ctx":5,"ts":"2026-10-05T16:31Z"}

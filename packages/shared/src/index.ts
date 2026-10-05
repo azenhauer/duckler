@@ -2,6 +2,7 @@ import { z } from 'zod';
 export * from './canvas';
 export * from './backup';
 export * from './obsidianCanvas';
+export * from './autofill';
 
 export const cardTypeSchema = z.enum(['bookmark', 'text', 'image', 'pdf']);
 

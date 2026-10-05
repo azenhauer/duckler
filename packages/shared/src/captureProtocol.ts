@@ -1,4 +1,6 @@
 // JSON messages are bounded; binary payloads cross the bridge as base64 chunks.
+import { normalizePageExcerpt } from './autofill';
+
 export const CAPTURE_PROTOCOL = 1;
 export const CAPTURE_CHUNK_BYTES = 192 * 1024;
 export const MAX_CAPTURE_BYTES = 16 * 1024 * 1024;
@@ -20,6 +22,11 @@ export type Capture = {
   collectionNames?: string[];
   payload?: string;
   tags?: string[];
+  /**
+   * Opt-in clip autofill only: meta description + first 1500 chars of the page (I3). Used once to
+   * classify the clip and never stored on the card, in backups or exports (I3b zero retention).
+   */
+  pageExcerpt?: string;
   createdAt: string;
 };
 export type Pairing = { origin: string; libraryId: string; nonce: string };
@@ -70,6 +77,7 @@ export function validateCapture(value: unknown): Capture {
     id: c.id, kind: c.kind as Capture['kind'], title: c.title.trim(), sourceUrl, note, caption: caption || undefined,
     ...(typeof c.color === 'string' && /^#[0-9a-f]{6}$/i.test(c.color) ? { color: c.color.toLowerCase() } : {}), payload, collectionName: typeof c.collectionName === 'string' ? c.collectionName.trim() : undefined, collectionIds, collectionNames,
     tags: Array.isArray(c.tags) ? c.tags.filter((tag): tag is string => typeof tag === 'string' && Boolean(tag.trim())).slice(0, 100).map(tag => tag.trim().slice(0, 100)) : [],
+    ...(normalizePageExcerpt(c.pageExcerpt) ? { pageExcerpt: normalizePageExcerpt(c.pageExcerpt) } : {}),
     createdAt: c.createdAt,
   };
 }
