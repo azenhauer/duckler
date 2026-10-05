@@ -124,11 +124,16 @@ html:not([data-theme='dark']) .content::after { opacity: .06; }
   animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both !important;
 }
 .add-menu-popover::before, .profile-popover::before, .card-move-menu::before, .collection-menu-popover::before, .library-options-popover::before { content: ''; position: absolute; left: -12px; right: -12px; top: -16px; bottom: -16px; z-index: -1; }
+/* Titles are left-aligned, so the options menu opens rightward from its trigger (phones keep the full-width layout). */
+@media (min-width: 561px) { .library-options-popover { left: 0; right: auto; } }
+/* Short screens (landscape phones): the account menu scrolls instead of rising past the top edge. */
+@media (max-height: 640px) { .bottom-dock .profile-popover { max-height: calc(100dvh - 120px); overflow-y: auto; overscroll-behavior: contain; } }
 .reader-backdrop { overflow: hidden !important; background: color-mix(in srgb, #02030a 66%, transparent) !important; backdrop-filter: none !important; animation: sx-fade var(--sx-fast) linear both; }
 html:not([data-theme='dark']) .reader-backdrop { background: color-mix(in srgb, #8ea3c8 42%, transparent) !important; }
 .reader-backdrop > [role=dialog] { max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; animation: sx-fade 110ms linear both !important; }
 @keyframes sx-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sx-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* Motion uses the individual translate/scale properties so it never overrides centering transforms. */
+@keyframes sx-rise { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: none; } }
 
 /* ---- Scrollbars: hidden everywhere. Wheel, touch and keyboard scrolling still work. ---- */
 html, body, * { scrollbar-width: none !important; }
@@ -196,7 +201,7 @@ html:not([data-theme='dark']) .dock-item.active::before { opacity: .45; }
 .app-shell .card-tile[data-tinted] .card-body { background: color-mix(in srgb, var(--card-tint) 18%, transparent) !important; }
 .app-shell[data-card-glow='off'] .card-tile:hover { box-shadow: none !important; }
 .app-shell[data-card-glow='on'] .card-tile:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-tint, var(--ui-accent-primary)) 40%, transparent), 0 6px 22px -10px color-mix(in srgb, var(--card-tint, var(--ui-glow)) 70%, transparent) !important; }
-.card-style-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; font-size: .8rem; color: var(--ui-text-muted); }
+.card-style-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin: 10px 0; font-size: .8rem; color: var(--ui-text-muted); }
 .card-style-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
 .card-style-swatch { position: relative; width: 22px; height: 22px; padding: 0; border: 1px solid var(--sx-line-soft); border-radius: 0; cursor: pointer; overflow: hidden; }
 .card-style-swatch[aria-pressed='true'] { outline: 2px solid var(--ui-accent-secondary); outline-offset: 2px; }
@@ -375,11 +380,17 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 /* Closing animation for popovers and dialogs (played by an inert copy, see exitAnimation.ts). */
 .is-leaving { animation: sx-leave 140ms cubic-bezier(.4,0,1,1) forwards !important; }
 .reader-backdrop.is-leaving > [role=dialog] { animation: sx-leave-dialog 140ms cubic-bezier(.4,0,1,1) forwards !important; }
-@keyframes sx-leave { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(4px) scale(.98); } }
+@keyframes sx-leave { from { opacity: 1; translate: none; scale: none; } to { opacity: 0; translate: 0 4px; scale: .98; } }
 .reader-backdrop.is-leaving { animation: sx-leave-fade 140ms linear forwards !important; }
 @keyframes sx-leave-fade { to { opacity: 0; } }
-@keyframes sx-leave-dialog { to { transform: translateY(8px) scale(.985); } }
-@media (prefers-reduced-motion: reduce) { .is-leaving { display: none !important; } .home-entry .home-artwork, .b-button { transition: none !important; } }
+@keyframes sx-leave-dialog { to { translate: 0 8px; scale: .985; } }
+@media (prefers-reduced-motion: reduce) {
+  .is-leaving { display: none !important; }
+  .home-entry .home-artwork, .b-button { transition: none !important; }
+  /* Same specificity as the hover rules above, so reduced motion actually wins. */
+  .home-entry:hover .home-artwork, .home-entry:active .home-artwork, .floating-add-button:hover, .add-menu.is-open .floating-add-button,
+  .refs-search .theme-toggle:hover svg, .b-button:hover .b-ring { transform: none !important; }
+}
 
 /* Nested collections: children sit indented under their parent with a leader line. */
 .collection-tile.is-child { margin-left: 34px; position: relative; }
