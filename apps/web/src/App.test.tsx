@@ -194,8 +194,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Duckler home' }));
     expect(screen.queryByRole('heading', { name: 'refs' })).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Filter by media type' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('.collection-stack-icon')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('.canvas-orbit-icon')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('img[src="/icons/home-collections.png"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('img[src="/icons/home-canvas.png"]')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'All notes' }));
     expect(screen.getByRole('heading', { name: 'refs' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Choose collection' })).toHaveTextContent('All notes');
@@ -291,8 +291,8 @@ describe('App', () => {
     expect(screen.queryByRole('navigation', { name: 'Filter by media type' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Search refs')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'All notes' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('.collection-stack-icon')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('.canvas-orbit-icon')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('img[src="/icons/home-collections.png"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('img[src="/icons/home-canvas.png"]')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Collections' }));
     expect(screen.queryByRole('navigation', { name: 'Filter by media type' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create a collection' }));

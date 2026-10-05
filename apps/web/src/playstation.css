@@ -50,6 +50,7 @@
 .home-entry:hover,.home-entry:focus-visible { transform:translateY(-2px); color:var(--ui-text); }
 .dock-icon,.ui-icon,.duckler-mark { color:#a9cff2; filter:drop-shadow(0 0 4px color-mix(in srgb,var(--ui-glow) 38%,transparent)); }
 .home-entry .dock-icon { color:#9fc9ee; filter:drop-shadow(0 2px 0 #eaf7ff66) drop-shadow(0 0 11px color-mix(in srgb,var(--ui-glow) 32%,transparent)); }
+.home-entry .home-artwork { object-fit:contain; filter:none; }
 .collection-stack-icon .stack-back { opacity:.38; }.collection-stack-icon .stack-middle { opacity:.62; }.collection-stack-icon .stack-front { opacity:.9; }
 .canvas-painting { opacity:.92; }.canvas-ledge { opacity:.56; }
 

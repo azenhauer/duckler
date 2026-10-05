@@ -19,7 +19,7 @@ IndexedDB version 5 stores documents, placements, elements and connectors separa
 
 Per-board limits are 200 placements (including hidden placements), 500 annotations and 200 connectors. A stroke has at most 5,000 samples; text at most 20,000 characters. Geometry and references are validated before writes. Text renders as inert React text. Offscreen nodes are culled, and node measurements are batched to avoid repeated full-board redraws.
 
-This implementation is local to the current browser. Canvas Drive synchronization, Canvas export/import, shared editing and server-side Canvas ownership endpoints remain pending. Real phone/stylus acceptance remains separate from desktop Chromium checks at mobile viewport sizes. The new generated Home logos still require accessible asset files.
+This implementation is local to the current browser. Canvas Drive synchronization, Canvas export/import, shared editing and server-side Canvas ownership endpoints remain pending. Real phone/stylus acceptance remains separate from desktop Chromium checks at mobile viewport sizes. The approved Home artwork is bundled at `apps/web/public/icons/home-canvas.png` and `apps/web/public/icons/home-collections.png`.
 
 ## Verification
 

@@ -149,3 +149,11 @@ Remaining: trusted invite-only passkey/magic-link onboarding, rate limits/audit/
 - `npm test`: 114/114 passed across 17 files. TypeScript, lint and all workspace builds passed. The existing Vite large-chunk advisory remains.
 - The running local app at http://localhost:5177 passed the Canvas gallery and expanded-tool Chromium checks, including group Undo, zoomed library drop, reload persistence, stale Undo from a real second tab and mobile viewport overflow checks.
 - Scope and usage are documented in `docs/canvas-tools.md`. Canvas sync/export, server-side ownership, real mobile/stylus acceptance and the generated Home logo assets remain pending; the security foundation stays disabled by default.
+
+## Approved Home artwork — October 4, 2026
+
+- Integrated the supplied transparent CD stack as `apps/web/public/icons/home-collections.png` and the chrome punk album with red ink eye mark as `apps/web/public/icons/home-canvas.png`. The original image bytes are preserved.
+- Home's expanded navigation icons use these assets with proportional sizing and no added glow. Compact navigation retains its existing icons, following the user's Home-only instruction.
+- Read `duckler_ui_notes_audio_patch_spec.md` as a product document. Its other notes/editor/theme/picker/audio proposals remain future work; authentic PS2 sound files have not been supplied.
+- Updated the existing Home assertions; all 21 app tests passed. Chromium verified loaded images, transparent corners, proportional sizing, Home-only placement and no horizontal overflow at 1440, 390 and 320 px. Reviewed the phone screenshot locally.
+- Raised the offline per-file cache limit to 3 MiB for the supplied 2.46 MiB album PNG so the approved artwork can be bundled offline.
