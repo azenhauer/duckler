@@ -391,3 +391,27 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 
 /* Dock, top controls and search stay clean: no worn texture. */
 .bottom-dock, .top-actions, .refs-search { background-image: none !important; }
+
+/* OCR + PDF */
+.ocr-panel .ocr-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ocr-panel .ocr-languages { display: flex; gap: 4px; margin-right: auto; }
+.ocr-panel .editor-action { padding: 6px 10px !important; font-size: .64rem !important; }
+.ocr-progress { position: relative; height: 18px; border: 1px solid var(--sx-line-soft); overflow: hidden; }
+.ocr-progress span { position: absolute; inset: 0; background: linear-gradient(90deg, var(--ui-accent-primary), var(--ui-accent-secondary)); transform-origin: left; transition: transform 160ms linear; opacity: .55; }
+.ocr-progress small { position: relative; display: block; padding: 0 8px; font: 700 .58rem/16px var(--sx-label); letter-spacing: .12em; text-transform: uppercase; color: var(--ui-text); }
+.ocr-stale { margin: 0; padding: 6px 10px; border-left: 2px solid var(--ui-accent-secondary); color: var(--ui-accent-secondary); font-size: .76rem; }
+.ocr-meta, .editor-provenance { color: var(--ui-text-muted); font-size: .74rem; margin: 0; }
+.editor-link { padding: 0; border: 0; background: none; color: var(--ui-accent-primary); text-decoration: underline; cursor: pointer; font: inherit; }
+.pdf-viewer { display: flex; flex-direction: column; gap: 10px; width: 100%; min-height: 0; }
+.pdf-page { display: grid; place-items: center; min-height: 0; max-height: min(58dvh, 520px); overflow: auto; overscroll-behavior: contain; background: #fff1; }
+.pdf-page img { display: block; max-width: 100%; height: auto; border: 1px solid var(--sx-line-soft); }
+.pdf-loading { padding: 40px; color: var(--ui-text-muted); font: 700 .66rem/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; }
+.pdf-controls { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.pdf-controls .editor-icon-button { font-size: 1.2rem; }
+.pdf-page-number { min-width: 60px; text-align: center; font: 700 .7rem/1 var(--sx-label); letter-spacing: .12em; color: var(--ui-text-muted); }
+.card-pdf-badge { position: absolute; top: 8px; left: 8px; z-index: 3; padding: 3px 6px; background: color-mix(in srgb, #000 70%, transparent); color: #fff; font: 700 .58rem/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; border: 1px solid #ffffff33; }
+.card-source-badge { left: auto; right: 8px; background: color-mix(in srgb, var(--ui-accent-primary) 40%, #000); }
+.card-type-pdf .card-body { padding: 12px 16px 13px; background: color-mix(in srgb, var(--ui-surface) 92%, transparent); }
+.card-type-pdf .card-body h2 { margin: 4px 0 0; font-size: .88rem; }
+.card-type-pdf .card-footer-meta { display: none; }
+.card-type-pdf .card-image { width: 100%; display: block; }

@@ -12,6 +12,7 @@ import {
   enqueueCapture,
   collectionParentError,
   appendCanvasesToObsidianArchive,
+  buildSearchText,
   createLibraryBackup,
   orderCollectionTree,
   parseLibraryBackup,
@@ -703,6 +704,12 @@ function App() {
     if (!file) {
       return;
     }
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      event.target.value = '';
+      setAddMenuOpen(false);
+      void handleAddPdf(file);
+      return;
+    }
 
     setForm({ ...emptyForm, type: 'image' });
     setMediaPreview(null);
@@ -717,6 +724,25 @@ function App() {
     };
     reader.readAsDataURL(file);
     event.target.value = '';
+  };
+
+  // A PDF becomes a card straight away: first page as its picture, the file and its text kept with it.
+  const handleAddPdf = async (file: File) => {
+    setShareNotice(`Reading ${file.name}…`);
+    try {
+      const { readPdfFile } = await import('./lib/pdf');
+      const { title, thumbnail, pdf } = await readPdfFile(file);
+      const base = createCardFromInput({ type: 'pdf', title, dataUrl: thumbnail, note: '' });
+      const card = { ...base, pdf, searchText: buildSearchText({ ...base, pdf }) };
+      const changed = selectedCollectionId ? collections.filter(item => item.id === selectedCollectionId).map(item => ({ ...item, cardIds: [...new Set([...item.cardIds, card.id])], updatedAt: card.createdAt })) : [];
+      await saveCardWithCollections(card, changed);
+      if (changed.length) setCollections(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
+      setCards(current => [card, ...current]);
+      setNewlyCreatedCardId(card.id);
+      setShareNotice(`Added “${title}” (${pdf.pageCount} page${pdf.pageCount === 1 ? '' : 's'}).`);
+    } catch (error) {
+      setShareNotice(error instanceof Error ? error.message : 'This PDF could not be added.');
+    }
   };
 
   const handleCreateCard = async (event: React.FormEvent) => {
@@ -779,7 +805,7 @@ function App() {
     if (composerSavingRef.current) return;
 
     const queued = enqueueCapture({
-      kind: form.type,
+      kind: form.type === 'pdf' ? 'image' : form.type,
       title: form.title.trim() || 'Queued capture',
       sourceUrl: form.sourceUrl,
       note: form.note,
@@ -1456,8 +1482,8 @@ function App() {
                   >
                     <span className="collection-tile-preview" aria-hidden="true">
                       {memberCards.length > 0 ? memberCards.map((card) => (
-                        <span key={card.id} className={`collection-preview-item ${card.type === 'image' && card.dataUrl ? 'has-image' : ''}`}>
-                          {card.type === 'image' && card.dataUrl
+                        <span key={card.id} className={`collection-preview-item ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-image' : ''}`}>
+                          {(card.type === 'image' || card.type === 'pdf') && card.dataUrl
                             ? <img src={card.dataUrl} alt="" />
                             : <span>{card.title.slice(0, 1).toUpperCase()}</span>}
                         </span>
@@ -1595,7 +1621,9 @@ function App() {
               >
 
 
-                {card.type === 'image' && card.dataUrl ? <img src={card.dataUrl} alt={card.title} className="card-image" /> : null}
+                {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt={card.title} className="card-image" /> : null}
+                {card.type === 'pdf' && <span className="card-pdf-badge">PDF · {card.pdf?.pageCount ?? '?'} p</span>}
+                {card.source && <span className="card-pdf-badge card-source-badge">Page {card.source.page}</span>}
                 {capturedCardIds.includes(card.id) && <span className="capture-flash" aria-hidden="true"><i /><i /><i /><i /></span>}
                 {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p></div> : null}
                 {card.type === 'bookmark' ? <div className="bookmark-card-preview">
@@ -1626,8 +1654,20 @@ function App() {
           <CardEditor key={selectedCard.id} card={selectedCard} collections={collections} onClose={() => setSelectedId(null)}
             onTrash={() => { void handleToggleTrash(selectedCard.id); setSelectedId(null); }}
             onDelete={() => { void handleDelete(selectedCard.id); }}
+            onCapturePdfPage={selectedCard.type === 'pdf' ? async (page, image) => {
+              // A captured page is an ordinary image card that remembers which PDF and page it came from.
+              const base = createCardFromInput({ type: 'image', title: `${selectedCard.title} — p. ${page}`, dataUrl: image });
+              const card = { ...base, source: { pdfCardId: selectedCard.id, page, fileName: selectedCard.pdf?.fileName } };
+              const memberOf = collections.filter(item => item.cardIds.includes(selectedCard.id));
+              const changed = memberOf.map(item => ({ ...item, cardIds: [...new Set([...item.cardIds, card.id])], updatedAt: card.createdAt }));
+              await saveCardWithCollections(card, changed);
+              if (changed.length) setCollections(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
+              setCards(current => [card, ...current]);
+              setShareNotice(`Captured page ${page} as an image card.`);
+            } : undefined}
+            pdfSource={selectedCard.source ? (() => { const pdf = cards.find(item => item.id === selectedCard.source!.pdfCardId && !item.trashed); return pdf ? { title: pdf.title, open: () => setSelectedId(pdf.id) } : undefined; })() : undefined}
             onSave={async (draft, collectionIds) => {
-              const updated = { ...draft, updatedAt: new Date().toISOString(), searchText: `${draft.title} ${draft.note} ${draft.sourceUrl ?? ''} ${draft.tags.join(' ')}`.toLowerCase() };
+              const updated = { ...draft, updatedAt: new Date().toISOString(), searchText: buildSearchText(draft) };
               const nextCollections = collections.map(collection => ({ ...collection, cardIds: collectionIds.includes(collection.id) ? [...new Set([...collection.cardIds, draft.id])] : collection.cardIds.filter(id => id !== draft.id), updatedAt: updated.updatedAt }));
               await saveCardWithCollections(updated, nextCollections);
               setCards(current => current.map(card => card.id === draft.id ? updated : card)); setCollections(nextCollections);
@@ -1876,7 +1916,7 @@ function App() {
             <label className="add-menu-action">
               <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="upload" /></span>
               <span>Upload</span>
-              <input ref={imagePickerRef} type="file" accept="image/*" onChange={handleFileChange} />
+              <input ref={imagePickerRef} type="file" accept="image/*,application/pdf,.pdf" onChange={handleFileChange} />
             </label>
             <button type="button" onClick={() => handleQuickAddCard('text')}>
               <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="note" /></span>
@@ -1944,7 +1984,7 @@ function App() {
                 {form.type === 'image' && (
                   <label className="composer-tool composer-upload">
                     <span aria-hidden="true"><InterfaceIcon name="upload" /></span> Image
-                    <input type="file" accept="image/*" onChange={handleFileChange} />
+                    <input type="file" accept="image/*,application/pdf,.pdf" onChange={handleFileChange} />
                   </label>
                 )}
               </div>

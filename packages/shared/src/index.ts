@@ -3,7 +3,30 @@ export * from './canvas';
 export * from './backup';
 export * from './obsidianCanvas';
 
-export const cardTypeSchema = z.enum(['bookmark', 'text', 'image']);
+export const cardTypeSchema = z.enum(['bookmark', 'text', 'image', 'pdf']);
+
+/** Text extracted from a card image, bound to the exact image bytes it came from. */
+export const ocrTextSchema = z.object({
+  text: z.string().max(200000),
+  sourceHash: z.string().min(1).max(200),
+  languages: z.array(z.string().min(1).max(10)).max(4),
+  engine: z.string().max(40),
+  engineVersion: z.string().max(40),
+  createdAt: z.string(),
+  editedByUser: z.boolean(),
+});
+export type OcrText = z.infer<typeof ocrTextSchema>;
+
+/** A PDF stored with its card: original bytes as a data URL, page count and any embedded text. */
+export const pdfDocumentSchema = z.object({
+  fileName: z.string().max(300),
+  pageCount: z.number().int().min(1).max(10000),
+  data: z.string().regex(/^data:application\/pdf;base64,/),
+  text: z.string().max(500000).default(''),
+});
+export type PdfDocument = z.infer<typeof pdfDocumentSchema>;
+export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+export const MAX_PDF_PAGES = 200;
 export type CardType = z.infer<typeof cardTypeSchema>;
 
 export const cardSchema = z.object({
@@ -22,6 +45,10 @@ export const cardSchema = z.object({
   searchText: z.string().default(''),
   /** Optional card colour (#rrggbb) chosen in the editor; absent means the global card style. */
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  ocr: ocrTextSchema.optional(),
+  pdf: pdfDocumentSchema.optional(),
+  /** Provenance for an image captured from a PDF page in the same library. */
+  source: z.object({ pdfCardId: z.string().min(1), page: z.number().int().min(1), fileName: z.string().max(300).optional() }).optional(),
 });
 
 export type CardRecord = z.infer<typeof cardSchema>;
@@ -436,10 +463,22 @@ export const toggleCardInCollection = (collection: Pick<CollectionRecord, 'cardI
     : [...nextIds, cardId];
 };
 
-export const buildSearchText = (card: Pick<CardRecord, 'title' | 'note' | 'sourceUrl' | 'tags'>): string =>
-  [card.title, card.note, card.sourceUrl ?? '', ...card.tags]
+export const buildSearchText = (card: Pick<CardRecord, 'title' | 'note' | 'sourceUrl' | 'tags'> & Partial<Pick<CardRecord, 'ocr' | 'pdf' | 'dataUrl'>>): string =>
+  [card.title, card.note, card.sourceUrl ?? '', ...card.tags, ocrIsCurrent(card) ? card.ocr!.text : '', card.pdf?.text.slice(0, 200000) ?? '']
     .join(' ')
     .toLowerCase();
+
+/** Cheap, stable fingerprint of a data URL (FNV-1a over length + sampled chars) used to tie OCR to its image. */
+export const mediaFingerprint = (dataUrl: string): string => {
+  let hash = 0x811c9dc5;
+  const step = Math.max(1, Math.floor(dataUrl.length / 4096));
+  for (let index = 0; index < dataUrl.length; index += step) { hash ^= dataUrl.charCodeAt(index); hash = Math.imul(hash, 0x01000193) >>> 0; }
+  return `${dataUrl.length.toString(36)}-${hash.toString(36)}`;
+};
+
+/** OCR text only counts as current while the image it came from is unchanged. */
+export const ocrIsCurrent = (card: Partial<Pick<CardRecord, 'ocr' | 'dataUrl'>>): boolean =>
+  Boolean(card.ocr && card.dataUrl && card.ocr.sourceHash === mediaFingerprint(card.dataUrl));
 
 export const createCardFromInput = (input: CreateCardInput): CardRecord => {
   const now = new Date().toISOString();
@@ -539,6 +578,15 @@ const decodeImageDataUrl = (dataUrl: string): { extension: string; bytes: Uint8A
   }
 };
 
+const decodeBase64DataUrl = (dataUrl: string): Uint8Array | null => {
+  try {
+    const binary = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  } catch { return null; }
+};
+
 const toYamlList = (values: string[]): string => values.map((item) => `  - ${JSON.stringify(item)}`).join('\n');
 
 const escapeMarkdownText = (value: string): string => value
@@ -592,7 +640,10 @@ export const createObsidianExportArchive = (
     const fileName = `${fileStem}--${encodeObsidianPathSegment(card.id)}.md`;
     const filePath = `cards/${fileName}`;
     const tags = card.tags ?? [];
-    const imageData = card.type === 'image' && card.dataUrl ? decodeImageDataUrl(card.dataUrl) : null;
+    const imageData = (card.type === 'image' || card.type === 'pdf') && card.dataUrl ? decodeImageDataUrl(card.dataUrl) : null;
+    const pdfBytes = card.type === 'pdf' && card.pdf ? decodeBase64DataUrl(card.pdf.data) : null;
+    const pdfPath = pdfBytes ? `attachments/${fileStem}--${encodeObsidianPathSegment(card.id)}.pdf` : undefined;
+    if (pdfPath && pdfBytes) files.push({ path: pdfPath, content: pdfBytes });
     const attachmentPath = imageData
       ? `attachments/${fileStem}--${encodeObsidianPathSegment(card.id)}.${imageData.extension}`
       : undefined;
@@ -642,8 +693,17 @@ export const createObsidianExportArchive = (
     if (card.sourceUrl) {
       bodyParts.push(`Source: ${card.sourceUrl}`);
     }
+    if (pdfPath) {
+      bodyParts.push(`PDF: [${escapeMarkdownText(card.pdf?.fileName ?? card.title)}](../${pdfPath}) (${card.pdf?.pageCount ?? '?'} pages)`);
+    }
+    if (card.source) {
+      bodyParts.push(`Captured from page ${card.source.page}${card.source.fileName ? ` of ${escapeMarkdownText(card.source.fileName)}` : ''}`);
+    }
     if (card.note) {
       bodyParts.push('', card.note);
+    }
+    if (card.ocr && ocrIsCurrent(card) && card.ocr.text.trim()) {
+      bodyParts.push('', '## Text in image (OCR)', '', `> Extracted with ${card.ocr.engine} (${card.ocr.languages.join(', ')})${card.ocr.editedByUser ? ', edited' : ''}. Text recognition can contain mistakes.`, '', card.ocr.text);
     }
 
     files.push({

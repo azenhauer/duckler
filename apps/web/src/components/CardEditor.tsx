@@ -2,20 +2,25 @@ import { useState } from 'react';
 import type { CardRecord, CollectionRecord } from '@visual-library/shared';
 import { Dialog } from './Dialog';
 import { InterfaceIcon } from './InterfaceIcon';
+import { OcrPanel } from './OcrPanel';
+import { PdfViewer } from './PdfViewer';
 
 /** PS2-palette tints for a single card; "none" falls back to the global card style. */
 export const CARD_TINTS = ['#3cc8ff', '#2a2ca6', '#f2d33d', '#3ddc84', '#ff4b4b', '#ff7ad9', '#9aa6ff', '#e6f6ff'];
 
-export function CardEditor({ card, collections, onClose, onSave, onTrash, onDelete }: {
+export function CardEditor({ card, collections, onClose, onSave, onTrash, onDelete, onCapturePdfPage, pdfSource }: {
   card: CardRecord; collections: CollectionRecord[]; onClose: () => void;
   onSave: (card: CardRecord, collectionIds: string[]) => Promise<void>;
   onTrash: () => void; onDelete: () => void;
+  onCapturePdfPage?: (page: number, image: string) => Promise<void>;
+  /** Title of the PDF this image was captured from, when it is still in the library. */
+  pdfSource?: { title: string; open: () => void };
 }) {
   const [draft, setDraft] = useState(card);
   const [memberships, setMemberships] = useState(collections.filter(item => item.cardIds.includes(card.id)).map(item => item.id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const kind = card.type === 'image' ? 'Image' : card.type === 'text' ? 'Note' : 'Link';
+  const kind = card.type === 'image' ? 'Image' : card.type === 'pdf' ? 'PDF' : card.type === 'text' ? 'Note' : 'Link';
   const toggleMembership = (id: string) => setMemberships(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
 
   return <Dialog label="Card details" className="card-editor" onClose={() => { if (!saving) onClose(); }}>
@@ -37,15 +42,19 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
         </div>
       </header>
 
-      <div className={`editor-body ${card.type === 'image' && card.dataUrl ? 'has-preview' : ''}`}>
-        {card.type === 'image' && card.dataUrl && <figure className="editor-preview"><img className="editor-image" src={card.dataUrl} alt={card.title} /></figure>}
+      <div className={`editor-body ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-preview' : ''}`}>
+        {card.type === 'pdf' && card.pdf ? <figure className="editor-preview"><PdfViewer pdf={card.pdf} onCapture={onCapturePdfPage} /></figure>
+          : card.type === 'image' && card.dataUrl && <figure className="editor-preview"><img className="editor-image" src={card.dataUrl} alt={card.title} /></figure>}
         <div className="editor-fields">
           {error && <p role="alert" className="editor-error">{error}</p>}
           <label className="editor-field"><span>Title</span>
             <input aria-label="Title" className="editor-title" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Untitled" maxLength={1000} /></label>
           <label className="editor-field editor-field-note"><span>Note</span>
             <textarea aria-label="Note" placeholder="Type here…" value={draft.note} rows={card.type === 'text' ? 6 : 3} onChange={event => setDraft({ ...draft, note: event.target.value })} /></label>
-          {card.type !== 'text' && <label className="editor-field"><span>Source</span>
+          {card.type === 'image' && card.dataUrl && <OcrPanel dataUrl={card.dataUrl} value={draft.ocr} onChange={ocr => setDraft({ ...draft, ocr })} />}
+          {card.source && <p className="editor-provenance">From page {card.source.page} of {pdfSource ? <button type="button" className="editor-link" onClick={pdfSource.open}>{pdfSource.title}</button> : <span>{card.source.fileName ?? 'a PDF no longer in your library'}</span>}</p>}
+          {card.type === 'pdf' && card.pdf && <p className="editor-provenance">{card.pdf.fileName} · {card.pdf.pageCount} page{card.pdf.pageCount === 1 ? '' : 's'}{card.pdf.text ? ' · text searchable' : ' · no embedded text (scanned)'}</p>}
+          {card.type !== 'text' && card.type !== 'pdf' && <label className="editor-field"><span>Source</span>
             <input aria-label="Source" value={draft.sourceUrl ?? ''} placeholder="Paste a link" onChange={event => setDraft({ ...draft, sourceUrl: event.target.value || undefined })} /></label>}
           <label className="editor-field"><span>Tags</span>
             <input aria-label="Tags" placeholder="comma, separated" value={draft.tags.join(', ')} onChange={event => setDraft({ ...draft, tags: event.target.value.split(',').map(tag => tag.trim()).filter(Boolean) })} /></label>

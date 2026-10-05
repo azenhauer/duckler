@@ -20,7 +20,7 @@ function CanvasPreview({ cards, layout, placements, elements = [] }: { cards: Ca
     {positioned.map(({ card, ...item }) => <g key={item.id} transform={`translate(${item.x} ${item.y}) rotate(${item.rotation} ${item.width / 2} ${item.height / 2})`}>
       <svg width={item.width} height={item.height} viewBox="0 0 210 194" preserveAspectRatio="none">
         <rect width="210" height="194" rx="12" fill="white" stroke="#dce1e7" strokeWidth="2" />
-        {card?.type === 'image' && card.dataUrl && !card.trashed ? <image href={card.dataUrl} x="8" y="8" width="194" height="132" preserveAspectRatio="xMidYMid meet" /> : <>
+        {(card?.type === 'image' || card?.type === 'pdf') && card.dataUrl && !card.trashed ? <image href={card.dataUrl} x="8" y="8" width="194" height="132" preserveAspectRatio="xMidYMid meet" /> : <>
           <rect x="12" y="12" width="186" height="112" rx="8" fill="#edf0f4" />
           <text x="24" y="46" fontSize="15" fill="#464d55">{card?.trashed ? 'Card in trash' : card?.title.slice(0, 20) ?? 'Missing card'}</text>
         </>}

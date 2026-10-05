@@ -36,7 +36,7 @@ function CardNode({ data, selected, id }: NodeProps<CanvasNode>) {
       <ConnectHandles />
       {!card || card.trashed ? <div className="canvas-card-placeholder"><strong>{card?.title ?? 'Missing card'}</strong><p>{card ? 'Card in trash' : 'This card is no longer available'}</p>
         {card && <button type="button" className="nodrag nopan" onClick={() => context.onRestore(card.id)}>Restore card</button>}</div>
-        : <>{card.type === 'image' && card.dataUrl ? <img src={card.dataUrl} alt="" draggable={false} loading="lazy" /> : <p>{card.note.slice(0, 250) || card.title}</p>}
+        : <>{(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt="" draggable={false} loading="lazy" /> : <p>{card.note.slice(0, 250) || card.title}</p>}
           <strong>{card.title}</strong><button type="button" className="canvas-node-edit nodrag nopan" aria-label={`Edit ${card.title}`} onClick={() => context.onEdit(card.id)}>Edit</button></>}
       {annotations.length > 0 && <svg className="canvas-anchored-art" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="Card annotations">
         {annotations.map(element => <g key={element.id} transform={`translate(${element.x} ${element.y}) rotate(${element.rotation} ${element.width / 2} ${element.height / 2})`}
@@ -392,7 +392,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
           <input type="search" aria-label="Find cards for canvas" placeholder="Find a card" value={query} onChange={event => setQuery(event.target.value)} />
           <div className="canvas-picker-cards">{cards.filter(card => !card.trashed && `${card.title} ${card.note}`.toLowerCase().includes(query.toLowerCase())).slice(0, 100).map(card =>
             <button type="button" key={card.id} disabled={!board || saving} draggable onDragStart={event => { event.dataTransfer.setData(CANVAS_CARD_MIME, card.id); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addCard(card.id)} aria-label={`Add ${card.title}`}>
-              {card.type === 'image' && card.dataUrl ? <img src={card.dataUrl} alt="" draggable={false} /> : <span className="canvas-picker-kind">{card.type === 'text' ? 'NOTE' : 'LINK'}</span>}
+              {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt="" draggable={false} /> : <span className="canvas-picker-kind">{card.type === 'text' ? 'NOTE' : 'LINK'}</span>}
               <span className="canvas-picker-title">{card.title}</span>
             </button>)}
             {!cards.some(card => !card.trashed) && <p>No cards yet. Add a card to your library first.</p>}
