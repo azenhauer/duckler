@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CardRecord, CollectionRecord } from '@visual-library/shared';
 import { Dialog } from './Dialog';
+import { BButton } from './BButton';
 import { InterfaceIcon } from './InterfaceIcon';
 import { OcrPanel } from './OcrPanel';
 import { PdfViewer, type PdfPageNote } from './PdfViewer';
@@ -43,7 +44,7 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
         <div className="editor-removal-actions">
           <button type="button" className="editor-icon-button" disabled={saving} data-tip={card.trashed ? 'Restore' : 'Move to trash'} aria-label={card.trashed ? 'Restore' : 'Move to trash'} onClick={onTrash}><InterfaceIcon name={card.trashed ? 'restore' : 'move'} /></button>
           <button type="button" className="editor-icon-button danger" disabled={saving} data-tip="Delete permanently" aria-label="Delete permanently" onClick={onDelete}><InterfaceIcon name="trash" /></button>
-          <button type="button" className="editor-icon-button editor-close" aria-label="Close details" data-tip="Close" disabled={saving} onClick={onClose}><InterfaceIcon name="close" /></button>
+          <BButton className="editor-close" label="Close details" disabled={saving} onClick={onClose} />
         </div>
       </header>
 

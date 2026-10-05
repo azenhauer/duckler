@@ -461,7 +461,7 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 .settings-gear:active, .sound-toggle:active, .refs-search-clear:active, .sound-preview-row button:active, .canvas-swatch:active, .editor-tint:active, .editor-chip:active { scale: .94; }
 .card-tile:active, .collection-tile-main:active, .notice:active { scale: .985; }
 /* A view's grid arrives once when you open it (not on every search keystroke: the container stays mounted). */
-.library-grid, .collection-grid, .canvas-gallery { animation: sx-arrive 150ms cubic-bezier(.2,.8,.2,1) both; }
+.library-grid, .collection-grid, .canvas-gallery { animation: sx-arrive 150ms cubic-bezier(.2,.8,.2,1) both !important; }
 @keyframes sx-arrive { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: none; } }
 /* Selecting a tool, a chip or a colour gives a short pop. */
 .canvas-icon-button[aria-pressed='true'] .canvas-icon, .editor-chip[data-checked], .editor-tint[aria-pressed='true'], .canvas-swatch[aria-pressed='true'] { animation: sx-pop 170ms cubic-bezier(.3,1.6,.5,1) both; }
@@ -490,3 +490,62 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 .pdf-text-hint { color: var(--ui-text-muted); font-size: .74rem; margin: 0; }
 .pdf-text .editor-action, .ocr-note-row .editor-action { padding: 6px 10px !important; font-size: .64rem !important; }
 @media (prefers-reduced-motion: reduce) { .pdf-message, .pdf-text { animation: none !important; } }
+
+/* ---- Soft corners: a tiny bit of roundness everywhere (as on the earlier build). ---- */
+.bottom-dock, .app-settings, .card-editor, .extension-setup, .card-composer, .card-reader { border-radius: 8px !important; }
+.refs-search, .profile-popover, .add-menu-popover, .collection-menu-popover, .library-options-popover, .workspace-menu-content, .card-move-menu,
+.quick-add-context, .collection-picker, .card-external-actions, .canvas-float, .canvas-popover, .top-actions, .notice, .sound-popover, .membership-undo { border-radius: 6px !important; }
+.card-tile, .collection-tile { border-radius: 5px !important; }
+.app-shell[data-card-corners='soft'] .card-tile, .app-shell[data-card-corners='soft'] .collection-tile { border-radius: 10px !important; }
+.app-shell[data-card-corners='round'] .card-tile, .app-shell[data-card-corners='round'] .collection-tile { border-radius: 16px !important; }
+.card-tile, .collection-tile { overflow: hidden; }
+.dock-item, .home-entry, .editor-action, .editor-icon-button, .canvas-icon-button, .sound-toggle, .settings-gear, .card-style-segment, .pdf-text, .pdf-message, .pdf-message-more,
+.card-editor .editor-field input:not([type=checkbox]):not([type=color]), .card-editor .editor-field textarea, .card-editor .pdf-text textarea, .profile-bio-field textarea,
+.bulk-new-collection input, .canvas-find, .canvas-stroke-field select, .canvas-contextbar input, .collection-parent-field select, .notice-glyph { border-radius: 4px !important; }
+.collection-badge, .editor-chip, .refs-search-clear, .card-style-swatch, .card-editor .editor-tint, .canvas-swatch, .sound-preview-row button, .card-pdf-badge, .pdf-page img { border-radius: 3px !important; }
+.card-style-segment { overflow: hidden; }
+
+/* ---- + button: lifts on hover and turns into a × when its menu opens (the earlier build's motion). ---- */
+.floating-add-button { border-radius: 7px !important; transition: border-color var(--sx-fast) linear, color var(--sx-fast) linear, transform 140ms cubic-bezier(.2,.8,.2,1) !important; }
+.floating-add-button:hover { transform: translateY(-2px) !important; }
+.add-menu.is-open .floating-add-button { transform: rotate(45deg) !important; }
+.floating-add-button:active { transform: translateY(0) scale(.94) !important; }
+.add-menu.is-open .floating-add-button:active { transform: rotate(45deg) scale(.94) !important; }
+
+/* ---- Selected cards lean like italic type; the editor-open card keeps its accent frame. ---- */
+.library-card .card-tile { transition: border-color var(--sx-fast) linear, transform 160ms cubic-bezier(.3,1.4,.5,1), scale 70ms !important; transform-origin: 50% 100%; cursor: default; }
+.library-card .card-tile.is-checked { transform: skewX(-4deg) !important; clip-path: none !important; border-color: var(--ui-accent-secondary) !important;
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--ui-accent-secondary) 30%, transparent) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-add-button:hover, .floating-add-button:active { transform: none !important; }
+  .add-menu.is-open .floating-add-button, .add-menu.is-open .floating-add-button:active { transform: rotate(45deg) !important; transition: none !important; }
+  .library-card .card-tile { transition: none !important; }
+}
+.canvas-gallery-tile { border-radius: 6px !important; }
+.canvas-gallery-new .canvas-thumbnail { display: grid; place-items: center; border-bottom: 1px dashed var(--sx-line-soft); }
+.canvas-new-plus { display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid var(--sx-line-soft); border-radius: 7px; color: var(--ui-accent-primary); font: 300 2rem/1 var(--sx-label); transition: transform 140ms cubic-bezier(.2,.8,.2,1), border-color var(--sx-fast) linear; }
+.canvas-gallery-new:hover .canvas-new-plus { transform: translateY(-2px); border-color: var(--ui-accent-primary); }
+.canvas-gallery-new:active .canvas-new-plus { transform: rotate(45deg) scale(.94); }
+@media (prefers-reduced-motion: reduce) { .canvas-new-plus { transition: none !important; transform: none !important; } }
+
+/* Content scrolls under the pinned Back / search / quick controls instead of showing through them. */
+.top-scrim { position: fixed; top: 0; left: 0; right: 0; z-index: 44; height: calc(max(22px, env(safe-area-inset-top)) + 64px); pointer-events: none;
+  background: linear-gradient(var(--ui-bg) 0, var(--ui-bg) 72%, color-mix(in srgb, var(--ui-bg) 0%, transparent) 100%); }
+@media (max-width: 640px) { .top-scrim { height: calc(max(22px, env(safe-area-inset-top)) + 116px); } }
+
+/* Click selects now, so the checkbox only shows on hover, when checked, or while a selection exists (touch). */
+.library-card > .tile-header input { opacity: 0 !important; transition: opacity 100ms linear !important; }
+.library-card:hover > .tile-header input, .library-card > .tile-header input:focus-visible, .library-card > .tile-header input:checked,
+.library-grid.has-selection .library-card > .tile-header input { opacity: 1 !important; }
+
+/* Collection rename: a small △ RENAME legend on the tile; the name field covers the tile heading while editing. */
+.collection-tile { position: relative; }
+.collection-rename-button { position: absolute; right: 10px; bottom: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: var(--ui-text-muted); font: 700 .58rem/1 var(--sx-label); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; opacity: .7; transition: opacity var(--sx-fast) linear, border-color var(--sx-fast) linear, scale 70ms; }
+.collection-rename-button b { color: var(--sx-tri); font-size: .7rem; }
+.collection-tile:hover .collection-rename-button, .collection-rename-button:focus-visible { opacity: 1; border-color: var(--sx-line-soft); }
+.collection-rename-button:active { scale: .94; }
+.collection-rename { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 3; }
+.collection-rename input { width: 100%; padding: 8px 10px; border: 1px solid var(--ui-accent-primary); border-radius: 4px; background: var(--ui-surface); color: var(--ui-text); font: 700 .95rem/1.2 inherit; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ui-accent-primary) 25%, transparent); }
+@media (hover: none) { .collection-rename-button { opacity: 1; } }

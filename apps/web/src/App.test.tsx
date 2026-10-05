@@ -113,6 +113,25 @@ describe('App', () => {
     expect(card.note).toBe('Revised note');
     expect((await cardDb.collections.toArray()).find(collection => collection.name === 'Research')?.cardIds).toContain(card.id);
   });
+  it('selects a card with one click, adds with Ctrl, clears with Escape and edits on double click', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    const design = await screen.findByRole('article', { name: 'Open Design note' });
+    const spec = screen.getByRole('article', { name: 'Open Spec checklist' });
+    fireEvent.click(design);
+    expect(design).toHaveClass('is-checked');
+    expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
+    fireEvent.click(spec, { ctrlKey: true });
+    expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
+    fireEvent.click(spec);
+    expect(design).not.toHaveClass('is-checked');
+    expect(spec).toHaveClass('is-checked');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(spec).not.toHaveClass('is-checked');
+    fireEvent.doubleClick(design);
+    expect(screen.getByRole('dialog', { name: 'Card details' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close details' })).toHaveClass('b-button');
+  });
   it('shows bulk actions only for multiple cards and saves membership from card options', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));

@@ -54,12 +54,13 @@ import { CardStyleSettings } from './components/CardStyleSettings';
 import { useCardStyle } from './lib/cardStyle';
 import { APPEARANCE_STORAGE_KEY, appearancePresets, appearanceStyle, loadAppearance, type AppearancePreset } from './lib/appearance';
 import { NavigationIcon } from './components/NavigationIcon';
-import { detailsHover, useHoverIntent } from './lib/hoverIntent';
+import { HOVER_CLOSE_DELAY, detailsHover, useHoverIntent } from './lib/hoverIntent';
 import { useExitAnimation } from './lib/exitAnimation';
 import { InterfaceIcon } from './components/InterfaceIcon';
 import { CanvasGallery } from './components/CanvasGallery';
 import { CollectionCanvas } from './components/CollectionCanvas';
 import { Notifications, notify } from './components/Notifications';
+import { BButton } from './components/BButton';
 import { inferImageTitle } from './lib/imageName';
 
 const emptyForm = {
@@ -575,6 +576,8 @@ function App() {
       }
       if (addMenuOpen) {
         setAddMenuOpen(false);
+        // Focus returns to +, which must not reopen the menu it just closed.
+        skipAddFocusOpen.current = true;
         cardComposerTriggerRef.current?.focus();
       }
       if (collectionMenuOpen) {
@@ -708,6 +711,16 @@ function App() {
         return sortMode === 'newest' ? rightTime - leftTime : leftTime - rightTime;
       });
   }, [cards, searchTerm, selectedCollection, sortMode, typeFilter]);
+
+  const selectCard = (cardId: string, additive: boolean) => setSelectedCardIds(current => additive
+    ? (current.includes(cardId) ? current.filter(id => id !== cardId) : [...current, cardId])
+    : (current.length === 1 && current[0] === cardId ? [] : [cardId]));
+  useEffect(() => {
+    if (!selectedCardIds.length) return;
+    const clear = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('[role="dialog"]')) setSelectedCardIds([]); };
+    document.addEventListener('keydown', clear);
+    return () => document.removeEventListener('keydown', clear);
+  }, [selectedCardIds.length]);
 
   const trashedCards = useMemo(() => cards.filter((card) => card.trashed), [cards]);
   const selectedCard = cards.find((card) => card.id === selectedId) ?? null;
@@ -870,6 +883,34 @@ function App() {
 
     await installPrompt.prompt();
     setInstallPrompt(null);
+  };
+
+  const [renamingCollectionId, setRenamingCollectionId] = useState<string | null>(null);
+  const handleRenameCollection = async (collectionId: string, value: FormDataEntryValue | null) => {
+    setRenamingCollectionId(current => current === collectionId ? null : current);
+    const target = collectionsRef.current.find(item => item.id === collectionId);
+    const name = typeof value === 'string' ? value.trim().slice(0, 120) : '';
+    if (!target || !name || name === target.name) return;
+    const next = { ...target, name, updatedAt: new Date().toISOString() };
+    setCollections(current => current.map(item => item.id === collectionId ? next : item));
+    try { await saveCollection(next); notify({ title: 'Renamed', detail: `“${target.name}” → “${name}”` }); }
+    catch { setCollections(current => current.map(item => item.id === collectionId ? target : item)); notify({ kind: 'error', title: "Couldn't rename collection" }); }
+  };
+
+  // Every canvas belongs to a collection, so an empty canvas is a new, empty collection opened on its board.
+  const handleCreateEmptyCanvas = async () => {
+    const taken = new Set(collections.map(collection => collection.name.toLocaleLowerCase()));
+    let name = 'Untitled canvas';
+    for (let index = 2; taken.has(name.toLocaleLowerCase()); index += 1) name = `Untitled canvas ${index}`;
+    const collection = createCollectionFromInput({ name, description: 'Canvas', cardIds: [] });
+    try {
+      await saveCollection(collection);
+      setCollections(current => [collection, ...current]);
+      navigateTo('canvas', collection.id);
+      notify({ title: 'Canvas created', detail: `“${name}” · rename it from Collections` });
+    } catch {
+      notify({ kind: 'error', title: "Couldn't create canvas" });
+    }
   };
 
   const handleCreateCollection = async (event: React.FormEvent) => {
@@ -1084,6 +1125,29 @@ function App() {
     setComposerCollectionsOpen(false);
     setCardComposerOpen(true);
   };
+
+  // The right-click menu only stays while it has the pointer or focus: it closes when the pointer leaves
+  // (or never arrives), when focus moves away, and on scroll, resize or window blur.
+  const quickAddRef = useRef<HTMLDivElement | null>(null);
+  const quickAddTimer = useRef<number | undefined>(undefined);
+  const quickAddHovered = useRef(false);
+  const skipAddFocusOpen = useRef(false);
+  const scheduleQuickAddClose = (delay: number | null) => {
+    window.clearTimeout(quickAddTimer.current);
+    if (delay !== null) quickAddTimer.current = window.setTimeout(() => setQuickAddPosition(null), delay);
+  };
+  useEffect(() => {
+    if (!quickAddPosition) return;
+    quickAddHovered.current = false;
+    quickAddRef.current?.focus({ preventScroll: true });
+    scheduleQuickAddClose(1500);
+    const close = () => setQuickAddPosition(null);
+    window.addEventListener('scroll', close, true); window.addEventListener('resize', close); window.addEventListener('blur', close);
+    return () => {
+      window.clearTimeout(quickAddTimer.current);
+      window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); window.removeEventListener('blur', close);
+    };
+  }, [quickAddPosition]);
 
   const openQuickAddMenu = (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
@@ -1334,6 +1398,8 @@ function App() {
       </aside>
 
       <section ref={contentRef} className={`content panel ${isHome ? 'home-view' : ''}`} data-view={activeView}>
+        {/* Inside the content's stacking context: above the cards, below the pinned Back and search. */}
+        {!isHome && !(activeView === 'canvas' && selectedCanvas) && <div className="top-scrim" aria-hidden="true" />}
         {!(activeView === 'canvas' && selectedCanvas) && <div ref={searchBarRef} className={`refs-search ${isHome ? 'home-search' : 'is-compact'} ${searchTerm ? 'has-query' : ''}`}>
           <label className="sidebar-search workspace-search refs-search-field" aria-label="Search refs">
             <InterfaceIcon name="search" />
@@ -1547,6 +1613,13 @@ function App() {
                       {collections.filter(item => !collectionParentError(collections, collection.id, item.id)).map(item => <option key={item.id} value={item.id}>Inside {item.name}</option>)}
                     </select>
                   </label>
+                  {renamingCollectionId === collection.id
+                    ? <form className="collection-rename" onSubmit={event => { event.preventDefault(); void handleRenameCollection(collection.id, new FormData(event.currentTarget).get('name')); }}>
+                      <input name="name" aria-label={`New name for ${collection.name}`} defaultValue={collection.name} maxLength={120} autoFocus onFocus={event => event.currentTarget.select()}
+                        onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setRenamingCollectionId(null); } }}
+                        onBlur={event => void handleRenameCollection(collection.id, event.currentTarget.value)} />
+                    </form>
+                    : <button type="button" className="collection-rename-button" aria-label={`Rename ${collection.name}`} title="Rename" onClick={() => setRenamingCollectionId(collection.id)}><b className="glyph-tri" aria-hidden="true">△</b>Rename</button>}
                   <button
                     type="button"
                     className="collection-tile-delete"
@@ -1586,7 +1659,7 @@ function App() {
               <input autoFocus aria-label="New collection name" placeholder="New collection name" maxLength={120} value={bulkNewName} onChange={event => setBulkNewName(event.target.value)}
                 onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setBulkNewName(null); } }} />
               <button type="submit" disabled={!bulkNewName.trim()}>Create &amp; add</button>
-              <button type="button" className="ghost-button" aria-label="Cancel new collection" onClick={() => setBulkNewName(null)}>×</button>
+              <BButton label="Cancel new collection" onClick={() => setBulkNewName(null)} />
             </form>}
             <button type="button" onClick={() => void handleBulkAddToCollection(bulkDestinationId)}>
               Add to collection
@@ -1605,7 +1678,8 @@ function App() {
           <p>{searchTerm ? 'Try a different search or clear your filters.' : ''}</p>
           <button type="button" onClick={() => searchTerm ? changeSearch('') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : 'Connect your browser'}</button>
         </div>}
-        {activeView === 'library' && <div className={`library-grid card-size-${cardSize}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
+        {activeView === 'library' && <p id="card-select-hint" hidden>Click to select, double-click or Enter to edit.</p>}
+        {activeView === 'library' && <div onClick={event => { if (event.target === event.currentTarget) setSelectedCardIds([]); }} className={`library-grid card-size-${cardSize} ${selectedCardIds.length ? 'has-selection' : ''}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
           {visibleCards.map((card) => {
             const sourceLabel = card.sourceUrl
               ? (() => {
@@ -1644,14 +1718,20 @@ function App() {
                 style={card.color ? { '--card-tint': card.color } as CSSProperties : undefined}
                 tabIndex={0}
                 aria-label={`Open ${card.title}`}
-                onClick={() => setSelectedId(card.id)}
+                aria-describedby="card-select-hint"
+                // One click selects (Ctrl/Cmd/Shift adds to the selection); a double click opens the editor.
+                onClick={(event) => selectCard(card.id, event.ctrlKey || event.metaKey || event.shiftKey)}
+                onDoubleClick={() => setSelectedId(card.id)}
                 onKeyDown={(event) => {
                   if (event.target !== event.currentTarget) {
                     return;
                   }
-                  if (event.key === 'Enter' || event.key === ' ') {
+                  if (event.key === 'Enter') {
                     event.preventDefault();
                     setSelectedId(card.id);
+                  } else if (event.key === ' ') {
+                    event.preventDefault();
+                    selectCard(card.id, true);
                   }
                 }}
               >
@@ -1758,7 +1838,7 @@ function App() {
 
         {activeView === 'canvas' && (selectedCanvas
           ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack} />
-          : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} />)}
+          : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} onCreateCanvas={() => void handleCreateEmptyCanvas()} />)}
 
         <div className="sync-panel panel">
           <h2>Sync status</h2>
@@ -1854,7 +1934,7 @@ function App() {
         </div>
       </nav>
       {settingsOpen && <Dialog label="Settings" className="app-settings" onClose={() => setSettingsOpen(false)}>
-        <button className="close-detail" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
+        <BButton className="close-detail" label="Close settings" onClick={() => setSettingsOpen(false)} />
         <h2>Settings</h2>
         <div className="settings-profile-card profile-identity-card is-clickable" title="Click to change the card colour" onClick={pickCardColor}>
           <label className="profile-avatar settings-avatar avatar-upload" title={profilePhoto ? 'Change photo' : 'Add photo'}>
@@ -1937,16 +2017,20 @@ function App() {
       </Dialog>}
       {extensionSetupOpen && <ExtensionSetup onClose={() => setExtensionSetupOpen(false)} onConnected={() => setExtensionConnectionVersion(current => current + 1)} />}
       {undoMembership && <div className="membership-undo" role="status"><span>Removed from {undoMembership.collection.name}</span><button type="button" disabled={membershipSaving} onClick={() => void handleUndoMembership()}>Undo</button></div>}
-      {quickAddPosition && <div className="quick-add-context" role="menu" aria-label="Quick add" style={{ left: quickAddPosition.left, top: quickAddPosition.top }}>
+      {quickAddPosition && <div ref={quickAddRef} className="quick-add-context" role="menu" aria-label="Quick add" tabIndex={-1} style={{ left: quickAddPosition.left, top: quickAddPosition.top }}
+        onPointerEnter={() => { quickAddHovered.current = true; scheduleQuickAddClose(null); }}
+        onPointerLeave={() => { quickAddHovered.current = false; scheduleQuickAddClose(HOVER_CLOSE_DELAY); }}
+        // Safari doesn't focus clicked buttons, so a blur while the pointer is on the menu isn't "leaving" it.
+        onBlur={event => { if (!quickAddHovered.current && !event.currentTarget.contains(event.relatedTarget as Node | null)) setQuickAddPosition(null); }}>
         <strong>Quick add</strong>
         <button type="button" role="menuitem" onClick={() => { navigateTo('library'); setQuickAddPosition(null); setCollectionMenuOpen(true); }}><NavigationIcon name="collections" />Collection</button>
-        <button type="button" role="menuitem" onClick={() => { navigateTo('canvas'); setQuickAddPosition(null); }}><NavigationIcon name="canvas" />Canvas</button>
+        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); void handleCreateEmptyCanvas(); }}><NavigationIcon name="canvas" />Canvas</button>
         <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); handleQuickAddCard('bookmark'); }}><InterfaceIcon name="link" />Link</button>
         <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); imagePickerRef.current?.click(); }}><InterfaceIcon name="upload" />Upload</button>
         <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); handleQuickAddCard('text'); }}><InterfaceIcon name="note" />Note</button>
       </div>}
       <div className={`add-menu ${addMenuOpen ? 'is-open' : ''}`} ref={addMenuRef} {...addHover}>
-        <button ref={cardComposerTriggerRef} type="button" className="floating-add-button" aria-label="Add card" aria-expanded={addMenuOpen} aria-haspopup="true" title="Add card" onFocus={() => setAddMenuOpen(true)} onClick={() => setAddMenuOpen(true)}>+</button>
+        <button ref={cardComposerTriggerRef} type="button" className="floating-add-button" aria-label="Add card" aria-expanded={addMenuOpen} aria-haspopup="true" title="Add card" onFocus={() => { if (skipAddFocusOpen.current) skipAddFocusOpen.current = false; else setAddMenuOpen(true); }} onClick={() => setAddMenuOpen(true)}>+</button>
         {addMenuOpen && <div ref={addMenuExitRef} className="add-menu-popover" aria-label="Create">
           <div className="add-menu-group">
             <button type="button" onClick={() => {
@@ -1958,8 +2042,8 @@ function App() {
               <span>Collection</span>
             </button>
             <button type="button" onClick={() => {
-              navigateTo('canvas');
               setAddMenuOpen(false);
+              void handleCreateEmptyCanvas();
             }}>
               <span className="add-menu-icon" aria-hidden="true"><NavigationIcon name="canvas" /></span>
               <span>Canvas</span>
@@ -2018,7 +2102,7 @@ function App() {
             }}
           >
             <header className="composer-topbar">
-              <button type="button" className="composer-close" aria-label="Close add card" disabled={composerSaving} onClick={() => setCardComposerOpen(false)}>×</button>
+              <BButton className="composer-close" label="Close add card" disabled={composerSaving} onClick={() => setCardComposerOpen(false)} />
               <h2 id="card-composer-title" className="visually-hidden">Add card</h2>
                 <label className="composer-type-control">
                   <span className="visually-hidden">Card type</span>

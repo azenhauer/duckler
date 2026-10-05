@@ -36,9 +36,9 @@ function CanvasPreview({ cards, layout, placements, elements = [] }: { cards: Ca
   </svg></div>;
 }
 
-export function CanvasGallery({ collections, cards, search, onOpen, onCreateCollection }: {
+export function CanvasGallery({ collections, cards, search, onOpen, onCreateCollection, onCreateCanvas }: {
   collections: CollectionRecord[]; cards: CardRecord[]; search: string;
-  onOpen: (collectionId: string) => void; onCreateCollection: () => void;
+  onOpen: (collectionId: string) => void; onCreateCollection: () => void; onCreateCanvas?: () => void;
 }) {
   const [layouts, setLayouts] = useState<CanvasLayout[]>([]);
   const [error, setError] = useState('');
@@ -57,13 +57,17 @@ export function CanvasGallery({ collections, cards, search, onOpen, onCreateColl
   const visible = collections.filter(collection => collection.name.toLocaleLowerCase().includes(query) || cards.some(card => (collection.cardIds.includes(card.id) || placements.some(item => item.canvasId === collection.id && !item.removed && item.cardId === card.id)) && !card.trashed && card.searchText.toLocaleLowerCase().includes(query)));
   return <div className="canvas-gallery" aria-label="Collection canvases" data-single={visible.length === 1}>
     {error && <p role="alert">{error}</p>}
+    {onCreateCanvas && !query && <button className="canvas-gallery-tile canvas-gallery-new" type="button" aria-label="New empty canvas" onClick={onCreateCanvas}>
+      <div className="canvas-thumbnail is-empty"><span className="canvas-new-plus" aria-hidden="true">+</span></div>
+      <span className="canvas-gallery-caption">New canvas</span>
+    </button>}
     {visible.map(collection => <button className="canvas-gallery-tile" type="button" key={collection.id} aria-label={`Open canvas ${collection.name}`} onClick={() => onOpen(collection.id)}>
       <CanvasPreview cards={canvasIds.includes(collection.id) ? cards : collectionCanvasCards(collection, cards)} layout={layouts.find(layout => layout.collectionId === collection.id)} placements={canvasIds.includes(collection.id) ? placements.filter(item => item.canvasId === collection.id) : undefined} elements={elements.filter(item => item.canvasId === collection.id)} />
       <span className="canvas-gallery-caption">{collection.name}</span>
     </button>)}
-    {!visible.length && <div className="empty-view"><NavigationIcon name="canvas" />
+    {!visible.length && (query || !onCreateCanvas) && <div className="empty-view"><NavigationIcon name="canvas" />
       <p>{collections.length ? 'No matches' : 'No canvases yet'}</p>
-      {!collections.length && <button type="button" className="secondary-button" onClick={onCreateCollection}>Create a collection</button>}
+      {!collections.length && !onCreateCanvas && <button type="button" className="secondary-button" onClick={onCreateCollection}>Create a collection</button>}
     </div>}
   </div>;
 }

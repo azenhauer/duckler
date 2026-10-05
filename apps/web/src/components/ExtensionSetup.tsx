@@ -1,3 +1,4 @@
+import { BButton } from './BButton';
 import { useState } from 'react';
 import { acceptExtensionConnection, getLibraryInvitation } from '../lib/extensionBridge';
 import { Dialog } from './Dialog';
@@ -7,7 +8,7 @@ export function ExtensionSetup({ onClose, onConnected }: { onClose: () => void; 
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
   return <Dialog label="Connect your browser" className="extension-setup" onClose={onClose}>
-      <button className="close-detail" type="button" aria-label="Close extension setup" onClick={onClose}>×</button>
+      <BButton className="close-detail" label="Close extension setup" onClick={onClose} />
       <h2 id="extension-title">Connect your browser</h2>
       <ol className="extension-steps">
         <li><strong>Load Duckler Capture</strong><p>In Chrome or Edge, open Extensions, enable Developer mode, and choose Load unpacked. Select the extension’s built folder.</p></li>

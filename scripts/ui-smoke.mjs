@@ -85,7 +85,7 @@ try {
   await page.evaluate(() => document.fonts.ready);
   const grid = await page.locator('.library-grid').boundingBox();
   assert.ok(Math.abs(grid.x + grid.width / 2 - 720) < 3, 'Library cards should be centered');
-  assert.equal(await page.locator('.card-tile').first().evaluate(el => getComputedStyle(el).borderRadius), '2px'); // PS2 schematic: near-square corners by default
+  assert.equal(await page.locator('.card-tile').first().evaluate(el => getComputedStyle(el).borderRadius), '5px'); // PS2 schematic with a tiny bit of roundness
   const cards = await page.locator('.library-card').evaluateAll(elements => elements.map(el => ({ x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y, width: el.getBoundingClientRect().width })));
   assert.equal(cards[0].y, cards[1].y, 'Two starter cards should sit side by side');
   assert.ok(Math.abs((cards[0].x + cards[1].x + cards[1].width) / 2 - 720) < 3);

@@ -38,7 +38,7 @@ try {
   await page.screenshot({ path: '.tmp/ui-checks/notes-light.png', fullPage: true });
   await page.getByRole('button', { name: 'Switch to dark mode' }).click();
   await page.screenshot({ path: '.tmp/ui-checks/notes-dark.png', fullPage: true });
-  await page.locator('article[aria-label="Open Original title"]').click();
+  await page.locator('article[aria-label="Open Original title"]').dblclick(); // one click selects, two edit
   const editor = page.getByRole('dialog', { name: 'Card details' });
   await expect(editor.locator('.editor-topbar').getByRole('button', { name: 'Move to trash', exact: true })).toBeVisible();
   await expect(editor.locator('.editor-topbar').getByRole('button', { name: 'Delete permanently', exact: true })).toBeVisible();
@@ -57,7 +57,7 @@ try {
   assert.equal(await page.evaluate(() => document.body.style.overflow), '');
   await page.reload(); await page.getByRole('button', { name: 'All notes', exact: true }).click();
   await expect(bubble).toContainText('Updated screenshot note');
-  await page.locator('article[aria-label="Open Original title"]').click();
+  await page.locator('article[aria-label="Open Original title"]').dblclick(); // one click selects, two edit
   await editor.getByRole('textbox', { name: 'Note' }).fill('   ');
   await editor.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(bubble).toHaveCount(0);
