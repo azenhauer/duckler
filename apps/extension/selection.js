@@ -1,6 +1,8 @@
 (() => {
-  if (window.__ducklerSelectionInstalled) return;
-  window.__ducklerSelectionInstalled = true;
+  // Only a live copy (not one orphaned by an extension reload) blocks a fresh install.
+  const alive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } };
+  if (window.__ducklerSelectionAlive?.()) return;
+  window.__ducklerSelectionAlive = alive;
   chrome.runtime.onConnect.addListener(port => {
     if (port.name !== 'duckler-selection-v1') return;
     let timer;

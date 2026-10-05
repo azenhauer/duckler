@@ -4,61 +4,65 @@ import { fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 
 const script = readFileSync(resolve('apps/extension/content.js'), 'utf8');
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); document.documentElement.querySelectorAll(':scope > div').forEach(el => el.remove()); delete (window as unknown as Record<string, unknown>).__ducklerRegionPickerInstalled; });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); document.documentElement.querySelectorAll(':scope > div').forEach(el => el.remove()); delete (window as unknown as Record<string, unknown>).__ducklerRegionPickerAlive; });
 
-async function capture(responseOverride?: Record<string, unknown>) {
+const shadowText = (selector: string) => Array.from(document.documentElement.children).flatMap(el => Array.from(el.shadowRoot?.querySelectorAll(selector) ?? [])).map(el => el.textContent ?? '');
+
+function install(response: Record<string, unknown>, live = true) {
   let listener: (message: unknown, sender: unknown, respond: (response: unknown) => void) => void = () => {};
   const roots: ShadowRoot[] = [];
   const attach = Element.prototype.attachShadow;
   vi.spyOn(Element.prototype, 'attachShadow').mockImplementation(function(this: Element) { const root = attach.call(this, { mode: 'open' }); roots.push(root); return root; });
-  const sendMessage = vi.fn(async (message: { type: string }) => message.type === 'prepare-region-review'
-    ? responseOverride ?? { ok: true, capture: { kind: 'screenshot', title: 'Screenshot', sourceUrl: 'https://example.com', payload: 'data:image/png;base64,AAAA' } }
-    : { ok: true });
+  const sendMessage = vi.fn(async (message: { type: string }) => message.type === 'prepare-region-review' ? response : { ok: true });
   vi.stubGlobal('visualViewport', { scale: 1 });
-  const chrome = { runtime: { sendMessage, onMessage: { addListener: (fn: typeof listener) => { listener = fn; } } } };
+  const chrome = { runtime: { id: live ? 'duckler-extension' : undefined, sendMessage, onMessage: { addListener: (fn: typeof listener) => { listener = fn; } } } };
   new Function('chrome', script)(chrome);
-  listener({ type: 'start-region-capture' }, {}, () => {});
-  const surface = roots[0].querySelector('.surface')!;
-  Object.assign(surface, { setPointerCapture: vi.fn() });
-  fireEvent(surface, new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10 }));
-  fireEvent(surface, new MouseEvent('pointerup', { clientX: 100, clientY: 100 }));
-  await waitFor(() => expect(roots.some(root => root.querySelector(responseOverride ? '[role="alert"]' : '[aria-label="Review screenshot"]'))).toBe(true));
-  return { sendMessage, root: roots.find(root => root.querySelector('[aria-label="Review screenshot"]'))!, restart: () => {
-    const respond = vi.fn(); listener({ type: 'start-region-capture' }, {}, respond); return respond;
-  } };
+  const start = () => { const respond = vi.fn(); listener({ type: 'start-region-capture' }, {}, respond); return respond; };
+  const drag = () => {
+    const surface = roots.at(-1)!.querySelector('.surface')!;
+    Object.assign(surface, { setPointerCapture: vi.fn() });
+    fireEvent(surface, new MouseEvent('pointerdown', { button: 0, clientX: 10, clientY: 10 }));
+    fireEvent(surface, new MouseEvent('pointerup', { clientX: 100, clientY: 100 }));
+  };
+  return { sendMessage, start, drag, listenerSet: () => listener };
 }
 
-it('reviews screenshots without queuing until Save, and includes the added note', async () => {
-  const { sendMessage, root } = await capture();
-  expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual(['prepare-region-review']);
-  (root.querySelector('textarea') as HTMLTextAreaElement).value = 'A useful reference';
-  (root.querySelector('#capture-title') as HTMLInputElement).value = 'Reference image';
-  (root.querySelector('#capture-collection') as HTMLInputElement).value = 'Inspiration';
-  expect(root.textContent).not.toContain('Your screenshot has not been sent');
-  fireEvent.click(root.querySelector('button')!);
-  await waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'queue-capture', capture: expect.objectContaining({ title: 'Reference image', collectionName: 'Inspiration', note: 'A useful reference', kind: 'screenshot' }) })));
-});
-
-it('discards a screenshot without delivering it', async () => {
-  const { sendMessage, root } = await capture();
-  fireEvent.click(root.querySelectorAll('button')[1]);
-  expect(root.host.isConnected).toBe(false);
+it('hands the screenshot to the side panel: no on-page review, just a short note', async () => {
+  const { sendMessage, start, drag } = install({ ok: true, inPanel: true });
+  start(); drag();
+  await waitFor(() => expect(shadowText('[role="status"]').join(' ')).toContain('Screenshot ready in the Duckler panel'));
+  expect(shadowText('[aria-label="Review screenshot"]')).toHaveLength(0);
   expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual(['prepare-region-review']);
 });
 
-it('rejects a missing screenshot without leaving an invisible review blocking retries', async () => {
-  const { sendMessage, restart } = await capture({ ok: true });
-  expect(document.querySelector('[aria-label="Review screenshot"]')).toBeNull();
-  const alerts = Array.from(document.documentElement.children).flatMap(el => Array.from(el.shadowRoot?.querySelectorAll('[role="alert"]') ?? []));
-  expect(alerts[0].textContent).toContain('Reload Duckler Capture');
-  expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual(['prepare-region-review']);
-  expect(restart()).toHaveBeenCalledWith({ ok: true });
+it('without a panel the screenshot is saved straight away, still without a pop-up', async () => {
+  const { start, drag } = install({ ok: true, saved: true });
+  start(); drag();
+  await waitFor(() => expect(shadowText('[role="status"]').join(' ')).toContain('Screenshot saved to Duckler'));
+  expect(shadowText('[aria-label="Review screenshot"]')).toHaveLength(0);
 });
 
-it('shows reload guidance when an older worker does not support screenshot review', async () => {
-  const { sendMessage } = await capture({ ok: false, error: 'Unsupported capture request.' });
-  const alerts = Array.from(document.documentElement.children).flatMap(el => Array.from(el.shadowRoot?.querySelectorAll('[role="alert"]') ?? []));
-  expect(alerts[0].textContent).toContain('Reload Duckler Capture');
+it('can start the next screenshot right after one finishes', async () => {
+  const { start, drag } = install({ ok: true, inPanel: true });
+  start(); drag();
+  await waitFor(() => expect(shadowText('[role="status"]').join(' ')).toContain('Duckler panel'));
+  expect(start()).toHaveBeenCalledWith({ ok: true });
+});
+
+it('shows reload guidance when an older worker does not support screenshots', async () => {
+  const { sendMessage, start, drag } = install({ ok: false, error: 'Unsupported capture request.' });
+  start(); drag();
+  await waitFor(() => expect(shadowText('[role="alert"]').join(' ')).toContain('Reload Duckler Capture'));
   expect(sendMessage).toHaveBeenCalledTimes(1);
 });
 
+it('a live copy blocks a second install, but a copy orphaned by an extension reload does not', () => {
+  install({ ok: true, inPanel: true });
+  const again = install({ ok: true, inPanel: true });
+  expect(again.listenerSet().toString()).toBe((() => {}).toString()); // live copy: second script returned early
+  delete (window as unknown as Record<string, unknown>).__ducklerRegionPickerAlive;
+  const dead = install({ ok: true, inPanel: true }, false); // its runtime is gone, like after a reload
+  const fresh = install({ ok: true, inPanel: true });
+  expect(dead.listenerSet().toString()).not.toBe((() => {}).toString());
+  expect(fresh.listenerSet().toString()).not.toBe((() => {}).toString());
+});

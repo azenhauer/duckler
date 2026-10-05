@@ -41,7 +41,8 @@ await cp(builtExtension, extension, { recursive: true });
 // the loopback fixture in this temporary test build; shipping permissions stay unchanged.
 const manifestPath = join(extension, 'manifest.json');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-manifest.host_permissions = ['http://127.0.0.1/*'];
+// <all_urls> stands in for the user granting site access from the panel (captureVisibleTab needs it).
+manifest.host_permissions = ['<all_urls>'];
 await writeFile(manifestPath, JSON.stringify(manifest));
 const profile = await mkdtemp(join(temporary, 'extension-check-'));
 const context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
@@ -176,6 +177,36 @@ try {
   }, undefined, { timeout: 15000 });
   await expect.poll(() => metaPopup.isClosed(), { timeout: 5000 }).toBe(true);
   console.log('Metadata autofill and in-panel screenshot review (no note needed) passed.');
+  // Real screenshot: Shot in the panel, drag on the page, review in the panel (no on-page pop-up).
+  const shotReady = context.waitForEvent('page');
+  await options.evaluate(() => chrome.tabs.create({ url: chrome.runtime.getURL('popup.html'), active: false }));
+  const shotPanel = await shotReady;
+  await website.bringToFront();
+  await expect(shotPanel.locator('#page-title')).not.toHaveText('Loading page…');
+  await shotPanel.locator('#mode-shot').click();
+  await expect(shotPanel.locator('#status')).toContainText('Drag over the page');
+  await website.mouse.move(40, 40); await website.mouse.down(); await website.mouse.move(400, 160, { steps: 8 }); await website.mouse.up();
+  await expect(shotPanel.locator('#shot-preview')).toBeVisible({ timeout: 10000 });
+  assert.equal(await website.evaluate(() => document.querySelectorAll('[aria-label="Review screenshot"]').length), 0);
+  await shotPanel.locator('#capture-title').fill('Real region shot');
+  await shotPanel.locator('#save-page').click();
+  await library.waitForFunction(async () => {
+    const { cardDb } = await import('/src/lib/cardDb.ts');
+    const card = await cardDb.cards.filter(card => card.title === 'Real region shot').first();
+    return card?.type === 'image' && card.dataUrl?.startsWith('data:image/png');
+  }, undefined, { timeout: 15000 });
+  // Without a panel the screenshot is saved straight away (only a short toast on the page).
+  await expect.poll(() => shotPanel.isClosed(), { timeout: 5000 }).toBe(true);
+  await website.bringToFront();
+  const websiteTab = await options.evaluate(async url => (await chrome.tabs.query({})).find(tab => tab.url === url)?.id, `${pdfWebsite}/meta`);
+  assert.equal((await options.evaluate(id => chrome.runtime.sendMessage({ type: 'start-region', tabId: id }), websiteTab)).ok, true);
+  await website.mouse.move(60, 60); await website.mouse.down(); await website.mouse.move(360, 200, { steps: 8 }); await website.mouse.up();
+  await library.waitForFunction(async () => {
+    const { cardDb } = await import('/src/lib/cardDb.ts');
+    return (await cardDb.cards.filter(card => card.type === 'image' && card.title.includes('Harbour Lights')).count()) >= 1;
+  }, undefined, { timeout: 15000 });
+  assert.equal(await website.evaluate(() => document.querySelectorAll('[aria-label="Review screenshot"]').length), 0);
+  console.log('Region screenshots: reviewed in the panel, or saved directly without a panel; no separate pop-up.');
   // The panel shortcut is registered.
   assert.ok(await options.evaluate(async () => (await chrome.commands.getAll()).some(command => command.name === 'toggle-capture-panel')));
   await website.bringToFront();

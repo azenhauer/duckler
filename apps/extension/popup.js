@@ -218,6 +218,10 @@ $('#mode-note').addEventListener('click', () => setMode('note'));
 $('#mode-pdf').addEventListener('click', () => setMode('pdf'));
 // Screenshot: pick the mode, drag over the page, and the shot appears here with the usual fields.
 async function startShot() {
+  // Screenshots need access to the page. Without it, ask now: this click is the user gesture Chrome requires.
+  if (!await hasSiteAccess()) {
+    try { if (await chrome.permissions?.request?.({ origins: ['<all_urls>'] })) $('#site-access').hidden = true; } catch { /* Fall back to this tab's temporary access. */ }
+  }
   screenshot = null; setMode('screenshot');
   if (!edited.has('note-text') && $('#note-text').value === lastAutoNote) { $('#note-text').value = ''; lastAutoNote = ''; }
   try { await request({ type: 'start-region', tabId: currentTab.id }); showStatus('Drag over the page to capture · Esc cancels'); }

@@ -19,6 +19,14 @@ chrome.runtime.onConnect.addListener(port => {
   });
   port.onDisconnect.addListener(() => { if (windowId !== undefined && panelPorts.get(windowId) === port) panelPorts.delete(windowId); });
 });
+// Windows whose panel the shortcut just opened: a screenshot finishing there waits briefly for it to connect.
+const panelOpening = new Map<number, number>();
+async function panelFor(windowId: number | undefined): Promise<chrome.runtime.Port | undefined> {
+  if (windowId === undefined) return undefined;
+  const deadline = (panelOpening.get(windowId) ?? 0) > Date.now() ? Date.now() + 3000 : Date.now();
+  while (!panelPorts.get(windowId) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+  return panelPorts.get(windowId);
+}
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Capture could not be saved.';
 const badge = async (error = false) => {
   const count = await queue.captures.count();
@@ -119,6 +127,11 @@ chrome.commands.onCommand.addListener((command, tab) => {
     return;
   }
   if (command !== 'capture-visible-area' || !tab?.id) return;
+  // Screenshots are reviewed in the side panel: open it (this key press is the required user gesture) and capture.
+  if (tab.windowId !== undefined && !panelPorts.has(tab.windowId)) {
+    panelOpening.set(tab.windowId, Date.now() + 15000);
+    void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => panelOpening.delete(tab.windowId!));
+  }
   void beginRegion(tab.id).catch(() => badge(true));
 });
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -167,10 +180,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'start-region': await beginRegion(message.tabId); return {};
       case 'prepare-region-review': {
         const capture = await captureRegion(sender, message);
-        // With the side panel open, the screenshot is reviewed there (same fields as every other capture).
-        const port = sender.tab?.windowId !== undefined ? panelPorts.get(sender.tab.windowId) : undefined;
-        if (port) { try { port.postMessage({ type: 'screenshot', capture, tabId: sender.tab?.id }); return { capture, inPanel: true }; } catch { panelPorts.delete(sender.tab!.windowId); } }
-        return { capture };
+        // Screenshots are reviewed in the side panel (same fields as every other capture). There is no
+        // separate on-page review: without a panel the screenshot is saved straight away.
+        const port = await panelFor(sender.tab?.windowId);
+        if (port) { try { port.postMessage({ type: 'screenshot', capture, tabId: sender.tab?.id }); return { inPanel: true }; } catch { panelPorts.delete(sender.tab!.windowId); } }
+        await save(capture);
+        return { saved: true };
       }
       case 'suggest-title': return { title: screenshotTitle(message.hint as RegionHint | undefined, typeof message.fallback === 'string' ? message.fallback : '') };
       case 'capture-region': throw new Error('Refresh this website before taking a screenshot. The screenshot review has been updated.');
