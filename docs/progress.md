@@ -203,7 +203,7 @@ Remaining: trusted invite-only passkey/magic-link onboarding, rate limits/audit/
 - Sound: a visible speaker button in the dock (click to mute or unmute; hover shows a volume slider, previewed on release). Cue variety comes from pitching and layering the two pack samples: hover, select, open, back/cancel/Escape, toggle on/off, save, delete and capture each sound different. Settings has preview buttons for each cue.
 - Note for the dev server: Vite sometimes misses edits made from Claude's shell (seen with an appended CSS file). If something looks stale, restart `npm run dev`.
 
-## OCR + PDF in progress — stopped here (October 5, 2026)
+## OCR + PDF work in progress (October 5, 2026, morning — superseded by the next entry)
 
 The owner installed `tesseract.js@7` and `pdfjs-dist@6` (root `package.json`). This work is **written and typechecks, but has not been run in a browser yet**. The PDF browser test was interrupted before it ran.
 
@@ -224,3 +224,33 @@ Next steps:
 3. Add tests: schema round-trip for `ocr`/`pdf`/`source` in backups, `ocrIsCurrent`, the PDF signature check.
 4. Optionally self-host `eng`/`por` traineddata under `public/ocr/lang` and set `VITE_OCR_LANG_PATH`.
 5. Move `tesseract.js` / `pdfjs-dist` from the root `package.json` into `apps/web/package.json` (run `npm install` on Windows after the move).
+
+## OCR + PDF verified; all checks green — October 5, 2026
+
+Picked up on a second Windows PC (fresh clone, `npm install`, Node 24). Every step of the handoff list is done except the optional self-hosted language data.
+
+Command results:
+- `npm run typecheck`: pass. `npm run lint`: pass (allowed `_`-prefixed unused variables, the rest-omit convention already in use; escaped one apostrophe).
+- `npm test`: 20 files, 132 tests pass. Three App tests were stale (the editor's Collections toggle is gone; Back navigation goes through `history.back()`, so tests now await `popstate`). New `packages/shared/src/ocrPdf.test.ts` covers `mediaFingerprint`/`ocrIsCurrent`, stale OCR excluded from search, `hasPdfSignature`, backup round-trip and rejection for `ocr`/`pdf`/`source`, and the Obsidian OCR section, PDF attachment and provenance. A `cardDb` test covers the rebuilt search index.
+- `npm run build`: failed at first because the two ~3.9 MB tesseract cores exceeded the Workbox precache limit. They are now excluded from the precache (`globIgnores`) and cached CacheFirst on first use in `duckler-engines` (which also holds the pdf.js worker, never precached because the glob has no `.mjs`); the jsdelivr language data goes in `duckler-ocr-languages`.
+- Playwright smoke scripts (after `npx playwright install chromium`): `ui-smoke`, `canvas-smoke`, `canvas-tools-smoke`, `notes-editor-smoke`, `membership-smoke`, `canvas-capacity-smoke` (200 placements / 500 annotations / 200 connectors open in ~800 ms) and `extension-smoke` all pass against `npm run dev`. The scripts were updated for the redesign.
+- `npm run pages:preview` couldn't start on this machine: workerd failed with `SQLITE_CANTOPEN` on its local state. The built `dist` was served instead by a small Node server that applies `dist/_headers` exactly, and checked in the browser: the CSP header is present, the service worker controls the page, PDF import/view/paging and OCR all work with no CSP violations and no console errors, and after first use the runtime caches hold the PDF worker, the SIMD core and `eng`/`por` traineddata.
+
+Browser testing (dev server):
+- PDF: a text PDF (3 pages) and a scanned PDF (2 pages) import; viewer paging and bounds work; Capture page creates "<title> — p. 2" with `source` provenance and a "Page 2" badge; PDF text is searchable. Errors: corrupt → "could not be read", not a PDF → "not a PDF", password → "password-protected", 26 MB → "up to 25 MB", 201 pages → "up to 200 pages".
+- OCR: English and Portuguese (with accents) extracted exactly in about 1–2 s; Cancel mid-run returns to Extract; Retry works; edits are marked "Edited by you"; OCR is saved with the card on Save; OCR'd and edited words are searchable; the stale warning appears when the image changes.
+
+Bugs found and fixed:
+- `PdfViewer`: Capture page could save the previous page's image under the new page number while the next page rendered; and the viewer gave up after polling 2 s for the document, so a slow-opening PDF stayed on "Loading page…". The document now lives in state and the rendered image is tied to its page.
+- Search: `searchText` is stored, so OCR that no longer matched its image (or a restored card with a stale or empty index) kept matching. `readCards` now rebuilds `searchText` on read.
+- OCR Copy failed silently when the clipboard was refused; it now says so.
+- `useHoverIntent` spread a `cancel` function onto DOM elements (React warning).
+- Popovers: `sx-rise`/`sx-leave` animated `transform`, overriding the `translateX(-50%)` centring, so the account menu and collection menu sat half their width to the right (off-screen at 320 px). The keyframes now use the individual `translate`/`scale` properties.
+- The library options menu went off the left edge at 768 px (right-anchored to a left-aligned title); the account menu rose past the top on a 667×375 landscape phone (it now scrolls on short screens); the Settings → Cards Frame segment overflowed at 320 px.
+- Reduced motion didn't stop the Home artwork, + button, theme toggle or Back ring hover motion (specificity lost to `!important` hover rules).
+- Dev only: React StrictMode re-attaching refs made the exit animation leave a ghost copy every time a dialog opened.
+- Backups now require the PDF data URL body to be base64, like images.
+
+Also: `tesseract.js`, `tesseract.js-core` (imported directly for the `?url` core assets) and `pdfjs-dist` moved from the root `package.json` into `apps/web/package.json`.
+
+Still open: optional self-hosted traineddata (`VITE_OCR_LANG_PATH`); OCR directly on scanned PDF pages; whether status notices should auto-dismiss (they stay until replaced and, on some layouts, can sit over the Back button); checking Google sign-in on the deployed build with the CSP.

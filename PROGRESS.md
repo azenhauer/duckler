@@ -4,7 +4,7 @@ A plain checklist across every spec. Detailed requirements: `docs/duckler-master
 
 Legend: `[x]` done · `[~]` partial · `[ ]` not started · `[!]` blocked (outside decision, device or account needed)
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 ## Now (this session)
 - [x] Merge seven specs into `docs/duckler-master-spec.md`; source specs saved in `docs/specs/`
@@ -14,7 +14,7 @@ Last updated: 2026-10-04
 - [x] Settings gear + avatar Account menu (mode, skin, actions) + theme token sweep
 - [x] Security headers (CSP, frame-ancestors), XSS sweep (fixed extension popup), token-storage check
 - [x] Screenshot capture sound + shutter/corner-tick animation
-- [ ] **You:** run `npm test`, `npm run lint`, `npm run build` on Windows (they can't run from Claude's shell), then commit
+- [x] `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` and all Playwright smoke scripts pass (Oct 5)
 - [ ] **You:** check Google sign-in still works on the deployed build with the new CSP
 
 ## Redesign (PS2 schematic) — Oct 4
@@ -34,8 +34,14 @@ Last updated: 2026-10-04
 - [x] Visible speaker button with hover volume; more sound variety (open, back, toggle, save, delete…)
 - [ ] **You:** restart `npm run dev` if anything looks stale, then review at full desktop width
 
-## ⏸ Stopped here (Oct 5)
-OCR and PDF are written but untested; next steps are in docs/progress.md under "OCR + PDF in progress — stopped here". The dock and search bar textures were removed.
+## OCR + PDF verified (Oct 5)
+- [x] Lint, typecheck, 132 unit tests, production build and all 7 Playwright smoke scripts pass
+- [x] PDF tested in the browser: text + scanned PDFs, paging, capture page with provenance, PDF text search, errors (corrupt, not a PDF, password, >25 MB, >200 pages)
+- [x] OCR tested in the browser: EN and PT, cancel mid-run, retry, edit, copy, OCR text search, stale warning
+- [x] Production build under the real CSP: pdf.js and tesseract workers + WASM run with no CSP violations; OCR cores cached on first use (not precached)
+- [x] Bugs fixed along the way: PDF capture could save the previous page; large PDFs could hang on "Loading page…"; stale OCR still matched search; popovers off-centre/off-screen (animation overrode centering); Settings overflow at 320px; reduced motion ignored on Home artwork and + button
+- [ ] Optional: self-host eng/por language data (`VITE_OCR_LANG_PATH`) instead of jsdelivr
+- [ ] **You:** decide whether status notices (e.g. "PDFs can be up to 25 MB.") should auto-dismiss; today they stay until replaced
 
 ## Round 4 (Oct 4) — done
 - [x] Bulk selection bar: "+ New collection…" creates a collection on the spot with the selected cards
@@ -60,9 +66,9 @@ Legend: [x] done · [~] partial · [ ] not started · [!] blocked (reason given)
 - [!] Asynchronous collaborative editing (cards, collections, canvases, OCR, annotations) and offline collaborative sync: depends on Drive sync + sharing
 - [~] Conflict detection: the shared revision reducer keeps concurrent heads, but there's no UI · [ ] Keep Mine / Keep Other / Duplicate · [ ] delete-vs-edit recovery UI
 
-### OCR (in progress — written, typechecks, **not yet tested in the browser**)
-- [~] OCR for screenshots and images · [~] English and Portuguese · [~] progress, cancel, retry, copy, edit, re-extract · [~] search by OCR text · [~] stale-OCR detection
-- Next: test in the dev server (language data downloads once), production build check, tests. See docs/progress.md "stopped here".
+### OCR
+- [x] OCR for screenshots and images · [x] English and Portuguese · [x] progress, cancel, retry, copy, edit, re-extract · [x] search by OCR text · [x] stale-OCR detection
+- [ ] OCR on scanned PDF pages directly (today: capture the page, then extract text from the image card)
 
 ### Canvas
 - [x] Card rotation · [x] Rotation reset
@@ -73,14 +79,13 @@ Legend: [x] done · [~] partial · [ ] not started · [!] blocked (reason given)
 - [x] Board background colour
 
 ### Backup & export
-- [~] Backup format for V2: cards, collections (with nesting), canvases, drawings, connectors, rotation and per-card colour are included; OCR, conflicts and revision history aren't, because those features don't exist yet
+- [~] Backup format for V2: cards, collections (with nesting), canvases, drawings, connectors, rotation, per-card colour, OCR text, PDFs and page provenance are included; conflicts and revision history aren't, because those features don't exist yet
 - [!] Shared-workspace backups · [!] Restore a shared workspace as a private copy: depend on shared workspaces
 - [x] Obsidian export with text annotations · [x] Obsidian export with canvas previews (SVG)
 
-### PDF (in progress — written, typechecks, **not yet tested in the browser**)
-- [~] PDF ingestion · [~] PDF cards · [~] first-page thumbnails · [~] built-in viewer · [~] capture pages as image cards · [~] page provenance · [~] search text-based PDFs
-- [~] Obsidian export with OCR (code written, untested)
-- Next: upload a text PDF and a scanned PDF, page through, capture a page, search its text.
+### PDF
+- [x] PDF ingestion · [x] PDF cards · [x] first-page thumbnails · [x] built-in viewer · [x] capture pages as image cards · [x] page provenance · [x] search text-based PDFs
+- [x] Obsidian export with OCR, PDF attachment and page provenance (unit-tested)
 
 ### Nested collections
 - [x] Nested collections · [x] Parent and child collections · [x] One additional hierarchy level
@@ -126,7 +131,7 @@ Legend: [x] done · [~] partial · [ ] not started · [!] blocked (reason given)
 ## Platform (V2 milestones)
 - [ ] M8 compatibility audit + v2 schemas
 - [ ] M9 account/workspace-scoped storage, safe account switching
-- [ ] M10 on-demand OCR (Tesseract, EN/PT)
+- [x] M10 on-demand OCR (Tesseract, EN/PT)
 - [!] Drive content sync (M5b): only sign-in + root folder exist today
 - [!] M12 collaboration feasibility (3 disposable Google accounts)
 - [!] M13–M15 sharing, collaboration, friends pilot
