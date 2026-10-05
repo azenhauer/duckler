@@ -40,7 +40,10 @@ Auto-add a clip to the best-matching collection(s) when no collection was chosen
 - 1.2 ok — pure ranking + decision rules (profiles, margin, max 3, strict small collections, undo memory, low-text). next=1.3 (embed Worker)
 - [x] Provider confirmed: Workers AI `@cf/baai/bge-m3`
 - 1.3 ok — `/api/embed` + `/api/embed/token` (zero retention, per-install tokens, daily caps, size caps, 5 s timeout); answers 503 until configured. next=1.4 (bindings + setup)
-- [ ] **You (before 1.4):** create the KV namespace and the token secret (commands in the 1.3 hand-off message)
+- 1.4 — bindings in `wrangler.jsonc`: `AI` (Workers AI) + `EMBED_USAGE` KV (id 704af653…). Setup, for reference:
+  - `npx wrangler kv namespace create EMBED_USAGE` (done)
+  - secret: `node -e "process.stdout.write(require('crypto').randomBytes(48).toString('base64url'))" | npx wrangler pages secret put CLASSIFY_TOKEN_SECRET --project-name duckler` (done by the owner; never pasted anywhere)
+  - pushes to `main` deploy automatically (Pages is git-connected)
 
 ## Small patches (Oct 5, afternoon)
 - [x] Notifications: console "achievement" panels (✕ success · ○ error · △ info · □ progress), auto-dismiss, chime per kind; replace the old status banner
