@@ -1,6 +1,6 @@
 import { appearanceLabels, appearancePresets, contrastRatio, type AppearanceConfig, type AppearanceKey, type AppearancePreset } from '../lib/appearance';
 
-const presetNames: Record<Exclude<AppearancePreset, 'custom'>, string> = { playstation: 'Duckler / PlayStation', graphite: 'Graphite', 'ps-blue': 'PS Blue', 'warm-crt': 'Warm CRT' };
+export const appearancePresetNames: Record<Exclude<AppearancePreset, 'custom'>, string> = { playstation: 'PSX2 Schematic', blueprint: 'Blueprint', synthwave: 'Synthwave', graphite: 'Graphite', 'ps-blue': 'PS Blue', 'warm-crt': 'Warm CRT' };
 
 export function AppearanceSettings({ value, onChange }: { value: AppearanceConfig; onChange: (next: AppearanceConfig) => void }) {
   const activeDefaults = value.preset === 'custom' ? appearancePresets.playstation : appearancePresets[value.preset];
@@ -9,9 +9,9 @@ export function AppearanceSettings({ value, onChange }: { value: AppearanceConfi
   return <section className="appearance-settings" aria-label="Appearance" aria-labelledby="appearance-title">
     <div className="settings-technical-heading"><span>APPEARANCE</span><h3 id="appearance-title">System colors</h3></div>
     <div className="appearance-presets" role="group" aria-label="Appearance preset">
-      {(Object.keys(presetNames) as Exclude<AppearancePreset, 'custom'>[]).map(preset => <button type="button" key={preset} aria-pressed={value.preset === preset} onClick={() => choosePreset(preset)}>
+      {(Object.keys(appearancePresetNames) as Exclude<AppearancePreset, 'custom'>[]).map(preset => <button type="button" key={preset} aria-pressed={value.preset === preset} onClick={() => choosePreset(preset)}>
         <span className="preset-swatch" style={{ background: `linear-gradient(145deg, ${appearancePresets[preset].background} 45%, ${appearancePresets[preset].accentPrimary})` }} />
-        {presetNames[preset]}
+        {appearancePresetNames[preset]}
       </button>)}
       <button type="button" aria-pressed={value.preset === 'custom'} onClick={() => onChange({ ...value, preset: 'custom' })}>
         <span className="preset-swatch" style={{ background: `linear-gradient(145deg, ${value.values.background} 45%, ${value.values.accentPrimary})` }} />Custom

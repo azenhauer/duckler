@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent } from '@visual-library/shared';
+import type { CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent, CanvasBackup, LibraryBackup } from '@visual-library/shared';
 import { createCardFromInput, createCollectionFromInput, createCanvasPlacement, canvasCardPosition, validateCanvasContent } from '@visual-library/shared';
 import { type Capture, hashBytes, MAX_CAPTURE_BYTES, validateCapture } from '../../../../packages/shared/src/captureProtocol';
 
@@ -186,6 +186,16 @@ export async function commitCanvasContent(canvasId: string, expectedRevision: nu
   });
 }
 
+export async function saveCanvasBackground(canvasId: string, background: string | undefined): Promise<void> {
+  if (background !== undefined && !/^#[0-9a-f]{6}$/i.test(background)) throw new Error('Invalid board background');
+  await cardDb.transaction('rw', cardDb.canvases, async () => {
+    const document = await cardDb.canvases.get(canvasId);
+    if (!document) throw new Error('Canvas no longer exists');
+    const { background: _previous, ...rest } = document;
+    await cardDb.canvases.put(background ? { ...rest, background } : rest);
+  });
+}
+
 export async function saveCanvasViewport(canvasId: string, viewport: CanvasState['viewport']): Promise<void> {
   if (!viewport || ![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) || viewport.zoom < .15 || viewport.zoom > 2) throw new Error('Invalid canvas viewport');
   await cardDb.transaction('rw', cardDb.collections, cardDb.canvasLayouts, async () => {
@@ -193,4 +203,58 @@ export async function saveCanvasViewport(canvasId: string, viewport: CanvasState
     const layout = await cardDb.canvasLayouts.get(canvasId);
     await cardDb.canvasLayouts.put({ ...layout, collectionId: canvasId, positions: layout?.positions ?? {}, viewport, updatedAt: new Date().toISOString() });
   });
+}
+
+/** Every stored canvas with its objects, for the native backup. */
+export async function readCanvasBackups(): Promise<CanvasBackup[]> {
+  return cardDb.transaction('r', [cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors, cardDb.canvasLayouts], async () => {
+    const documents = await cardDb.canvases.toArray();
+    return Promise.all(documents.map(async document => {
+      const [placements, elements, connectors, layout] = await Promise.all([
+        cardDb.canvasPlacements.where('canvasId').equals(document.id).toArray(),
+        cardDb.canvasElements.where('canvasId').equals(document.id).toArray(),
+        cardDb.canvasConnectors.where('canvasId').equals(document.id).toArray(),
+        cardDb.canvasLayouts.get(document.id),
+      ]);
+      return { document, placements, elements, connectors, ...(layout?.viewport ? { viewport: layout.viewport } : {}) };
+    }));
+  });
+}
+
+export type RestoreReport = { cardsAdded: number; collectionsAdded: number; canvasesAdded: number; skipped: number };
+
+/**
+ * Additive restore: records whose ID already exists locally are kept as they are and counted as skipped.
+ * A canvas is restored only as a whole and only when this device has no canvas with that ID.
+ */
+export async function restoreLibraryBackup(backup: LibraryBackup): Promise<RestoreReport> {
+  const report: RestoreReport = { cardsAdded: 0, collectionsAdded: 0, canvasesAdded: 0, skipped: 0 };
+  await cardDb.transaction('rw', [cardDb.cards, ...canvasTables()], async () => {
+    for (const card of backup.cards) {
+      if (await cardDb.cards.get(card.id)) { report.skipped++; continue; }
+      await cardDb.cards.add(card); report.cardsAdded++;
+    }
+    for (const collection of backup.collections) {
+      if (await cardDb.collections.get(collection.id)) { report.skipped++; continue; }
+      await cardDb.collections.add(collection); report.collectionsAdded++;
+    }
+    for (const canvas of backup.canvases) {
+      const id = canvas.document.id;
+      const ids = [...canvas.placements, ...canvas.elements, ...canvas.connectors].map(object => object.id);
+      const taken = await Promise.all([
+        cardDb.canvases.get(id), cardDb.canvasPlacements.bulkGet(ids), cardDb.canvasElements.bulkGet(ids), cardDb.canvasConnectors.bulkGet(ids),
+      ]);
+      if (taken[0] || taken.slice(1).some(found => (found as unknown[]).some(Boolean))) { report.skipped++; continue; }
+      await cardDb.canvases.add(canvas.document);
+      await cardDb.canvasPlacements.bulkAdd(canvas.placements);
+      await cardDb.canvasElements.bulkAdd(canvas.elements);
+      await cardDb.canvasConnectors.bulkAdd(canvas.connectors);
+      if (canvas.viewport) {
+        const layout = await cardDb.canvasLayouts.get(id);
+        await cardDb.canvasLayouts.put({ ...layout, collectionId: id, positions: layout?.positions ?? {}, viewport: canvas.viewport, updatedAt: new Date().toISOString() });
+      }
+      report.canvasesAdded++;
+    }
+  });
+  return report;
 }

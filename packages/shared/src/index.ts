@@ -1,5 +1,6 @@
 import { z } from 'zod';
 export * from './canvas';
+export * from './backup';
 
 export const cardTypeSchema = z.enum(['bookmark', 'text', 'image']);
 export type CardType = z.infer<typeof cardTypeSchema>;
@@ -18,6 +19,8 @@ export const cardSchema = z.object({
   capturePayloadHash: z.string().optional(),
   trashed: z.boolean().default(false),
   searchText: z.string().default(''),
+  /** Optional card colour (#rrggbb) chosen in the editor; absent means the global card style. */
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
 });
 
 export type CardRecord = z.infer<typeof cardSchema>;

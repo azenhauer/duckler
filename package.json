@@ -21,6 +21,7 @@
     "test:canvas:ui": "node scripts/canvas-smoke.mjs",
     "test:canvas:tools": "node scripts/canvas-tools-smoke.mjs",
     "test:canvas:capacity": "node scripts/canvas-capacity-smoke.mjs",
+    "test:notes:ui": "node scripts/notes-editor-smoke.mjs",
     "test:membership:ui": "node scripts/membership-smoke.mjs",
     "test:extension:browser": "node scripts/extension-smoke.mjs"
   },

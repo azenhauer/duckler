@@ -1,19 +1,37 @@
-type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more';
+// PS2-schematic icon set: square caps, mitred corners, hardware-diagram shapes.
+export type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more' | 'sound' | 'mute' | 'restore' | 'close' | 'check';
 export function InterfaceIcon({ name }: { name: IconName }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  return <svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-    {name === 'edit' && <><path {...common} d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L4 18v2Z" /><path {...common} d="m14.8 6.2 3 3" /></>}
-    {name === 'move' && <><path {...common} d="M12 3v18M3 12h18" /><path {...common} d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" /></>}
-    {name === 'trash' && <><path {...common} d="M4 7h16M10 3h4l1 4H9l1-4ZM6 7l1 14h10l1-14M10 11v6M14 11v6" /></>}
-    {name === 'back' && <path {...common} d="m14 5-7 7 7 7M7 12h13" />}
-    {name === 'search' && <><circle {...common} cx="10.5" cy="10.5" r="6.5" /><path {...common} d="m16 16 5 5" /></>}
-    {name === 'sun' && <><circle {...common} cx="12" cy="12" r="4" /><path {...common} d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></>}
-    {name === 'moon' && <path {...common} d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" />}
-    {name === 'link' && <><path {...common} d="m9.5 14.5 5-5" /><path {...common} d="M7.5 17.5H6a4 4 0 0 1 0-8h3M16.5 6.5H18a4 4 0 0 1 0 8h-3" /></>}
-    {name === 'upload' && <><path {...common} d="M12 15V3M7 8l5-5 5 5M4 15v5h16v-5" /></>}
-    {name === 'note' && <><path {...common} d="M6 3h9l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path {...common} d="M14 3v5h5M8 12h7M8 16h5" /></>}
-    {name === 'browser' && <><rect {...common} x="3" y="4" width="18" height="16" rx="2" /><path {...common} d="M3 9h18M7 6.5h.01M10 6.5h.01M13 6.5h.01" /></>}
-    {name === 'settings' && <><circle {...common} cx="12" cy="12" r="3" /><path {...common} d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20h-2.6v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6V11.3h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.6v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1V13h-.1a1.7 1.7 0 0 0-1.6 1Z" /></>}
-    {name === 'more' && <><circle {...common} cx="5" cy="12" r="1" /><circle {...common} cx="12" cy="12" r="1" /><circle {...common} cx="19" cy="12" r="1" /></>}
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'square' as const, strokeLinejoin: 'miter' as const };
+  return <svg className={`ui-icon ui-icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
+    {/* Pen nib over a baseline */}
+    {name === 'edit' && <><path {...p} d="M5 19l1.2-4.4L15.8 5l3.2 3.2-9.6 9.6L5 19Z" /><path {...p} d="M13.6 7.2l3.2 3.2M4 21.5h9" /></>}
+    {/* D-pad: move */}
+    {name === 'move' && <path {...p} d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5V3Z" />}
+    {/* Bin with lid rail */}
+    {name === 'trash' && <><path {...p} d="M4 6.5h16M9 6.5V3.5h6v3M6.5 6.5l1 14h9l1-14" /><path {...p} d="M10.5 10.5v6M13.5 10.5v6" /></>}
+    {/* Circle-button "back" arrow */}
+    {name === 'back' && <path {...p} d="M10 6l-6 6 6 6M4.5 12H20" />}
+    {/* Lens with crosshair tick */}
+    {name === 'search' && <><circle {...p} cx="10.5" cy="10.5" r="6" /><path {...p} d="M15 15l5.5 5.5M10.5 7.5v1.5M10.5 12v1.5M7.5 10.5h1.5M12 10.5h1.5" /></>}
+    {name === 'sun' && <><circle {...p} cx="12" cy="12" r="3.8" /><path {...p} d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8" /></>}
+    {name === 'moon' && <path {...p} d="M19.5 14.8A8 8 0 0 1 9.2 4.5a8 8 0 1 0 10.3 10.3Z" />}
+    {/* Cable plug: link */}
+    {name === 'link' && <><path {...p} d="M10 14l4-4" /><path {...p} d="M8.5 11.5L6 14a3 3 0 0 0 4.2 4.2l2.5-2.5M15.5 12.5L18 10a3 3 0 0 0-4.2-4.2l-2.5 2.5" /></>}
+    {/* Disc tray with eject arrow */}
+    {name === 'upload' && <><path {...p} d="M12 14V3.5M7.5 8L12 3.5 16.5 8" /><path {...p} d="M3.5 14v6h17v-6M3.5 17h17" /></>}
+    {/* Memory card: note */}
+    {name === 'note' && <><path {...p} d="M6 3h9l3 3v15H6V3Z" /><path {...p} d="M9 3v4h6V3M9 12h6M9 15.5h6M9 19h3" /></>}
+    {/* Console window */}
+    {name === 'browser' && <><path {...p} d="M3 4.5h18v15H3v-15ZM3 8.5h18" /><path {...p} d="M6 6.5h.5M8.5 6.5H9M11 6.5h.5" /></>}
+    {/* Gear with square teeth */}
+    {name === 'settings' && <><circle {...p} cx="12" cy="12" r="3" /><path {...p} d="M10.5 2.5h3l.5 2.6 1.9.8 2.2-1.5 2.1 2.1-1.5 2.2.8 1.9 2.6.5v3l-2.6.5-.8 1.9 1.5 2.2-2.1 2.1-2.2-1.5-1.9.8-.5 2.6h-3l-.5-2.6-1.9-.8-2.2 1.5-2.1-2.1 1.5-2.2-.8-1.9-2.6-.5v-3l2.6-.5.8-1.9-1.5-2.2 2.1-2.1 2.2 1.5 1.9-.8.5-2.6Z" /></>}
+    {name === 'more' && <path {...p} d="M4.5 11h3v2h-3zM10.5 11h3v2h-3zM16.5 11h3v2h-3z" />}
+    {/* Speaker cone + waves */}
+    {name === 'sound' && <><path {...p} d="M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5Z" /><path {...p} d="M15 9.5a3.5 3.5 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10" /></>}
+    {name === 'mute' && <><path {...p} d="M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5Z" /><path {...p} d="M15.5 9.5l5 5M20.5 9.5l-5 5" /></>}
+    {name === 'restore' && <><path {...p} d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" /><path {...p} d="M4 3.5V8h4.5" /></>}
+    {/* Cross button */}
+    {name === 'close' && <path {...p} d="M6 6l12 12M18 6L6 18" />}
+    {name === 'check' && <path {...p} d="M4.5 12.5l4.5 4.5L19.5 6.5" />}
   </svg>;
 }

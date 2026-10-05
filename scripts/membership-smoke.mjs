@@ -26,7 +26,8 @@ try {
   const firstBadge = page.getByRole('button', { name: 'Collection First', exact: true });
   const secondBadge = page.getByRole('button', { name: 'Collection Second', exact: true });
   await firstBadge.click();
-  await page.getByRole('menuitem', { name: 'Remove from collection', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Collections for this card' }).getByRole('checkbox', { name: 'First', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(firstBadge).toHaveCount(0);
   await expect(card).toBeVisible();
   await expect(secondBadge).toBeVisible();
@@ -45,7 +46,8 @@ try {
   await expect(renamedBadge).toBeVisible();
   await expect(secondBadge).toBeVisible();
   await renamedBadge.click();
-  await page.getByRole('menuitem', { name: 'Remove from collection', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Collections for this card' }).getByRole('checkbox', { name: 'Renamed after removal', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(undo).toBeVisible();
   await expect(undo).toHaveCount(0, { timeout: 8500 });
   await page.reload();

@@ -1,0 +1,128 @@
+/* Canvas studio: the board fills the page and every control floats inside it as icon toolbars. */
+.content[data-view='canvas'] .canvas-studio { position: relative; margin: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.content[data-view='canvas']:has(.canvas-studio) { padding-bottom: 0 !important; }
+.content[data-view='canvas']:has(.canvas-studio) .page-header { display: none !important; }
+.content[data-view='canvas']:has(.canvas-studio) { padding-top: 16px !important; }
+.canvas-studio .canvas-surface {
+  position: relative; isolation: isolate; overflow: hidden;
+  height: calc(100dvh - 132px) !important; min-height: 420px;
+  border-radius: 4px !important;
+  background: var(--board-bg, color-mix(in srgb, var(--ui-bg) 86%, var(--ui-surface))) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-line) 45%, transparent);
+}
+.canvas-studio .react-flow, .content[data-view='canvas'] .canvas-studio .react-flow { background: transparent !important; }
+.canvas-studio .canvas-surface[data-board-tone='light'] { --canvas-ink: #141a3d; color: #141a3d; }
+
+/* Floating chrome */
+.canvas-float { position: absolute; z-index: 20; display: flex; align-items: center; gap: 2px; padding: 5px; }
+.canvas-float-divider { flex: none; width: 1px; height: 22px; margin: 0 4px; background: color-mix(in srgb, var(--ui-text) 14%, transparent); }
+.canvas-dock { top: 50%; left: 14px; flex-direction: column; transform: translateY(-50%); }
+.canvas-dock .canvas-float-divider { width: 22px; height: 1px; margin: 4px 0; }
+.canvas-topbar { top: 14px; left: 50%; max-width: calc(100% - 28px); transform: translateX(-50%); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.canvas-topbar::-webkit-scrollbar { display: none; }
+.canvas-title { max-width: 180px; overflow: hidden; padding: 0 8px; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; text-transform: uppercase; letter-spacing: .14em !important; }
+.canvas-status { padding: 0 8px; color: var(--ui-text-muted); font: 500 .66rem/1 ui-monospace, Consolas, monospace; letter-spacing: .08em; white-space: nowrap; }
+@keyframes sw-dock-in { from { opacity: 0; transform: translate(-10px, -50%); } to { opacity: 1; transform: translate(0, -50%); } }
+@keyframes sw-top-in { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.canvas-icon-button { position: relative; display: grid; place-items: center; flex: none; width: 36px; height: 36px; padding: 0; border: 0 !important; border-radius: 2px; background: transparent !important; color: var(--ui-text-muted); cursor: pointer; transition: color 100ms linear, background-color 100ms linear; list-style: none; }
+.canvas-icon-button::-webkit-details-marker { display: none; }
+.canvas-icon-button .canvas-icon, .canvas-float .canvas-icon { width: 19px; height: 19px; }
+.canvas-icon-button:hover:not(:disabled) { color: var(--ui-text); background: color-mix(in srgb, var(--ui-text) 8%, transparent) !important; }
+.canvas-icon-button[aria-pressed='true'] { color: var(--ui-text); background: color-mix(in srgb, var(--ui-accent-primary) 20%, transparent) !important; box-shadow: inset 0 -2px 0 var(--ui-accent-secondary), inset 0 0 0 1px color-mix(in srgb, var(--ui-accent-primary) 45%, transparent); }
+.canvas-icon-button:disabled { opacity: .32; cursor: default; }
+.canvas-icon-button:focus-visible { outline: 2px solid var(--ui-selection); outline-offset: 1px; }
+
+/* Tooltips with a short delay so they never flicker while sweeping across icons. */
+[data-tip] { position: relative; }
+[data-tip]::after { content: attr(data-tip); position: absolute; z-index: 40; pointer-events: none; white-space: nowrap; padding: 5px 8px; border-radius: 6px; background: color-mix(in srgb, var(--ui-surface) 96%, transparent); color: var(--ui-text); box-shadow: 0 6px 18px -8px #000, 0 0 0 1px color-mix(in srgb, var(--ui-text) 12%, transparent); font: 500 .68rem/1 'Inter', sans-serif; letter-spacing: .02em; opacity: 0; transition: opacity 80ms linear 0ms; }
+[data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; transition-delay: 300ms; }
+.canvas-dock [data-tip]::after { left: calc(100% + 10px); top: 50%; transform: translate(-4px, -50%); }
+.canvas-dock [data-tip]:hover::after { transform: translate(0, -50%); }
+.canvas-topbar [data-tip]::after, .canvas-stylebar [data-tip]::after { top: calc(100% + 8px); left: 50%; transform: translate(-50%, -4px); }
+.canvas-stylebar [data-tip]::after { top: auto; bottom: calc(100% + 8px); transform: translate(-50%, 4px); }
+.canvas-topbar [data-tip]:hover::after, .canvas-stylebar [data-tip]:hover::after { transform: translate(-50%, 0); }
+.canvas-topbar { overflow: visible; }
+
+/* Board find */
+.canvas-find { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border-radius: 2px; color: var(--ui-text-muted); background: color-mix(in srgb, var(--ui-text) 6%, transparent); }
+.canvas-find input { width: 92px; min-width: 0; padding: 0; border: 0 !important; background: transparent !important; color: var(--ui-text); font-size: .74rem; outline: none; box-shadow: none !important;  }
+.canvas-find:focus-within input, .canvas-find.has-query input { width: 160px; }
+.canvas-find:focus-within { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-accent-primary) 60%, transparent); }
+.canvas-find::after { display: none; }
+.canvas-card-node { transition: opacity 100ms linear; }
+.canvas-card-node.is-dimmed { opacity: .2; }
+
+/* Style bar: slides up only while a drawing tool is active. */
+.canvas-stylebar { left: 50%; bottom: 16px; transform: translateX(-50%); opacity: 0; pointer-events: none; transition: opacity 100ms linear; }
+.canvas-stylebar.is-open { opacity: 1; pointer-events: auto; }
+.canvas-swatches { display: flex; align-items: center; gap: 6px; padding: 0 4px; }
+.canvas-swatch { position: relative; flex: none; width: 20px; height: 20px; padding: 0; border: 0 !important; border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-text) 22%, transparent); }
+.canvas-swatch:hover { box-shadow: 0 0 0 2px var(--ui-text); }
+.canvas-swatch[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--ui-selection), 0 0 12px var(--ui-glow); }
+.canvas-swatch-custom { overflow: hidden; background: conic-gradient(#ff5a5a, #ffd84d, #41f0d1, #7cbcff, #ff4fd8, #ff5a5a); }
+.canvas-swatch-custom input { position: absolute; inset: -6px; width: 32px; height: 32px; opacity: 0; cursor: pointer; }
+.canvas-swatch-theme { background: linear-gradient(135deg, var(--ui-bg) 50%, var(--ui-surface-alt) 50%); }
+.canvas-stroke-field { display: flex; align-items: center; gap: 6px; padding: 0 6px; color: var(--ui-text-muted); }
+.canvas-stroke-dot { flex: none; border-radius: 50%; background: currentColor; }
+.canvas-stroke-field select { height: 28px; padding: 0 6px; border-radius: 2px; border: 0 !important; background: color-mix(in srgb, var(--ui-text) 8%, transparent) !important; color: var(--ui-text); font-size: .72rem; }
+.canvas-opacity-field input { width: 76px; accent-color: var(--ui-accent-secondary); }
+
+/* Popover menus anchored to toolbar items */
+.canvas-popover-trigger { position: relative; }
+.canvas-popover-trigger > summary { list-style: none; }
+.canvas-popover { position: absolute; z-index: 50; top: calc(100% + 10px); right: 0; display: grid; gap: 10px; min-width: 220px; padding: 12px; }
+.canvas-popover-title { color: var(--ui-text-muted); font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; }
+.canvas-background-picker .canvas-swatches { flex-wrap: wrap; gap: 8px; padding: 0; }
+.canvas-background-picker .canvas-swatch { width: 26px; height: 26px; border-radius: 2px; }
+.canvas-hidden-count { width: auto; padding: 0 10px; gap: 6px; grid-auto-flow: column; font-size: .72rem; }
+.canvas-recovery-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .76rem; }
+.canvas-recovery-row button, .canvas-contextbar button, .canvas-text-button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 0 !important; border-radius: 2px; background: color-mix(in srgb, var(--ui-text) 8%, transparent) !important; color: var(--ui-text); font-size: .72rem; cursor: pointer; }
+.canvas-recovery-row button:hover, .canvas-contextbar button:hover { background: color-mix(in srgb, var(--ui-accent-primary) 22%, transparent) !important; }
+.canvas-recovery p { margin: 0; color: var(--ui-text-muted); font-size: .7rem; }
+
+/* Context bar for selected annotation / connector / errors */
+.canvas-contextbar { top: 66px; left: 50%; transform: translateX(-50%); gap: 8px; padding: 6px 10px; font-size: .76rem; }
+.canvas-contextbar p { display: flex; align-items: center; gap: 8px; margin: 0; color: #ff8fa3; }
+.canvas-contextbar .canvas-connector-label { display: flex; align-items: center; gap: 8px; margin: 0; }
+.canvas-contextbar input { height: 28px; padding: 0 8px; border-radius: 2px; border: 0 !important; background: color-mix(in srgb, var(--ui-text) 8%, transparent) !important; color: var(--ui-text); }
+
+/* Add cards: a pill at bottom-left that opens a visual card drawer. */
+.canvas-card-picker { left: 14px; bottom: 14px; padding: 0; margin: 0 !important; }
+.canvas-card-picker > summary { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 10px; cursor: pointer; list-style: none; color: var(--ui-text); font-size: .76rem; font-weight: 500; }
+.canvas-card-picker > summary::-webkit-details-marker { display: none; }
+.canvas-card-picker > summary:hover { color: var(--ui-accent-primary); }
+.canvas-card-picker[open] > summary .canvas-icon { transform: rotate(45deg); }
+.canvas-card-picker > summary .canvas-icon { }
+.canvas-picker-panel { top: auto; bottom: calc(100% + 10px); left: 0; right: auto; width: min(360px, calc(100vw - 60px)); }
+.canvas-picker-panel input[type=search] { width: 100%; height: 34px; padding: 0 10px; border-radius: 8px; border: 0 !important; background: color-mix(in srgb, var(--ui-text) 8%, transparent) !important; color: var(--ui-text); }
+.canvas-picker-cards { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 8px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+.canvas-picker-cards button { display: grid; grid-template-rows: 64px auto; gap: 4px; min-height: 0 !important; padding: 4px !important; border: 0 !important; border-radius: 2px; background: color-mix(in srgb, var(--ui-text) 6%, transparent) !important; color: var(--ui-text); text-align: left; cursor: grab; }
+.canvas-picker-cards button:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-accent-primary) 50%, transparent), 0 8px 18px -10px #000; }
+.canvas-picker-cards img { width: 100%; height: 64px; object-fit: cover; border-radius: 5px; }
+.canvas-picker-kind { display: grid; place-items: center; height: 64px; border-radius: 5px; background: color-mix(in srgb, var(--ui-accent-secondary) 14%, transparent); color: var(--ui-text-muted); font: 600 .6rem/1 ui-monospace, monospace; letter-spacing: .12em; }
+.canvas-picker-title { overflow: hidden; font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
+
+/* React Flow zoom controls in the same material */
+.canvas-studio .react-flow__controls { margin: 14px !important; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-line) 55%, transparent) !important; background: var(--ui-surface); }
+.canvas-studio .react-flow__controls-button { width: 32px; height: 32px; border: 0 !important; background: transparent !important; color: var(--ui-text-muted); fill: currentColor; }
+.canvas-studio .react-flow__controls-button:hover { color: var(--ui-text); background: color-mix(in srgb, var(--ui-text) 8%, transparent) !important; }
+.canvas-studio .canvas-empty-hint { top: 46%; color: var(--ui-text-muted); font-size: .9rem; letter-spacing: .04em; }
+.canvas-studio .canvas-surface[data-board-tone='light'] .canvas-empty-hint { color: #4c5582; }
+
+@media (max-width: 700px) {
+  .canvas-studio .canvas-surface { height: calc(100dvh - 150px) !important; border-radius: 4px !important; }
+  .canvas-dock { top: auto; bottom: 64px; left: 50%; flex-direction: row; transform: translateX(-50%); max-width: calc(100% - 20px); overflow-x: auto; animation: none; }
+  .canvas-dock .canvas-float-divider { width: 1px; height: 22px; margin: 0 4px; }
+  .canvas-title, .canvas-status { display: none; }
+  .canvas-topbar { flex-wrap: wrap; justify-content: center; left: 10px; right: 10px; max-width: none; transform: none; animation: none; }
+  .canvas-find input { width: 64px; }
+  .canvas-popover { right: -40px; }
+  .canvas-stylebar { bottom: 112px; }
+  .canvas-card-picker { bottom: 10px; }
+  [data-tip]::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .canvas-dock, .canvas-topbar, .canvas-contextbar, .canvas-popover { animation: none !important; }
+  .canvas-stylebar { transition: opacity 120ms ease; }
+}

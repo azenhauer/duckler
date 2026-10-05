@@ -24,6 +24,8 @@ export function canvasCardPosition(cardId: string, index: number, layout?: Canva
 export type CanvasDocument = {
   id: string; title: string; createdAt: string; updatedAt: string;
   revision: number; seenCardIds: string[];
+  /** Optional board colour (#rrggbb); absent means the board follows the app theme. */
+  background?: string;
 };
 export type CanvasGeometry = CanvasPoint & { width: number; height: number; rotation: number; zIndex: number };
 export type CanvasPlacement = CanvasGeometry & { id: string; canvasId: string; cardId: string; removed?: boolean };

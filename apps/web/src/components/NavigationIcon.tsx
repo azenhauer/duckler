@@ -1,8 +1,12 @@
 export function NavigationIcon({ name, expanded = false }: { name: 'library' | 'collections' | 'canvas'; expanded?: boolean }) {
-  if (expanded && name !== 'library') return <img className="dock-icon home-artwork" src={`/icons/home-${name}.png`} alt="" aria-hidden="true" draggable={false} />;
-  return <svg className="dock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {name === 'library' && <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>}
-    {name === 'collections' && <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H10l2.2 2H19.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11Z" />}
-    {name === 'canvas' && <><path d="M12 2v3M8.5 16 6 22M15.5 16l2.5 6M3 18h18" /><rect x="4" y="5" width="16" height="11" rx="1.5" /></>}
+  // The two Home destinations keep their approved artwork; everywhere else uses the schematic line icons.
+  if (expanded && name !== 'library') return <img className={`dock-icon home-artwork home-artwork-${name}`} src={`/icons/home-${name}.png`} alt="" aria-hidden="true" draggable={false} />;
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'square' as const, strokeLinejoin: 'miter' as const };
+  return <svg className={`dock-icon dock-icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
+    {name === 'library' && <path {...p} d="M3.5 3.5h7v7h-7zM13.5 3.5h7v7h-7zM3.5 13.5h7v7h-7zM13.5 13.5h7v7h-7z" />}
+    {/* Three stacked discs, echoing the Home CD artwork */}
+    {name === 'collections' && <><circle {...p} cx="9" cy="10" r="6" /><circle {...p} cx="15" cy="14" r="6" /><circle {...p} cx="15" cy="14" r="1.6" /><path {...p} d="M11.6 14.7a3.5 3.5 0 0 1 1.3-3.4" /></>}
+    {/* Ring-bound sketchbook, echoing the Home album artwork */}
+    {name === 'canvas' && <><path {...p} d="M6 3h14v18H6z" /><path {...p} d="M3.5 6.5H8M3.5 10.5H8M3.5 14.5H8M3.5 18.5H8" /><path {...p} d="M10.5 15l2.5-4 2 2.5 1.5-2 2 3.5" /></>}
   </svg>;
 }

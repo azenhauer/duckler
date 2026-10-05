@@ -3016,3 +3016,34 @@ button, .library-options > summary { transition:background-color 160ms ease,colo
 .canvas-text-dialog button { margin-right:8px; }
 .canvas-connector-label { display:flex; align-items:center; gap:8px; max-width:400px; margin-bottom:10px; font-size:.8rem; }
 @media (max-width:700px) { .canvas-toolbar button { min-height:40px; } .canvas-options { gap:8px; } .canvas-panel .canvas-surface { min-height:340px; } }
+/* Screenshot notes take normal layout space outside the media frame. */
+.screenshot-note { position:relative; margin:12px 0 0; padding:12px 14px; border:1px solid var(--border); border-radius:14px; background:var(--surface-alt); color:var(--ink); box-shadow:0 3px 10px var(--shadow); }
+.screenshot-note::before { content:''; position:absolute; top:-6px; left:22px; width:10px; height:10px; background:var(--surface-alt); border-top:1px solid var(--border); border-left:1px solid var(--border); transform:rotate(45deg); }
+.screenshot-note p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.8rem; line-height:1.5; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+.screenshot-note p.is-expanded { display:block; overflow:visible; }
+.screenshot-note button { margin-top:6px; padding:3px 0; color:var(--accent); background:transparent; border:0; font-size:.75rem; }
+.app-shell { --scrollbar-thumb:color-mix(in srgb,var(--ink-muted) 60%,var(--surface-alt)); scrollbar-color:var(--scrollbar-thumb) transparent; scrollbar-width:thin; }
+.app-shell * { scrollbar-width:thin; scrollbar-color:var(--scrollbar-thumb) transparent; }
+.app-shell ::-webkit-scrollbar { width:7px; height:7px; }
+.app-shell ::-webkit-scrollbar-thumb { background:var(--scrollbar-thumb); border-radius:8px; }
+.app-shell ::-webkit-scrollbar-thumb:hover { background:var(--ink-muted); }
+.card-editor { width:min(660px,calc(100vw - 24px)); max-height:none; overflow:visible; border-radius:18px; }
+.card-editor form { display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; min-height:0; }
+.card-editor .editor-topbar { position:static; padding:12px 16px; flex-wrap:nowrap; }
+.editor-removal-actions { display:flex; gap:8px; margin-left:auto; }
+.editor-removal-actions button,.editor-footer button { display:flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:9px; background:var(--surface-strong); color:var(--ink); padding:8px 10px; font-size:.75rem; }
+.editor-removal-actions svg { width:16px; height:16px; }
+.editor-removal-actions .danger:hover,.editor-removal-actions .danger:focus-visible { color:#da6565; border-color:currentColor; }
+.card-editor .editor-toolbar { margin:0 12px; border-radius:10px; gap:4px; }
+.card-editor .editor-toolbar button { padding:6px 8px; font-size:.75rem; }
+.card-editor .editor-content { display:flex; flex-direction:column; gap:10px; min-height:0; padding:14px 18px; }
+.card-editor .editor-content .editor-title { font-size:1.1rem; padding:10px 12px; }
+.card-editor .editor-content textarea { flex:1; min-height:40px; resize:none; }
+.card-editor .editor-image { max-height:180px; min-height:0; width:100%; flex:1; }
+.card-editor .editor-collections { display:flex; flex-direction:column; overflow:auto; min-height:0; gap:8px; }
+.editor-footer { display:flex; justify-content:flex-end; gap:8px; padding:10px 16px; }
+@media(max-height:760px) { .card-editor .editor-image { display:none; } }
+@media(max-height:360px) { .card-editor .editor-topbar { padding:4px 12px; } .card-editor .editor-content { padding:6px 12px; gap:5px; } .editor-footer { padding:4px 12px; } }
+@media(forced-colors:active) { .app-shell,.app-shell * { scrollbar-color:auto; } }
+/* Modal overlays must escape the content's navigation stacking layer. */
+.content:has(.reader-backdrop) { z-index:200; }

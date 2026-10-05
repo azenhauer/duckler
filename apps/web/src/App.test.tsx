@@ -27,8 +27,13 @@ describe('App', () => {
     const card = await screen.findByRole('article', { name: 'Open Spec checklist' });
     const badges = within(card.parentElement!);
     fireEvent.click(badges.getByRole('button', { name: 'Collection Inbox' }));
-    fireEvent.click(badges.getByRole('menuitem', { name: 'Remove from collection' }));
+    const picker = screen.getByRole('dialog', { name: 'Collections for this card' });
+    expect(within(picker).getByRole('checkbox', { name: 'Research' })).toBeChecked();
+    fireEvent.click(within(picker).getByRole('checkbox', { name: 'Inbox' }));
     await screen.findByRole('button', { name: 'Undo' });
+    expect(within(picker).getByRole('checkbox', { name: 'Inbox' })).not.toBeChecked();
+    fireEvent.keyDown(picker, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Collections for this card' })).not.toBeInTheDocument();
     expect(badges.queryByRole('button', { name: 'Collection Inbox' })).not.toBeInTheDocument();
     expect(badges.getByRole('button', { name: 'Collection Research' })).toBeInTheDocument();
     const failure = vi.spyOn(cardDb.collections, 'put').mockRejectedValueOnce(new Error('Storage full'));
@@ -45,6 +50,41 @@ describe('App', () => {
     expect((await cardDb.collections.toArray()).filter(item => item.cardIds.includes(stored.id))).toHaveLength(2);
   });
 
+  it('manages several memberships from one picker, creates collections inline and opens with browser history', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    const card = await screen.findByRole('article', { name: 'Open Design note' });
+    fireEvent.click(within(card.parentElement!).getByRole('button', { name: 'Collection Inbox' }));
+    const picker = screen.getByRole('dialog', { name: 'Collections for this card' });
+    fireEvent.click(within(picker).getByRole('checkbox', { name: 'Research' }));
+    await waitFor(() => expect(within(card.parentElement!).getByRole('button', { name: 'Collection Research' })).toBeInTheDocument());
+    expect(within(card.parentElement!).getByRole('button', { name: 'Collection Inbox' })).toBeInTheDocument();
+    fireEvent.change(within(picker).getByRole('searchbox', { name: 'Search collections' }), { target: { value: 'res' } });
+    expect(within(picker).queryByRole('checkbox', { name: 'Inbox' })).not.toBeInTheDocument();
+    fireEvent.click(within(picker).getByRole('button', { name: '+ Create new collection' }));
+    fireEvent.change(within(picker).getByRole('textbox', { name: 'New collection name' }), { target: { value: 'Moodboard' } });
+    fireEvent.click(within(picker).getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(within(card.parentElement!).getByRole('button', { name: 'Collection Moodboard' })).toBeInTheDocument());
+    const stored = (await readCards()).find(item => item.title === 'Design note')!;
+    await waitFor(async () => expect((await cardDb.collections.toArray()).filter(item => item.cardIds.includes(stored.id)).map(item => item.name).sort()).toEqual(['Inbox', 'Moodboard', 'Research']));
+    fireEvent.click(within(picker).getByRole('button', { name: 'Open collection Research' }));
+    expect(window.history.state?.duckler).toMatchObject({ view: 'library' });
+  });
+
+  it('opens an account menu with quick appearance controls that agree with Settings', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+    const menu = screen.getByRole('dialog', { name: 'Account menu' });
+    fireEvent.click(within(menu).getByRole('button', { name: 'Light' }));
+    expect(within(menu).getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(menu).getByRole('button', { name: 'Dark' }));
+    fireEvent.change(within(menu).getByRole('combobox', { name: 'Skin' }), { target: { value: 'ps-blue' } });
+    expect(document.querySelector('.app-shell')).toHaveStyle({ '--ui-accent-primary': '#47a5ff' });
+    fireEvent.click(within(menu).getByRole('button', { name: 'All settings' }));
+    expect(screen.queryByRole('dialog', { name: 'Account menu' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'PS Blue' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('exposes editable PlayStation appearance presets in Settings and persists changes', async () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
@@ -57,7 +97,7 @@ describe('App', () => {
   });
   it('opens the add menu on hover and edits a card only after Save', async () => {
     render(<App />);
-    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Add card' }).parentElement!);
+    fireEvent.click(screen.getByRole('button', { name: 'Add card' }));
     expect(screen.getByRole('button', { name: 'Link' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Design note' }));
@@ -122,9 +162,9 @@ describe('App', () => {
     for (const name of ['Collections', 'Canvas']) {
       expect(screen.getByRole('button', { name }).querySelector('svg')).toBeInTheDocument();
     }
-    fireEvent.click(navigation.getByRole('button', { name: 'Open settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.queryByRole('tooltip', { name: 'Profile preview' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Account menu' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -210,13 +250,13 @@ describe('App', () => {
 
     await waitFor(() => expect(localStorage.getItem('visual-library-profile-name')).toBe('Paulo'));
     await waitFor(() => expect(localStorage.getItem('visual-library-profile-tag')).toBe('paulo'));
-    expect(screen.getByRole('button', { name: 'Open settings' })).toHaveTextContent('P');
+    expect(screen.getByRole('button', { name: 'Account menu' })).toHaveTextContent('P');
     fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
-    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Open settings' }).parentElement!);
-    expect(within(screen.getByRole('tooltip', { name: 'Profile preview' })).getByText('@paulo')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+    expect(within(screen.getByRole('dialog', { name: 'Account menu' })).getByText('@paulo')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Profile name' })).not.toBeInTheDocument();
-    fireEvent.mouseLeave(screen.getByRole('button', { name: 'Open settings' }).parentElement!);
-    expect(screen.queryByRole('tooltip', { name: 'Profile preview' })).not.toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Account menu' })).not.toBeInTheDocument();
   });
 
   it('goes back from a collection to Collections and then Home', async () => {
@@ -243,7 +283,7 @@ describe('App', () => {
     });
 
     await waitFor(() => expect(localStorage.getItem('visual-library-profile-photo')).toMatch(/^data:image\/png;base64,/));
-    expect(screen.getByRole('button', { name: 'Open settings' }).querySelector('img')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account menu' }).querySelector('img')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
     expect(localStorage.getItem('visual-library-profile-photo')).toBeNull();
   });
@@ -302,15 +342,15 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Choose collection' })).toHaveTextContent('First collection'));
   });
 
-  it('customizes only the identity card from Settings and keeps the hover preview read-only', async () => {
+  it('customizes only the identity card from Settings and keeps the account menu card read-only', async () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
     fireEvent.change(screen.getByLabelText('Profile card color'), { target: { value: '#506bbb' } });
     fireEvent.change(screen.getByLabelText('Profile tag'), { target: { value: 'paulo' } });
     await waitFor(() => expect(localStorage.getItem('duckler-profile-card-color')).toBe('#506bbb'));
     fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
-    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Open settings' }).parentElement!);
-    const preview = screen.getByRole('tooltip', { name: 'Profile preview' });
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+    const preview = screen.getByRole('dialog', { name: 'Account menu' });
     const identity = within(preview).getByRole('group', { name: 'Profile card' });
     expect(identity).toHaveClass('profile-identity-card');
     expect(preview).not.toHaveClass('profile-identity-card');

@@ -1,0 +1,9 @@
+{
+  "name": "PS2 System Sounds",
+  "source": "https://github.com/Junomede/PS2-System-Sounds",
+  "revision": "8cfa8a744186d6edd5375565ade9209c91562375",
+  "provenance": "Repository describes PS2 BIOS extracts; some pack samples are combined with SteamOS audio. Original sounds attributed to Sony Interactive Entertainment Japan.",
+  "permittedUse": "Integrated locally at the user's request. No redistribution license found in the source repository; distribution clearance remains unconfirmed.",
+  "events": { "hover": "deck_ui_navigation.wav", "click": "deck_ui_default_activation.wav" },
+  "defaults": { "enabled": true, "volume": 0.15 }
+}

@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import type { CardRecord, CollectionRecord } from '@visual-library/shared';
 import { Dialog } from './Dialog';
 import { InterfaceIcon } from './InterfaceIcon';
-import { NavigationIcon } from './NavigationIcon';
+
+/** PS2-palette tints for a single card; "none" falls back to the global card style. */
+export const CARD_TINTS = ['#3cc8ff', '#2a2ca6', '#f2d33d', '#3ddc84', '#ff4b4b', '#ff7ad9', '#9aa6ff', '#e6f6ff'];
 
 export function CardEditor({ card, collections, onClose, onSave, onTrash, onDelete }: {
   card: CardRecord; collections: CollectionRecord[]; onClose: () => void;
@@ -11,13 +13,13 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
 }) {
   const [draft, setDraft] = useState(card);
   const [memberships, setMemberships] = useState(collections.filter(item => item.cardIds.includes(card.id)).map(item => item.id));
-  const [sourceOpen, setSourceOpen] = useState(false);
-  const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const note = useRef<HTMLTextAreaElement>(null);
+  const kind = card.type === 'image' ? 'Image' : card.type === 'text' ? 'Note' : 'Link';
+  const toggleMembership = (id: string) => setMemberships(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+
   return <Dialog label="Card details" className="card-editor" onClose={() => { if (!saving) onClose(); }}>
-    <form onSubmit={async event => {
+    <form className="editor-sheet" style={draft.color ? { '--card-tint': draft.color } as React.CSSProperties : undefined} onSubmit={async event => {
       event.preventDefault(); if (saving) return;
       if (!draft.title.trim()) { setError('Enter a title.'); return; }
       if (draft.sourceUrl) { try { if (!['http:', 'https:'].includes(new URL(draft.sourceUrl).protocol)) throw new Error(); } catch { setError('Enter a valid website address.'); return; } }
@@ -27,26 +29,45 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
       finally { setSaving(false); }
     }}>
       <header className="editor-topbar">
-        <button type="button" className="editor-close" aria-label="Close details" disabled={saving} onClick={onClose}>×</button>
-        <div className="editor-toolbar">
-          <button type="button" aria-pressed={sourceOpen} onClick={() => setSourceOpen(!sourceOpen)}><InterfaceIcon name="link" />Source</button>
-          <button type="button" onClick={() => note.current?.focus()}><InterfaceIcon name="note" />Note</button>
-          <button type="button" aria-expanded={collectionsOpen} onClick={() => setCollectionsOpen(!collectionsOpen)}><NavigationIcon name="collections" />Collections{memberships.length ? ` · ${memberships.length}` : ''}</button>
-          <button type="submit" className="editor-save" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <span className="editor-kind">{kind}</span>
+        <div className="editor-removal-actions">
+          <button type="button" className="editor-icon-button" disabled={saving} data-tip={card.trashed ? 'Restore' : 'Move to trash'} aria-label={card.trashed ? 'Restore' : 'Move to trash'} onClick={onTrash}><InterfaceIcon name={card.trashed ? 'restore' : 'move'} /></button>
+          <button type="button" className="editor-icon-button danger" disabled={saving} data-tip="Delete permanently" aria-label="Delete permanently" onClick={onDelete}><InterfaceIcon name="trash" /></button>
+          <button type="button" className="editor-icon-button editor-close" aria-label="Close details" data-tip="Close" disabled={saving} onClick={onClose}><InterfaceIcon name="close" /></button>
         </div>
       </header>
-      <div className="editor-content">
-        {error && <p role="alert">{error}</p>}
-        {card.type === 'image' && card.dataUrl && <img className="editor-image" src={card.dataUrl} alt={card.title} />}
-        <input aria-label="Title" className="editor-title" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Untitled" maxLength={1000} />
-        {sourceOpen && <input aria-label="Source" value={draft.sourceUrl ?? ''} placeholder="Paste a link" onChange={event => setDraft({ ...draft, sourceUrl: event.target.value || undefined })} />}
-        {collectionsOpen && <div className="editor-collections">{collections.length ? collections.map(collection => <label key={collection.id}>
-          <input type="checkbox" checked={memberships.includes(collection.id)} onChange={() => setMemberships(current => current.includes(collection.id) ? current.filter(id => id !== collection.id) : [...current, collection.id])} />{collection.name}
-        </label>) : <span>No collections yet</span>}</div>}
-        <textarea ref={note} aria-label="Note" placeholder="Type here…" value={draft.note} onChange={event => setDraft({ ...draft, note: event.target.value })} />
-        <input aria-label="Tags" placeholder="Tags" value={draft.tags.join(', ')} onChange={event => setDraft({ ...draft, tags: event.target.value.split(',').map(tag => tag.trim()).filter(Boolean) })} />
-        <div className="editor-delete-actions"><button type="button" disabled={saving} onClick={onTrash}>{card.trashed ? 'Restore' : 'Move to trash'}</button><button type="button" className="danger" disabled={saving} onClick={onDelete}>Delete permanently</button></div>
+
+      <div className={`editor-body ${card.type === 'image' && card.dataUrl ? 'has-preview' : ''}`}>
+        {card.type === 'image' && card.dataUrl && <figure className="editor-preview"><img className="editor-image" src={card.dataUrl} alt={card.title} /></figure>}
+        <div className="editor-fields">
+          {error && <p role="alert" className="editor-error">{error}</p>}
+          <label className="editor-field"><span>Title</span>
+            <input aria-label="Title" className="editor-title" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Untitled" maxLength={1000} /></label>
+          <label className="editor-field editor-field-note"><span>Note</span>
+            <textarea aria-label="Note" placeholder="Type here…" value={draft.note} rows={card.type === 'text' ? 6 : 3} onChange={event => setDraft({ ...draft, note: event.target.value })} /></label>
+          {card.type !== 'text' && <label className="editor-field"><span>Source</span>
+            <input aria-label="Source" value={draft.sourceUrl ?? ''} placeholder="Paste a link" onChange={event => setDraft({ ...draft, sourceUrl: event.target.value || undefined })} /></label>}
+          <label className="editor-field"><span>Tags</span>
+            <input aria-label="Tags" placeholder="comma, separated" value={draft.tags.join(', ')} onChange={event => setDraft({ ...draft, tags: event.target.value.split(',').map(tag => tag.trim()).filter(Boolean) })} /></label>
+          <fieldset className="editor-field editor-collections"><legend>Collections</legend>
+            <div className="editor-chips">{collections.length ? collections.map(collection => <label key={collection.id} className="editor-chip" data-checked={memberships.includes(collection.id) || undefined}>
+              <input type="checkbox" checked={memberships.includes(collection.id)} onChange={() => toggleMembership(collection.id)} />{collection.name}
+            </label>) : <span className="editor-empty">No collections yet</span>}</div>
+          </fieldset>
+          <fieldset className="editor-field editor-tints"><legend>Card colour</legend>
+            <div className="editor-chips">
+              <button type="button" className="editor-tint editor-tint-none" aria-label="Default colour" aria-pressed={!draft.color} onClick={() => setDraft({ ...draft, color: undefined })} />
+              {CARD_TINTS.map(color => <button type="button" key={color} className="editor-tint" style={{ background: color }} aria-label={`Colour ${color}`} aria-pressed={draft.color === color} onClick={() => setDraft({ ...draft, color })} />)}
+              <label className="editor-tint editor-tint-custom" title="Custom colour"><input type="color" aria-label="Custom card colour" value={draft.color ?? '#3cc8ff'} onChange={event => setDraft({ ...draft, color: event.target.value })} /></label>
+            </div>
+          </fieldset>
+        </div>
       </div>
+
+      <footer className="editor-footer">
+        <button type="button" className="editor-action" disabled={saving} onClick={onClose}><b className="glyph-cir" aria-hidden="true">○</b>Cancel</button>
+        <button type="submit" className="editor-action editor-save" disabled={saving}><b className="glyph-crs" aria-hidden="true">✕</b>{saving ? 'Saving…' : 'Save'}</button>
+      </footer>
     </form>
   </Dialog>;
 }

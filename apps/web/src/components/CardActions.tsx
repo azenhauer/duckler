@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import type { CollectionRecord } from '@visual-library/shared';
 import { InterfaceIcon } from './InterfaceIcon';
+import { useHoverIntent } from '../lib/hoverIntent';
 
 export function CardActions({ title, collections, onEdit, onMove, onDelete }: { title: string; collections: CollectionRecord[]; onEdit: () => void; onMove: (id: string) => Promise<void>; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState('');
+  const hover = useHoverIntent(setOpen);
   return <div className="card-external-actions" role="group" aria-label={`Actions for ${title}`}>
     <button type="button" aria-label={`Edit ${title}`} title="Edit" onClick={onEdit}><InterfaceIcon name="edit" /></button>
-    <div className="card-move-control" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div className="card-move-control" {...hover}>
       <button type="button" aria-label={`Move ${title} to collection`} title="Move to collection" aria-expanded={open} onFocus={() => setOpen(true)} onClick={() => setOpen(true)}><InterfaceIcon name="move" /></button>
       {open && <div className="card-move-menu">
         {collections.length === 0 && <span>Create a collection first.</span>}

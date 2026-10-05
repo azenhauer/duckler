@@ -1,7 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useExitAnimation } from '../lib/exitAnimation';
 
 export function Dialog({ label, onClose, children, className = '' }: { label: string; onClose: () => void; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const exitRef = useExitAnimation<HTMLDivElement>();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
@@ -22,7 +24,7 @@ export function Dialog({ label, onClose, children, className = '' }: { label: st
     document.addEventListener('keydown', key, true);
     return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', key, true); previous?.focus(); };
   }, []);
-  return <div className="reader-backdrop" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div ref={exitRef} className="reader-backdrop" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div ref={ref} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className={className}>{children}</div>
   </div>;
 }
