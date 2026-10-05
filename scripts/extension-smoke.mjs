@@ -22,6 +22,11 @@ const server = createServer((request, response) => {
   response.setHeader('Access-Control-Allow-Origin', request.headers.origin || '*');
   response.setHeader('Access-Control-Allow-Credentials', 'true');
   response.setHeader('Content-Type', request.url === '/file.pdf' ? 'application/pdf' : 'text/html');
+  if (request.url === '/meta') {
+    response.end('<title>Harbour Lights Guide | Example Journal</title><meta property="og:title" content="Harbour Lights Guide"><meta property="og:site_name" content="Example Journal">'
+      + '<meta name="description" content="Where to see the old lighthouses at dusk."><meta name="keywords" content="Harbour, Lighthouses, travel guide with a very long keyword phrase"><h1>Harbour Lights</h1><p>Body</p>');
+    return;
+  }
   response.end(request.url === '/file.pdf' ? fixture : '<title>PDF website</title><a href="/file.pdf" type="application/pdf">Download PDF</a>');
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -115,9 +120,16 @@ try {
     const card = await cardDb.cards.filter(card => card.title === 'Highlight with caption').first();
     return card?.note === 'This passage becomes my note.' && card.caption === 'My independent caption';
   });
-  assert.equal(await pdfPopup.isClosed(), false);
-  await pdfPopup.locator('#capture-title').fill('Edited highlight shortcut');
-  await pdfPopup.locator('#note-text').fill('I refined the highlighted note.');
+  // Sending closes the capture panel; the next capture opens a fresh one.
+  await expect.poll(() => pdfPopup.isClosed(), { timeout: 5000 }).toBe(true);
+  const reopened = context.waitForEvent('page');
+  await options.evaluate(() => chrome.tabs.create({ url: chrome.runtime.getURL('popup.html'), active: false }));
+  const nextPopup = await reopened;
+  await expect(nextPopup.locator('#page-title')).not.toHaveText('Loading page…');
+  await nextPopup.locator('#capture-title').fill('Edited highlight shortcut');
+  await nextPopup.locator('#mode-selection').click();
+  await nextPopup.locator('#note-text').fill('I refined the highlighted note.');
+  await nextPopup.locator('#caption-text').fill('My independent caption');
   await website.keyboard.press('Control+Enter');
   await library.waitForFunction(async () => {
     const { cardDb } = await import('/src/lib/cardDb.ts');
@@ -128,12 +140,47 @@ try {
   await library.getByRole('button', { name: 'All notes', exact: true }).click();
   await expect(library.getByRole('article', { name: 'Open Saved PDF fixture' })).toBeVisible();
   await expect(library.getByRole('article', { name: 'Open Highlight with caption' }).locator('.note-caption')).toHaveText('My independent caption');
-  console.log('Live page highlighting, separate captions and Ctrl+Enter delivery passed with the capture document open.');
-  await pdfPopup.close();
+  console.log('Live page highlighting, separate captions, Ctrl+Enter delivery and close-on-send passed.');
+  await expect.poll(() => nextPopup.isClosed(), { timeout: 5000 }).toBe(true);
+  // Escape closes the panel.
+  const escapeReady = context.waitForEvent('page');
+  await options.evaluate(() => chrome.tabs.create({ url: chrome.runtime.getURL('popup.html'), active: false }));
+  const escapePopup = await escapeReady;
+  await expect(escapePopup.locator('#page-title')).not.toHaveText('Loading page…');
+  await escapePopup.locator('#capture-title').focus();
+  await escapePopup.keyboard.press('Escape').catch(() => { /* The page closes during the key press. */ });
+  await expect.poll(() => escapePopup.isClosed(), { timeout: 5000 }).toBe(true);
+  // Autofill from page metadata: cleaned title + site, description as caption, short tags.
+  await website.goto(`${pdfWebsite}/meta`);
+  const metaReady = context.waitForEvent('page');
+  await options.evaluate(() => chrome.tabs.create({ url: chrome.runtime.getURL('popup.html'), active: false }));
+  const metaPopup = await metaReady;
+  await expect(metaPopup.locator('#capture-title')).toHaveValue('Harbour Lights Guide · Example Journal');
+  await expect(metaPopup.locator('#note-text')).toHaveValue('Where to see the old lighthouses at dusk.');
+  await expect(metaPopup.locator('#tags')).toHaveValue('harbour, lighthouses');
+  // A screenshot handed to the open panel is reviewed there and saves without a note.
+  await metaPopup.evaluate(() => receiveScreenshot({ kind: 'screenshot', title: 'Lighthouse crop · Example Journal', sourceUrl: 'http://127.0.0.1/meta',
+    payload: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' }));
+  await expect(metaPopup.locator('#shot-preview')).toBeVisible();
+  await expect(metaPopup.locator('#save-page')).toHaveText('Save screenshot');
+  // The screenshot's own name (from what was inside the selection) replaces the untouched page title.
+  await expect(metaPopup.locator('#capture-title')).toHaveValue('Lighthouse crop · Example Journal');
+  await metaPopup.locator('#capture-title').fill('Lighthouse crop');
+  await metaPopup.locator('#note-text').fill('');
+  await metaPopup.locator('#save-page').click();
+  await library.waitForFunction(async () => {
+    const { cardDb } = await import('/src/lib/cardDb.ts');
+    const card = await cardDb.cards.filter(card => card.title === 'Lighthouse crop').first();
+    return card?.type === 'image' && card.dataUrl?.startsWith('data:image/png') && !card.note;
+  }, undefined, { timeout: 15000 });
+  await expect.poll(() => metaPopup.isClosed(), { timeout: 5000 }).toBe(true);
+  console.log('Metadata autofill and in-panel screenshot review (no note needed) passed.');
+  // The panel shortcut is registered.
+  assert.ok(await options.evaluate(async () => (await chrome.commands.getAll()).some(command => command.name === 'toggle-capture-panel')));
   await website.bringToFront();
   await options.evaluate(async () => { await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id }); });
   await expect.poll(() => options.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length)).toBe(1);
-  await website.locator('#highlight-fixture').click();
+  await website.locator('body').click(); // any interaction with the website
   assert.equal(await options.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length), 1);
   console.log('Native side panel stays open while interacting with the website.');
   console.log('PDF downloaded through the extension popup, parsed, stored in its collection and retained after reload.');

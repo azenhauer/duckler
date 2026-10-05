@@ -8,7 +8,7 @@
     const publish = () => {
       if (editable()) return;
       const text = window.getSelection()?.toString().trim().slice(0, 100000) || '';
-      if (text) port.postMessage({ type: 'selection', text, url: location.href });
+      if (text) port.postMessage({ type: 'selection', text, url: location.href, top: window === window.top });
     };
     const changed = () => { clearTimeout(timer); timer = setTimeout(publish, 100); };
     const key = event => {

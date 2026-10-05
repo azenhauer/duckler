@@ -4,14 +4,30 @@
   "name": "Duckler Capture",
   "version": "0.3.0",
   "description": "Save pages, notes, images, and screen regions to your Duckler library.",
-  "permissions": ["storage", "activeTab", "scripting", "contextMenus", "sidePanel"],
-  "side_panel": { "default_path": "popup.html" },
-  "icons": { "16": "icons/duck-16.png", "32": "icons/duck-32.png", "48": "icons/duck-48.png", "128": "icons/duck-128.png" },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "sidePanel"
+  ],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "icons": {
+    "16": "icons/duck-16.png",
+    "32": "icons/duck-32.png",
+    "48": "icons/duck-48.png",
+    "128": "icons/duck-128.png"
+  },
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_icon": { "16": "icons/duck-16.png", "32": "icons/duck-32.png" },
+    "default_icon": {
+      "16": "icons/duck-16.png",
+      "32": "icons/duck-32.png"
+    },
     "default_title": "Capture to Duckler"
   },
   "options_ui": {
@@ -24,6 +40,15 @@
         "default": "Alt+Shift+D"
       },
       "description": "Capture a region of the current page"
+    },
+    "toggle-capture-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Open or close the Duckler side panel"
     }
-  }
+  },
+  "optional_host_permissions": [
+    "<all_urls>"
+  ]
 }

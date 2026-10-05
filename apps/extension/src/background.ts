@@ -9,6 +9,16 @@ import { fetchPdf } from './pdf';
 const queue = new CaptureQueue();
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 const trustedPorts = new Set<chrome.runtime.Port>();
+// The side panel connects once it opens, so screenshots can land in it and the shortcut can close it.
+const panelPorts = new Map<number, chrome.runtime.Port>();
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name !== 'duckler-panel' || port.sender?.url !== chrome.runtime.getURL('popup.html')) return;
+  let windowId: number | undefined;
+  port.onMessage.addListener(message => {
+    if (message?.type === 'hello' && Number.isInteger(message.windowId)) { windowId = message.windowId; panelPorts.set(message.windowId, port); }
+  });
+  port.onDisconnect.addListener(() => { if (windowId !== undefined && panelPorts.get(windowId) === port) panelPorts.delete(windowId); });
+});
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Capture could not be saved.';
 const badge = async (error = false) => {
   const count = await queue.captures.count();
@@ -102,6 +112,12 @@ async function feedback(tabId: number, text: string, error = false) {
   } catch { await badge(error); }
 }
 chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === 'toggle-capture-panel' && tab?.windowId !== undefined) {
+    const port = panelPorts.get(tab.windowId);
+    if (port) { try { port.postMessage({ type: 'close' }); } catch { panelPorts.delete(tab.windowId); } }
+    else void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => badge(true));
+    return;
+  }
   if (command !== 'capture-visible-area' || !tab?.id) return;
   void beginRegion(tab.id).catch(() => badge(true));
 });
@@ -149,7 +165,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'deliver-capture': await openLibrary(true); return {};
       case 'open-library': await openLibrary(); return {};
       case 'start-region': await beginRegion(message.tabId); return {};
-      case 'prepare-region-review': return { capture: await captureRegion(sender, message) };
+      case 'prepare-region-review': {
+        const capture = await captureRegion(sender, message);
+        // With the side panel open, the screenshot is reviewed there (same fields as every other capture).
+        const port = sender.tab?.windowId !== undefined ? panelPorts.get(sender.tab.windowId) : undefined;
+        if (port) { try { port.postMessage({ type: 'screenshot', capture, tabId: sender.tab?.id }); return { capture, inPanel: true }; } catch { panelPorts.delete(sender.tab!.windowId); } }
+        return { capture };
+      }
+      case 'suggest-title': return { title: screenshotTitle(message.hint as RegionHint | undefined, typeof message.fallback === 'string' ? message.fallback : '') };
       case 'capture-region': throw new Error('Refresh this website before taking a screenshot. The screenshot review has been updated.');
       case 'pair-library': {
         if (!isSettingsSender(sender, chrome.runtime.id, chrome.runtime.getURL('options.html'))) throw new Error('Confirm the connection in extension settings.');

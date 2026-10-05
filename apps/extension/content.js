@@ -21,7 +21,7 @@
     const title = document.createElement('input'); title.id = 'capture-title'; title.maxLength = 1000; title.value = capture.title || 'Captured area';
     const collectionLabel = document.createElement('label'); collectionLabel.htmlFor = 'capture-collection'; collectionLabel.textContent = 'Collection';
     const collection = document.createElement('input'); collection.id = 'capture-collection'; collection.maxLength = 200; collection.placeholder = 'Collection name (optional)';
-    const label = document.createElement('label'); label.htmlFor = 'capture-note'; label.textContent = 'Add a note';
+    const label = document.createElement('label'); label.htmlFor = 'capture-note'; label.textContent = 'Note (optional)';
     const note = document.createElement('textarea'); note.id = 'capture-note'; note.maxLength = 100000; note.placeholder = 'What caught your eye?';
     const message = document.createElement('p'); message.setAttribute('role', 'status');
     const actions = document.createElement('div'); actions.className = 'actions';
@@ -43,6 +43,8 @@
     });
     panel.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !saveButton.disabled) { event.preventDefault(); close(); }
+      // Enter saves right away (a note is optional); Shift+Enter still adds lines to the note.
+      if (event.key === 'Enter' && !event.shiftKey && (root.activeElement !== note || event.ctrlKey || event.metaKey)) { event.preventDefault(); saveButton.click(); }
       if (event.key === 'Tab') {
         if (event.shiftKey && root.activeElement === title) { event.preventDefault(); discard.focus(); }
         else if (!event.shiftKey && root.activeElement === discard) { event.preventDefault(); title.focus(); }
@@ -142,7 +144,9 @@
       if (response?.error === 'Unsupported capture request.') throw new Error('Reload Duckler Capture in Extensions, refresh this website, and try again.');
       if (!response?.ok) throw new Error(response?.error || 'Could not save this screenshot.');
       cancel();
-      review(response.capture);
+      // With the side panel open the screenshot is reviewed there; otherwise review it on the page.
+      if (response.inPanel) toast('Screenshot ready in the Duckler panel');
+      else review(response.capture);
     } catch (error) { toast(error.message || 'Could not save this screenshot.', true); }
     finally { busy = false; cancel(); }
   };
