@@ -1,3 +1,4 @@
+import { ColorPickerButton } from './ColorPicker';
 import { appearanceLabels, appearancePresets, contrastRatio, type AppearanceConfig, type AppearanceKey, type AppearancePreset } from '../lib/appearance';
 
 export const appearancePresetNames: Record<Exclude<AppearancePreset, 'custom'>, string> = { playstation: 'PSX2 Schematic', blueprint: 'Blueprint', synthwave: 'Synthwave', graphite: 'Graphite', 'ps-blue': 'PS Blue', 'warm-crt': 'Warm CRT' };
@@ -26,7 +27,8 @@ export function AppearanceSettings({ value, onChange }: { value: AppearanceConfi
     <div className="appearance-colors">
       {(Object.keys(appearanceLabels) as AppearanceKey[]).map(key => <div className="appearance-color-row" key={key}>
         <label htmlFor={`appearance-${key}`}>{appearanceLabels[key]}</label>
-        <input className="appearance-color-swatch" aria-label={`${appearanceLabels[key]} color picker`} type="color" value={value.values[key]} onChange={event => onChange({ preset: 'custom', values: { ...value.values, [key]: event.target.value } })} />
+        <ColorPickerButton className="appearance-color-swatch" label={`${appearanceLabels[key]} color picker`} value={value.values[key]}
+          onChange={color => onChange({ preset: 'custom', values: { ...value.values, [key]: color } })}><i style={{ background: value.values[key] }} /></ColorPickerButton>
         <input id={`appearance-${key}`} className="appearance-hex" value={value.values[key]} maxLength={7} spellCheck={false} onChange={event => {
           const next = event.target.value.startsWith('#') ? event.target.value : `#${event.target.value}`;
           if (/^#[0-9a-f]{0,6}$/i.test(next)) onChange({ preset: 'custom', values: { ...value.values, [key]: next.length === 7 ? next : value.values[key] } });

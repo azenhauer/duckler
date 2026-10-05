@@ -1,3 +1,4 @@
+import { ColorPickerButton } from './ColorPicker';
 import type { CardCorners, CardFrame, CardStyle } from '../lib/cardStyle';
 
 const backgrounds = ['#04060b', '#0c1424', '#2a2ca6', '#1d0b33', '#0d2a26', '#e6f6ff', '#dde8f4'];
@@ -11,7 +12,8 @@ export function CardStyleSettings({ value, onChange }: { value: CardStyle; onCha
       <div className="card-style-swatches">
         <button type="button" className="card-style-swatch card-style-swatch-auto" aria-label="Match skin" aria-pressed={!value.background} onClick={() => onChange({ ...value, background: null })} />
         {backgrounds.map(color => <button type="button" key={color} className="card-style-swatch" style={{ background: color }} aria-label={`Card background ${color}`} aria-pressed={value.background === color} onClick={() => onChange({ ...value, background: color })} />)}
-        <label className="card-style-swatch card-style-swatch-custom" title="Custom"><input type="color" aria-label="Custom card background" value={value.background ?? '#0c1424'} onChange={event => onChange({ ...value, background: event.target.value })} /></label>
+        <ColorPickerButton className="card-style-swatch card-style-swatch-custom" label="Custom card background" title="Custom" value={value.background ?? '#0c1424'} swatches={backgrounds}
+          onChange={color => onChange({ ...value, background: color })} />
       </div>
     </div>
     <div className="card-style-row"><span>Frame</span>

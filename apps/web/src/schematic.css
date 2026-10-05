@@ -596,3 +596,59 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 }
 @media (prefers-reduced-motion: reduce) { .selection-hint { animation: none !important; } .profile-trigger { transition: none !important; } }
 .app-shell:has([aria-modal='true']) .bottom-scrim { display: none; }
+
+/* ---- Colour picker: replaces the browser's native dialog for UI colours (the canvas keeps its own). ---- */
+.color-pop { position: fixed; z-index: 120; display: grid; gap: 10px; width: 236px; padding: 12px; border: 1px solid var(--sx-line-soft); border-radius: 8px;
+  background: var(--sx-panel); color: var(--ui-text); box-shadow: 4px 4px 0 color-mix(in srgb, #000 35%, transparent); animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both; }
+.color-pop.is-leaving { animation: sx-leave 120ms ease-in forwards !important; }
+.color-pop-square { position: relative; height: 132px; border-radius: 5px; cursor: crosshair; touch-action: none; outline: none; box-shadow: inset 0 0 0 1px #ffffff1a; }
+.color-pop-square:focus-visible { box-shadow: inset 0 0 0 1px #ffffff1a, 0 0 0 2px var(--ui-accent-primary); }
+.color-pop-thumb { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #0009, 0 1px 4px #0008; pointer-events: none; }
+.color-pop-hue { -webkit-appearance: none; appearance: none; width: 100%; height: 12px; margin: 0; border-radius: 6px; cursor: pointer;
+  background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.color-pop-hue::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; background: transparent; box-shadow: 0 0 0 1px #0009; }
+.color-pop-hue::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%; background: transparent; box-shadow: 0 0 0 1px #0009; }
+.color-pop-row { display: flex; align-items: center; gap: 8px; }
+.color-pop-preview { flex: none; width: 26px; height: 26px; border-radius: 4px; box-shadow: inset 0 0 0 1px #ffffff26; }
+.color-pop-hex { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: color-mix(in srgb, var(--ui-bg) 55%, transparent);
+  color: var(--ui-text); font: 700 .78rem/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+.color-pop-hex:focus { outline: none; border-color: var(--ui-accent-primary); }
+.color-pop-done { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: transparent;
+  color: var(--ui-text); font: 700 .6rem/1 var(--sx-label); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; transition: border-color var(--sx-fast) linear, scale 70ms; }
+.color-pop-done b { color: var(--sx-crs); }
+.color-pop-done:hover { border-color: var(--ui-accent-primary); } .color-pop-done:active { scale: .94; }
+.color-pop-swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+.color-pop-swatches button { aspect-ratio: 1; padding: 0; border: 1px solid #ffffff26; border-radius: 3px; cursor: pointer; transition: scale 70ms; }
+.color-pop-swatches button[aria-pressed='true'] { outline: 2px solid var(--ui-accent-secondary); outline-offset: 1px; }
+.color-pop-swatches button:active { scale: .9; }
+/* Triggers: Settings colour rows show the colour itself; custom swatches keep their small spectrum tile. */
+.appearance-color-swatch { display: grid !important; place-items: center; width: 30px !important; height: 26px !important; padding: 3px !important; border: 1px solid var(--sx-line-soft) !important;
+  border-radius: 4px !important; background: transparent !important; cursor: pointer; transition: border-color var(--sx-fast) linear, scale 70ms; }
+.appearance-color-swatch i { display: block; width: 100%; height: 100%; border-radius: 2px; box-shadow: inset 0 0 0 1px #ffffff1f; }
+.appearance-color-swatch:hover, .appearance-color-swatch[aria-expanded='true'] { border-color: var(--ui-accent-primary) !important; }
+.appearance-color-swatch:active { scale: .94; }
+.editor-tint-custom, .card-style-swatch-custom { cursor: pointer; }
+.editor-tint-custom[aria-expanded='true'], .card-style-swatch-custom[aria-expanded='true'] { outline: 2px solid var(--ui-accent-secondary); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .color-pop { animation: none !important; } }
+
+/* ---- Canvas top bar spans the board: Back in the left corner, Settings in the right. The page's own
+   floating sound/settings controls step aside on an open canvas (they overlapped the bar). ---- */
+.app-shell[data-canvas-open] .top-actions { display: none !important; }
+.canvas-studio .canvas-topbar { left: 14px; right: 14px; max-width: none; transform: none; translate: none; }
+.canvas-topbar > * { order: 4; }
+.canvas-topbar > .canvas-corner-back { order: 0; }
+.canvas-topbar > .canvas-nav { order: 1; }
+.canvas-topbar > .canvas-corner-settings { order: 6; margin-left: auto; }
+.canvas-topbar > .canvas-status { order: 5; margin-left: auto; }
+.canvas-topbar > .canvas-status + .canvas-topbar-break + .canvas-corner-settings { margin-left: 0; }
+.canvas-topbar-break { display: none; }
+@media (max-width: 700px) {
+  .canvas-studio .canvas-topbar { left: 10px; right: 10px; justify-content: center; }
+  .canvas-topbar > .canvas-corner-back { margin-right: auto; }
+  .canvas-topbar > .canvas-corner-settings { order: 2; margin-left: auto !important; }
+  .canvas-topbar-break { display: block; order: 3; flex-basis: 100%; height: 0; }
+}
+.canvas-topbar > .canvas-title { flex: 0 1 auto; min-width: 72px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.appearance-hex { height: 26px; padding: 0 8px !important; border: 1px solid var(--sx-line-soft) !important; border-radius: 4px !important; background: color-mix(in srgb, var(--ui-bg) 55%, transparent) !important;
+  color: var(--ui-text) !important; font: 700 .72rem/1 ui-monospace, SFMono-Regular, Consolas, monospace !important; letter-spacing: .06em; text-transform: uppercase; box-shadow: none !important; }
+.appearance-hex:focus { outline: none; border-color: var(--ui-accent-primary) !important; }

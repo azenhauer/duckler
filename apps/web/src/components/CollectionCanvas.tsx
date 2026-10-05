@@ -318,12 +318,11 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
       </div>
 
       <div className="canvas-float canvas-topbar" role="toolbar" aria-label="Canvas actions">
-        {onBack && <button type="button" className="b-button b-button-small" aria-label="Go back" onClick={onBack}><span className="b-ring" aria-hidden="true" /><span className="b-label" aria-hidden="true">Back</span></button>}
+        {onBack && <button type="button" className="b-button b-button-small canvas-corner-back" aria-label="Go back" onClick={onBack}><span className="b-ring" aria-hidden="true" /><span className="b-label" aria-hidden="true">Back</span></button>}
         {onNavigate && <span className="canvas-nav" role="group" aria-label="Go to">
           <button type="button" className="canvas-icon-button" aria-label="Duckler home" data-tip="Home" onClick={() => onNavigate('home')}><span className="brand-mark duckler-mark" aria-hidden="true" /></button>
           <button type="button" className="canvas-icon-button" aria-label="Collections" data-tip="Collections" onClick={() => onNavigate('collections')}><NavigationIcon name="collections" /></button>
           <button type="button" className="canvas-icon-button" aria-label="All canvases" data-tip="Canvases" onClick={() => onNavigate('canvases')}><NavigationIcon name="canvas" /></button>
-          <button type="button" className="canvas-icon-button settings-gear" aria-label="Open settings" data-tip="Settings" onClick={() => onNavigate('settings')}><InterfaceIcon name="settings" /></button>
         </span>}
         <span className="canvas-title" title={collection.name}>{collection.name}</span>
         <label className={`canvas-find ${boardFind ? 'has-query' : ''}`} data-tip="Find on board">
@@ -362,6 +361,9 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
           </div>
         </details>}
         <span className="canvas-status" role="status">{saving ? 'Saving…' : `${content.placements.filter(item => !item.removed).length} cards · ${content.elements.length} annotations`}</span>
+        {/* Back and Settings hold the bar's two corners; on phones the tools wrap onto the rows below. */}
+        <span className="canvas-topbar-break" aria-hidden="true" />
+        {onNavigate && <button type="button" className="canvas-icon-button settings-gear canvas-corner-settings" aria-label="Open settings" data-tip="Settings" onClick={() => onNavigate('settings')}><InterfaceIcon name="settings" /></button>}
       </div>
 
       {(selectedAnnotation || selectedEdge || error) && <div className="canvas-float canvas-contextbar">

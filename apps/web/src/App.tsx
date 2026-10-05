@@ -61,6 +61,7 @@ import { CanvasGallery } from './components/CanvasGallery';
 import { CollectionCanvas } from './components/CollectionCanvas';
 import { Notifications, notify } from './components/Notifications';
 import { BButton } from './components/BButton';
+import { ColorPopover } from './components/ColorPicker';
 import { inferImageTitle } from './lib/imageName';
 
 const emptyForm = {
@@ -146,7 +147,8 @@ function App() {
   const [profileBio, setProfileBio] = useState(() => (localStorage.getItem('duckler-profile-bio') ?? '').slice(0, 256));
   const profileColorInputRef = useRef<HTMLInputElement | null>(null);
   // Clicking the identity card itself (not the photo) opens its colour picker.
-  const pickCardColor = (event: React.MouseEvent) => { if (!(event.target as HTMLElement).closest('.avatar-upload')) profileColorInputRef.current?.click(); };
+  const [profileColorAnchor, setProfileColorAnchor] = useState<HTMLElement | null>(null);
+  const pickCardColor = (event: React.MouseEvent<HTMLElement>) => { if (!(event.target as HTMLElement).closest('.avatar-upload')) setProfileColorAnchor(event.currentTarget); };
   const [profilePhoto, setProfilePhoto] = useState(() => localStorage.getItem('visual-library-profile-photo') ?? '');
   const [profileCardColor, setProfileCardColor] = useState(() => {
     const saved = localStorage.getItem('duckler-profile-card-color');
@@ -1879,7 +1881,10 @@ function App() {
           </div>
         )}
       </section>
-      <input ref={profileColorInputRef} className="visually-hidden" type="color" aria-label="Profile card color" value={profileCardColor} onChange={event => setProfileCardColor(event.target.value)} />
+      {/* Keyboard / assistive fallback for the profile colour; clicking the card opens the picker. */}
+      <input ref={profileColorInputRef} className="visually-hidden" tabIndex={-1} aria-label="Profile card color" value={profileCardColor} onChange={event => { if (/^#[0-9a-f]{6}$/i.test(event.target.value)) setProfileCardColor(event.target.value); }} />
+      {profileColorAnchor && <ColorPopover anchor={profileColorAnchor} label="Profile card colour" value={profileCardColor} onChange={setProfileCardColor} onClose={() => setProfileColorAnchor(null)}
+        swatches={['#3cc8ff', '#506bbb', '#2a2ca6', '#3ddc84', '#f2d33d', '#ff7ad9', '#ff4b4b', '#e6f6ff']} />}
       <div className="top-actions" role="group" aria-label="Quick controls">
         <SoundButton preferences={sounds.preferences} setPreferences={sounds.setPreferences} preview={sounds.preview} />
         <button type="button" className="settings-gear" aria-label="Open settings" title="Settings" aria-haspopup="dialog" onClick={() => { setProfileOpen(false); setAccountMenuOpen(false); setSettingsOpen(true); }}>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CardRecord, CollectionRecord } from '@visual-library/shared';
 import { Dialog } from './Dialog';
 import { BButton } from './BButton';
+import { ColorPickerButton } from './ColorPicker';
 import { InterfaceIcon } from './InterfaceIcon';
 import { OcrPanel } from './OcrPanel';
 import { PdfViewer, type PdfPageNote } from './PdfViewer';
@@ -75,7 +76,8 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
             <div className="editor-chips">
               <button type="button" className="editor-tint editor-tint-none" aria-label="Default colour" aria-pressed={!draft.color} onClick={() => setDraft({ ...draft, color: undefined })} />
               {CARD_TINTS.map(color => <button type="button" key={color} className="editor-tint" style={{ background: color }} aria-label={`Colour ${color}`} aria-pressed={draft.color === color} onClick={() => setDraft({ ...draft, color })} />)}
-              <label className="editor-tint editor-tint-custom" title="Custom colour"><input type="color" aria-label="Custom card colour" value={draft.color ?? '#3cc8ff'} onChange={event => setDraft({ ...draft, color: event.target.value })} /></label>
+              <ColorPickerButton className="editor-tint editor-tint-custom" label="Custom card colour" title="Custom colour" value={draft.color ?? '#3cc8ff'} swatches={CARD_TINTS}
+                onChange={color => setDraft({ ...draft, color })} />
             </div>
           </fieldset>
         </div>
