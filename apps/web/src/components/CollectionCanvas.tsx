@@ -302,7 +302,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
       </div>
 
       <div className="canvas-float canvas-topbar" role="toolbar" aria-label="Canvas actions">
-        {onBack && <button type="button" className="b-button b-button-small" aria-label="Go back" data-tip="Back" onClick={onBack}><span aria-hidden="true">B</span></button>}
+        {onBack && <button type="button" className="b-button b-button-small" aria-label="Go back" data-tip="Back" onClick={onBack}><span className="b-ring" aria-hidden="true" /></button>}
         <span className="canvas-title" title={collection.name}>{collection.name}</span>
         <label className={`canvas-find ${boardFind ? 'has-query' : ''}`} data-tip="Find on board">
           <svg className="canvas-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.7" /><path d="m16 16 5 5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>

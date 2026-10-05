@@ -316,14 +316,18 @@ html:not([data-theme='dark']) .dock-item.active::before { opacity: .45; }
 .home-entry:hover .home-artwork { transform: translateY(-6px) rotate(-2deg) !important; }
 .home-entry:active .home-artwork { transform: translateY(-2px) scale(.96) !important; }
 
-/* Red B button for "back", like a controller face button. */
-.b-button { display: grid !important; place-items: center; width: 44px !important; height: 44px !important; padding: 0 !important; border: 0 !important; border-radius: 50% !important; cursor: pointer;
-  background: radial-gradient(circle at 35% 30%, #ff7a7a 0%, #e0262b 45%, #a3121a 100%) !important; color: #fff !important;
-  box-shadow: inset 0 -3px 0 #0005, inset 0 2px 0 #fff4, 0 3px 0 #5a0a0e, 0 6px 14px -6px #000 !important;
-  font: 800 1.15rem/1 var(--sx-label); text-shadow: 0 1px 0 #0007; transition: transform 120ms cubic-bezier(.3,1.3,.5,1), box-shadow 120ms; }
+/* Back = the controller's circle button: glossy black cap with a red ring. */
+.b-button { position: relative; display: grid !important; place-items: center; width: 44px !important; height: 44px !important; padding: 0 !important; border: 0 !important; border-radius: 50% !important; cursor: pointer;
+  background: radial-gradient(circle at 34% 26%, #5a5a5f 0%, #1b1b1f 32%, #050506 72%, #000 100%) !important;
+  box-shadow: inset 0 2px 1px #ffffff2e, inset 0 -3px 4px #000, 0 3px 0 #000, 0 6px 14px -6px #000 !important;
+  transition: transform 120ms cubic-bezier(.3,1.3,.5,1), box-shadow 120ms; }
+.b-ring { display: block; width: 56%; height: 56%; border: 3px solid #ff2b2b; border-radius: 50%; box-shadow: 0 0 6px #ff2b2b66, inset 0 0 3px #ff2b2b55; transition: box-shadow 150ms ease, border-color 150ms ease; }
 .b-button:hover { transform: translateY(-1px); }
-.b-button:active { transform: translateY(2px); box-shadow: inset 0 -1px 0 #0005, inset 0 2px 0 #fff3, 0 1px 0 #5a0a0e !important; }
-.b-button-small { width: 32px !important; height: 32px !important; font-size: .9rem; margin: 0 4px; flex: none; }
+.b-button:hover .b-ring { border-color: #ff4a4a; box-shadow: 0 0 12px #ff2b2baa, inset 0 0 4px #ff2b2b88; }
+.b-button:active { transform: translateY(2px); box-shadow: inset 0 2px 1px #ffffff22, inset 0 -1px 2px #000, 0 1px 0 #000 !important; }
+.b-button-small { width: 32px !important; height: 32px !important; margin: 0 4px; flex: none; }
+.b-button-small .b-ring { border-width: 2px; }
+.page-back.b-button { position: fixed !important; top: max(22px, env(safe-area-inset-top)) !important; left: 28px !important; z-index: 46; }
 .page-back.b-button .ui-icon { display: none; }
 
 /* Top-right quick controls: volume + settings. */
