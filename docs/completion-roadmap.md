@@ -47,7 +47,8 @@ No collaboration, open registration, DMs or comments before the corresponding se
 Requested, then explicitly parked until the owner says to start. Both sit behind the multi-user gates above.
 
 - [ ] **Account-based extension.** Replace the manual setup-code / confirmation-code pairing with signing in to the same Duckler account in the extension and the library, so captures route to the account rather than to one paired browser. Needs gate 1 (identity + storage architecture) and the Drive content sync (M5b).
-- [ ] **Multi-user libraries, collection collaboration and sharing by link.** Private libraries per account, shared collections/moodboards with Viewer/Editor roles, revocable share links, async collaborative editing. Needs gates 1–3 and the M12 real-account Drive test.
+- [x] **Accounts, Drive sync and view-only share links** — started and built by the owner's request on October 6, 2026 (decision 0002): sign in with Google, library in the owner's Drive, encrypted revocable view-only links. Owner setup: `docs/google-setup.md`.
+- [ ] **Collaboration (editing together), Editor roles, comments.** Still deferred; needs a conflict screen and the M12 real-account Drive test.
 
 
 ## Security implementation started — October 4, 2026

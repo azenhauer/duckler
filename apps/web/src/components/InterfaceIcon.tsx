@@ -1,8 +1,10 @@
 // PS2-schematic icon set: square caps, mitred corners, hardware-diagram shapes.
-export type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more' | 'sound' | 'mute' | 'restore' | 'close' | 'check' | 'connect';
+export type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more' | 'sound' | 'mute' | 'restore' | 'close' | 'check' | 'connect' | 'image';
 export function InterfaceIcon({ name }: { name: IconName }) {
   const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'square' as const, strokeLinejoin: 'miter' as const };
   return <svg className={`ui-icon ui-icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
+    {/* Picture frame: mountains and sun */}
+    {name === 'image' && <><path {...p} d="M3.5 5h17v14h-17V5Z" /><path {...p} d="M3.5 16l5-5 4 4 2.5-2.5 5 5" /><circle {...p} cx="16" cy="9" r="1.5" /></>}
     {/* Pen nib over a baseline */}
     {name === 'edit' && <><path {...p} d="M5 19l1.2-4.4L15.8 5l3.2 3.2-9.6 9.6L5 19Z" /><path {...p} d="M13.6 7.2l3.2 3.2M4 21.5h9" /></>}
     {/* D-pad: move */}

@@ -46,3 +46,15 @@ describe('UI sound zones', () => {
     expect(cueFor($('#remove'))).toBe('delete');
   });
 });
+
+describe('every UI sound is distinct', () => {
+  it('no two cues share the same layers', async () => {
+    const { cueLayers } = await import('./UiSounds');
+    const signatures = Object.entries(cueLayers).map(([cue, layers]) => [cue, JSON.stringify(layers)] as const);
+    const seen = new Map<string, string>();
+    for (const [cue, signature] of signatures) {
+      expect(seen.get(signature), `${cue} sounds the same as ${seen.get(signature)}`).toBeUndefined();
+      seen.set(signature, cue);
+    }
+  });
+});

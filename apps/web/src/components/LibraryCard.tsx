@@ -32,6 +32,8 @@ type Props = {
   isCaptured: boolean;
   isRemoving: boolean;
   connectionCount: number;
+  /** Someone else's card (a shared link): no selection, actions or collection controls; a click opens it. */
+  readOnly?: boolean;
 };
 
 const hostOf = (url?: string) => {
@@ -43,18 +45,20 @@ const hostOf = (url?: string) => {
  * One card in the library grid. Memoized: selecting, searching or hovering elsewhere only re-renders
  * the cards whose own props changed (with hundreds of cards, re-rendering all of them cost ~200 ms).
  */
-export const LibraryCard = memo(function LibraryCard({ card, collections, api, isOpen, isChecked, isNew, isCaptured, isRemoving, connectionCount }: Props) {
+export const LibraryCard = memo(function LibraryCard({ card, collections, api, isOpen, isChecked, isNew, isCaptured, isRemoving, connectionCount, readOnly = false }: Props) {
   const sourceLabel = hostOf(card.sourceUrl);
   const picture = useThumbnail(card, card.type === 'image' || card.type === 'pdf' ? card.dataUrl : undefined, (cardId, thumb) => api().storeThumb(cardId, thumb));
   return (
     <div className={`library-card ${isNew ? 'is-new' : ''} ${isCaptured ? 'is-captured' : ''} ${isRemoving ? 'is-removing' : ''} ${isChecked ? 'is-checked' : ''}`}>
-      <div className="tile-header">
-        <input type="checkbox" aria-label={`Select ${card.title}`} checked={isChecked}
-          onChange={() => api().select(card.id)} onClick={event => event.stopPropagation()} />
-      </div>
-      <CardActions cardId={card.id} title={card.title} collections={collections}
-        onConnect={() => api().startConnect(card.id)} onEdit={() => api().open(card.id)}
-        onDelete={() => api().remove(card.id)} onMove={collectionId => api().move(card, collectionId)} />
+      {!readOnly && <>
+        <div className="tile-header">
+          <input type="checkbox" aria-label={`Select ${card.title}`} checked={isChecked}
+            onChange={() => api().select(card.id)} onClick={event => event.stopPropagation()} />
+        </div>
+        <CardActions cardId={card.id} title={card.title} collections={collections}
+          onConnect={() => api().startConnect(card.id)} onEdit={() => api().open(card.id)}
+          onDelete={() => api().remove(card.id)} onMove={collectionId => api().move(card, collectionId)} />
+      </>}
       <article
         data-card-id={card.id}
         className={`card-tile card-type-${card.type} ${isOpen ? 'selected' : ''} ${isChecked ? 'is-checked' : ''}`}
@@ -65,6 +69,7 @@ export const LibraryCard = memo(function LibraryCard({ card, collections, api, i
         aria-describedby="card-select-hint"
         // Each click adds or removes the card from the selection; a double click opens the editor.
         onClick={event => {
+          if (readOnly) { api().open(card.id); return; }
           const { connectingFrom } = api();
           if (connectingFrom) { if (connectingFrom !== card.id) api().connect(connectingFrom, card.id); return; }
           // Finishing a text selection inside the card isn't a click on the card.
@@ -112,10 +117,10 @@ export const LibraryCard = memo(function LibraryCard({ card, collections, api, i
         </div>
       </article>
       {card.type === 'image' && <ScreenshotNote note={card.note} />}
-      <CardCollectionControls cardId={card.id} collections={collections}
+      {!readOnly && <CardCollectionControls cardId={card.id} collections={collections}
         onToggle={(collectionId, included) => api().changeMembership(card.id, collectionId, included)}
         onCreate={name => api().createCollection(card.id, name)}
-        onOpenCollection={collectionId => api().openCollection(collectionId)} />
+        onOpenCollection={collectionId => api().openCollection(collectionId)} />}
     </div>
   );
 });

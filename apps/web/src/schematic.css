@@ -700,13 +700,15 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 
 /* ---- Profile photo cropper: a square you drag and zoom; the circle shows the avatar. ---- */
 .app-settings.avatar-cropper { position: relative; display: grid; justify-items: center; gap: 16px; padding: 30px 34px; width: min(100%, 360px); }
+.app-settings.avatar-cropper.is-wide { width: min(100%, 420px); }
+.avatar-crop-frame:not(.is-round)::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 1px #fff6; pointer-events: none; }
 .avatar-cropper > .close-detail { position: absolute; top: 18px; right: 18px; }
 .avatar-cropper h2 { justify-self: start; margin: 0; font-size: 1.3rem; font-weight: 500; letter-spacing: -.03em; }
 .avatar-crop-frame { position: relative; overflow: hidden; max-width: 100%; border: 1px solid var(--sx-line-soft); background: #0006; cursor: grab; touch-action: none; user-select: none; }
 .avatar-crop-frame:active { cursor: grabbing; }
 .avatar-crop-frame:focus-visible { outline: 2px solid var(--ui-accent-primary); outline-offset: 2px; }
 .avatar-crop-frame img { position: absolute; left: 50%; top: 50%; max-width: none; pointer-events: none; }
-.avatar-crop-frame::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px #000a; pointer-events: none; }
+.avatar-crop-frame.is-round::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px #000a; pointer-events: none; }
 .avatar-crop-zoom { display: flex; align-items: center; gap: 12px; width: 100%; color: var(--ui-text-muted); font: 700 10px/1 var(--sx-label); letter-spacing: .12em; text-transform: uppercase; }
 .avatar-crop-zoom input { flex: 1; accent-color: var(--ui-accent-primary); }
 .avatar-crop-actions { display: flex; justify-content: flex-end; gap: 10px; width: 100%; }
@@ -719,3 +721,96 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 /* Every card keeps a (no-op) transform, so the selected lean only changes its value. Switching from
    `none` made each card a new containing block and re-laid-out the whole grid (~60 ms with 300 cards). */
 .library-card .card-tile { transform: skewX(0deg) !important; }
+
+/* ---- Account & sync (Settings) and share links ---- */
+.account-sync { display: grid; gap: 10px; margin: 8px 0 18px; }
+.account-sync-note { margin: 0; color: var(--ui-text-muted); font-size: .82rem; line-height: 1.5; }
+.account-sync-who { display: grid; gap: 2px; margin: 0; }
+.account-sync-who span { color: var(--ui-text-muted); font-size: .78rem; }
+.account-sync-state { margin: 0; font: 700 10px/1 var(--sx-label); letter-spacing: .12em; text-transform: uppercase; color: var(--ui-text-muted); }
+.account-sync-state.is-synced { color: var(--sx-tri); }
+.account-sync-state.is-syncing { color: var(--ui-accent-primary); }
+.account-sync-state.is-error, .account-sync-state.is-expired { color: var(--sx-cir); }
+.account-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-sync-actions button, .account-sync-link { padding: 7px 12px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: transparent; color: var(--ui-text); font: inherit; font-size: .82rem; cursor: pointer; }
+.account-sync-link { justify-self: start; border-color: transparent; color: var(--ui-text-muted); padding-inline: 0; }
+.account-sync-actions button:disabled { opacity: .5; cursor: default; }
+.google-sign-in { justify-self: start; display: inline-flex; align-items: center; gap: 10px; padding: 9px 16px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: var(--ui-surface); color: var(--ui-text); font: 600 .86rem/1 inherit; cursor: pointer; }
+.google-sign-in svg { width: 18px; height: 18px; }
+.google-sign-in:hover:not(:disabled) { border-color: var(--ui-accent-primary); }
+.google-sign-in:disabled { opacity: .6; cursor: default; }
+.app-settings.share-dialog { display: grid; gap: 14px; width: min(100%, 460px); }
+.app-settings.share-dialog h2 { margin: 0 40px 0 0; font-size: 1.3rem; }
+.share-link-row { display: flex; gap: 8px; }
+.share-link-row input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: transparent; color: var(--ui-text); font: .8rem/1.2 ui-monospace, monospace; }
+.share-link-row button { padding: 8px 14px; border: 1px solid var(--ui-accent-primary); border-radius: 4px; background: transparent; color: var(--ui-accent-primary); font: inherit; cursor: pointer; white-space: nowrap; }
+
+/* ---- Shared collection page (duckler.pages.dev/s/…): the collection page's own layout, read-only ---- */
+.shared-shelf { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.shared-owner { display: flex; align-items: center; gap: 10px; }
+.shared-owner .profile-avatar { display: grid; place-items: center; width: 32px; height: 32px; overflow: hidden; border: 1px solid var(--sx-line-soft); background: color-mix(in srgb, var(--profile-accent, var(--ui-accent-primary)) 30%, transparent); font: 700 13px/1 var(--sx-label); }
+.shared-owner .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.shared-owner > span:nth-child(2) { display: grid; gap: 2px; }
+.shared-owner small { color: var(--ui-text-muted); font: 700 9px/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; }
+.shared-owner strong { font-size: .9rem; font-weight: 600; }
+.shared-badge { padding: 4px 8px; border: 1px solid var(--sx-line-soft); border-radius: 3px; color: var(--ui-text-muted); font: 700 9px/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; }
+.shared-sort select { padding: 6px 8px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: transparent; color: var(--ui-text); font: inherit; font-size: .8rem; }
+.shared-status { max-width: 520px; margin: 14vh auto 0; text-align: center; color: var(--ui-text-muted); }
+.shared-status a { color: var(--ui-accent-primary); }
+.app-settings.shared-card-detail { display: grid; gap: 12px; width: min(100%, 720px); }
+.app-settings.shared-card-detail img { width: 100%; max-height: 62vh; object-fit: contain; border-radius: 4px; background: #0006; }
+.app-settings.shared-card-detail h2 { margin: 0 44px 0 0; font-size: 1.3rem; }
+.shared-detail-note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.shared-card-detail .bookmark-domain { overflow-wrap: anywhere; color: var(--ui-accent-primary); }
+
+/* ---- Collection description (under the name) and the Share button ---- */
+.collection-description { display: block; max-width: 640px; margin: 6px 0 0; padding: 2px 0; border: 0; border-bottom: 1px dashed transparent; background: none; color: var(--ui-text-muted); font: inherit; font-size: .9rem; line-height: 1.5; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+button.collection-description:hover, button.collection-description:focus-visible { border-bottom-color: color-mix(in srgb, var(--ui-accent-primary) 60%, transparent); color: var(--ui-text); }
+.collection-description.is-empty { font-style: italic; opacity: .7; }
+.collection-description.is-static { cursor: default; }
+.collection-description.is-editing { display: grid; gap: 4px; width: min(640px, 100%); cursor: auto; }
+.collection-description textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--ui-accent-primary); border-radius: 4px; background: transparent; color: var(--ui-text); font: inherit; font-size: .9rem; resize: vertical; }
+.collection-description small { color: var(--ui-text-muted); font-size: .7rem; }
+.collection-share { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: transparent; color: var(--ui-text); font: inherit; font-size: .8rem; text-decoration: none; cursor: pointer; }
+/* On a collection page Share is only its icon (the shared page keeps a labelled "Save a copy"). */
+.toolbar-actions > button.collection-share:not(:has(span)) { padding: 4px; border: 0; color: var(--ui-text-muted); }
+.toolbar-actions > button.collection-share:not(:has(span)):hover { color: var(--ui-text); }
+.toolbar-actions > button.collection-share.is-shared:not(:has(span)) { color: var(--sx-tri); }
+.toolbar-actions > button.collection-share .ui-icon { width: 18px; height: 18px; }
+.collection-share .ui-icon { width: 15px; height: 15px; }
+.collection-share:hover { border-color: var(--ui-accent-primary); }
+.collection-share.is-shared { border-color: color-mix(in srgb, var(--sx-tri) 60%, transparent); color: var(--sx-tri); }
+.collection-share:disabled { opacity: .6; }
+
+/* ---- Profile card image: translucent behind the name; a small picture button adds or changes it. ---- */
+.profile-identity-card { position: relative; isolation: isolate; }
+.profile-identity-card.has-cover::after { content: ''; position: absolute; inset: 0; z-index: -2; border-radius: inherit; background: var(--profile-cover) center / cover no-repeat; opacity: .32; pointer-events: none; }
+html:not([data-theme='dark']) .profile-identity-card.has-cover::after { opacity: .42; }
+.profile-card-image { position: absolute; top: 10px; right: 10px; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--sx-line-soft); border-radius: 50%; background: color-mix(in srgb, var(--ui-surface) 70%, transparent); color: var(--ui-text-muted); cursor: pointer; opacity: .7; transition: opacity var(--sx-fast) linear, color var(--sx-fast) linear; }
+.profile-card-image .ui-icon { width: 15px; height: 15px; }
+.profile-identity-card:hover .profile-card-image, .profile-card-image:focus-within { opacity: 1; color: var(--ui-text); }
+.collection-description-row { margin: -4px 0 14px; }
+.shared-heading { display: flex; align-items: center; gap: 10px; }
+
+/* ---- Profile picture before a collection's name; hovering it shows the profile card ---- */
+.profile-hover { position: relative; display: inline-flex; flex: none; align-self: center; }
+.profile-hover .collection-owner-avatar { display: grid; place-items: center; width: 30px; height: 30px; overflow: hidden; border-radius: 50%; border: 1px solid var(--sx-line-soft); background: color-mix(in srgb, var(--profile-accent, var(--ui-accent-primary)) 35%, transparent); font: 700 12px/1 var(--sx-label); cursor: default; outline: none; }
+.profile-hover .collection-owner-avatar:focus-visible { box-shadow: 0 0 0 2px var(--ui-accent-primary); }
+.profile-hover .collection-owner-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-hover-card { position: absolute; top: calc(100% + 8px); left: 0; z-index: 1000; width: 260px; animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both; }
+.profile-hover-card .profile-identity-card { box-shadow: 4px 4px 0 color-mix(in srgb, #000 35%, transparent); background-color: var(--sx-panel); }
+.profile-hover-card .profile-bio { margin: 4px 0 0; font-size: .8rem; color: var(--ui-text-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.shared-heading { display: flex; align-items: center; gap: 8px; }
+.collection-shelf:has(> .collection-owner-row) { flex-wrap: wrap; }
+.collection-owner-row { flex: 1 0 100%; display: flex; align-items: center; margin-bottom: 2px; }
+.profile-hover { gap: 8px; align-items: center; }
+.profile-hover-name { display: inline-flex; align-items: baseline; gap: 6px; color: var(--ui-text); font-size: .9rem; font-weight: 600; }
+.profile-hover-name small { color: var(--ui-text-muted); font-size: .76rem; font-weight: 500; }
+.profile-hover .shared-badge { margin-left: 4px; }
+.page-header .collection-owner-row { margin-bottom: 8px; }
+.app-settings.incoming-shares { display: grid; gap: 12px; width: min(100%, 480px); }
+.app-settings.incoming-shares h2 { margin: 0 44px 0 0; font-size: 1.25rem; }
+.incoming-share-list { display: grid; gap: 8px; max-height: 40vh; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.incoming-share-list li { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--sx-line-soft); border-radius: 4px; overflow-wrap: anywhere; }
+.incoming-share-list small { color: var(--ui-accent-primary); font-size: .76rem; }
+.incoming-share-list span { color: var(--ui-text-muted); font-size: .8rem; }

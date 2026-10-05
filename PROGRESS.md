@@ -16,9 +16,11 @@ Last updated: 2026-10-05 (evening)
 
 **Next:** owner-directed polish and simplification. Candidates: headed check of Alt+Shift+D in real Chrome; trim remaining extension complexity (per-tab drafts, frames listener); review other over-built areas with the owner before cutting.
 
-**Missing / open:** Google client ID for the deployed build (`VITE_GOOGLE_CLIENT_ID`; Drive sign-in shows a developer note) · Drive content sync (M5b) · conflict UI · self-hosted OCR language data (optional) · "All cards" canvas · Codex-side items from its own log.
+**Accounts, Drive sync and share links (Oct 6, decision 0002):** built and tested against a fake Drive; switched on once the owner follows `docs/google-setup.md` (sets `VITE_GOOGLE_CLIENT_ID` + `VITE_GOOGLE_API_KEY` in Cloudflare, then redeploys). Then: the real-account check in that doc.
 
-**Parked by the owner (do not start; remind occasionally):** account-based extension linking · multi-user libraries, collaboration and sharing by link — see `docs/completion-roadmap.md` "Deferred by the owner".
+**Missing / open:** owner's Google setup (above) · canvases are not synced yet · "keep both" conflict screen · self-hosted OCR language data (optional) · "All cards" canvas · Codex-side items from its own log.
+
+**Parked by the owner (do not start; remind occasionally):** account-based extension linking · collaboration (editing together) — see `docs/completion-roadmap.md` "Deferred by the owner".
 
 
 ## Now (this session)

@@ -308,3 +308,27 @@ Speed (measured on the production build with 300 cards, 100 of them images):
 - Open: opening a 300-card view is still ~350 ms of layout (batching would need a different grid; deferred).
 - Drive: cards are not uploaded to Drive yet (connect only creates the root folder), so deleting a card has nothing to remove there. Content sync (M5b) must propagate deletions when it is built.
 
+## Google accounts, Drive sync and encrypted share links — October 6, 2026
+
+The owner asked for Drive integration, account creation and sharing collections by link, and chose Google sign-in plus view-only links (decision 0002). Open-source references were checked first: Vync (Drive sync with LWW and tombstones, MIT) and Excalidraw's encrypted share links (MIT).
+- `packages/shared/src/driveSync.ts`: the Drive library format and a pure merge. Records go to the newest `updatedAt`; deletions win over older versions, with tombstones kept 180 days. Images are uploaded and downloaded separately, and a missing local image never deletes Drive's copy.
+- `packages/shared/src/share.ts`: view-only snapshot (strict schema; raster data URLs and http(s) links only) plus AES-GCM encryption with the key in the #fragment.
+- `apps/web/src/lib/driveSync.ts`: Drive REST client, `Duckler/` root found by appProperties, `syncLibrary` (redone when `library.json` changed meanwhile; uploaded images reused on retry), `editLibraryFile`.
+- `apps/web/src/lib/shareLinks.ts`: share, stop sharing (deletes the file), refresh after sync, open with a browser API key. `lib/googleDrive.ts`: token-only GIS sign-in, kept in memory.
+- `lib/useDriveSync.ts`: account, status and share state. Sync runs after sign-in, 3 s after local changes (Dexie hooks, silent for sync's own writes and for thumbnails), on focus and every 5 min.
+- `cardDb`: `tombstones` table (v6), recorded by `removeCard`/`deleteCollection`; `applySyncedLibrary`.
+- UI: Settings → Account & sync; account menu entry; collection right-click → Share link… (`ShareDialog`); `/s/<id>#<key>` → `SharedCollectionPage` (viewer's theme, "Save a copy to my library").
+- Removed the placeholder Drive state (`syncState`, fake card ids, root-folder debug panel).
+- Tests: merge rules, snapshot safety, encryption, and an in-memory fake Drive (two devices, image transfer, deletion propagation, newer-wins, concurrent `library.json` write, share/open/stop).
+- Needs the owner: Google Cloud project, OAuth client and API key in Cloudflare (`docs/google-setup.md`). Real-account testing can't be done by an agent.
+
+## Profile card image, distinct sounds, real-looking shared pages, security pass — October 6, 2026 (later)
+- Profile card image: the cropper handles wide images (`CARD_IMAGE_SHAPE`, 900×360 JPEG, ~26 KB from 3.6 MB). Shown translucent behind the card (`.has-cover::after`); a picture button sits on both profile cards.
+- Sounds: each cue now has its own synthesized tone layer (waveform + pitch movement) on top of the shared PS2 samples, plus a new `share` cue. A test asserts no two cues are identical.
+- Refresh keeps the current page (the initial view comes from `history.state`).
+- Collection description: click to edit under the name (Ctrl+Enter / blur saves, Esc cancels); included in share links.
+- Collection header: the owner row (picture + name; the profile card appears on hover, `ProfileHover`) sits above the name row; Share is icon-only.
+- Shared page rebuilt from the collection page's own parts: search, Back, header, media filters, sort, `LibraryCard` (new `readOnly` mode), sounds, a read-only card view, and the sharer row with their hover card (snapshot carries the owner's name, photo, tag, bio, colour and card image, all validated).
+- Security pass: see `docs/security-review-2026-10-06.md`. Shared-in items need confirmation; the dead `?ducklerCapture=` import was removed; AI routes return 404; dev server is localhost-only; HSTS added.
+- Note: the uncommitted `wrangler.jsonc` edit (`VITE_GOOGLE_*` under `vars`) must not be committed. Those values belong in the Pages build variables.
+

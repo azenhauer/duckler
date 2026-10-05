@@ -1,237 +1,69 @@
-const driveScope = 'https://www.googleapis.com/auth/drive.file';
-let activeDriveAccessToken: string | null = null;
+/**
+ * Google sign-in for Drive sync (Google Identity Services token flow). Duckler has no accounts of its
+ * own: the Google account is the account. The access token stays in memory only (never stored); after
+ * a reload, signing in again takes one click. Scope drive.file: Duckler only sees files it created.
+ */
+import { googleConfig, loadGoogleConfig } from './googleConfig';
 
-export type GoogleDriveAuthResult = {
-  connected: boolean;
-  email?: string;
-  rootFolderId?: string;
-  message: string;
-};
+const driveScope = 'https://www.googleapis.com/auth/drive.file';
+
+type TokenResponse = { error?: string; error_description?: string; access_token?: string; expires_in?: number };
+type TokenClient = { requestAccessToken: (options?: { prompt?: string; login_hint?: string }) => void };
 
 declare global {
   interface Window {
     google?: {
       accounts?: {
         oauth2?: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            callback: (response: { error?: string; error_description?: string; access_token?: string }) => void;
-          }) => {
-            requestAccessToken: (options?: { prompt?: string }) => void;
-          };
+          initTokenClient: (config: { client_id: string; scope: string; callback: (response: TokenResponse) => void; error_callback?: (error: { type?: string; message?: string }) => void }) => TokenClient;
+          revoke?: (token: string, done?: () => void) => void;
         };
       };
     };
   }
 }
 
-export const getGoogleDriveClientId = (): string => (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '').trim();
-
+export const getGoogleDriveClientId = (): string => googleConfig().clientId;
 export const isGoogleDriveConfigured = (): boolean => getGoogleDriveClientId().length > 0;
-
-export const getActiveDriveAccessToken = (): string | null => activeDriveAccessToken;
-
-type DriveListResponse = {
-  files?: Array<{
-    id?: string;
-    name?: string;
-    properties?: Record<string, string | undefined>;
-  }>;
-};
-
-type DriveFileResponse = {
-  id?: string;
-  name?: string;
-  properties?: Record<string, string | undefined>;
-};
-
-const fetchDriveJson = async <T>(url: string, accessToken: string, init: RequestInit = {}): Promise<T> => {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Drive request failed with status ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-};
-
-export const findOrCreateLibraryRoot = async (libraryName = 'Visual Library'): Promise<string | null> => {
-  const accessToken = getActiveDriveAccessToken();
-  if (!accessToken) {
-    return null;
-  }
-
-  const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${libraryName.replace(/'/g, "\\'")}' and trashed = false and 'root' in parents`;
-  const listPayload = await fetchDriveJson<DriveListResponse>(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&spaces=drive&fields=files(id,name,properties)&pageSize=10`,
-    accessToken,
-  );
-
-  const existingFolder = listPayload.files?.[0];
-  if (existingFolder?.id) {
-    return existingFolder.id;
-  }
-
-  const createdFolder = await fetchDriveJson<DriveFileResponse>('https://www.googleapis.com/drive/v3/files', accessToken, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=UTF-8',
-    },
-    body: JSON.stringify({
-      name: libraryName,
-      mimeType: 'application/vnd.google-apps.folder',
-      properties: {
-        appIdentifier: 'visual-library',
-        libraryName,
-      },
-    }),
-  });
-
-  return createdFolder.id ?? null;
-};
 
 export const loadGoogleIdentityScript = (): Promise<void> =>
   new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') {
-      resolve();
-      return;
+    if (typeof window === 'undefined' || window.google?.accounts?.oauth2) { resolve(); return; }
+    const existing = document.querySelector<HTMLScriptElement>('script[data-google-drive-script="true"]');
+    const script = existing ?? document.createElement('script');
+    script.addEventListener('load', () => resolve(), { once: true });
+    script.addEventListener('error', () => reject(new Error('Google sign-in could not load. Check your connection and try again.')), { once: true });
+    if (!existing) {
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.dataset.googleDriveScript = 'true';
+      document.head.appendChild(script);
     }
-
-    if (window.google?.accounts?.oauth2) {
-      resolve();
-      return;
-    }
-
-    const existingScript = document.querySelector<HTMLScriptElement>('script[data-google-drive-script="true"]');
-    if (existingScript) {
-      existingScript.addEventListener('load', () => resolve(), { once: true });
-      existingScript.addEventListener('error', () => reject(new Error('Google Identity Services failed to load.')), {
-        once: true,
-      });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.dataset.googleDriveScript = 'true';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Google Identity Services failed to load.'));
-    document.head.appendChild(script);
   });
 
-export const connectGoogleDrive = async (): Promise<GoogleDriveAuthResult> => {
-  const clientId = getGoogleDriveClientId();
+export type GoogleToken = { accessToken: string; expiresAt: number };
 
-  if (!clientId) {
-    return {
-      connected: false,
-      message: 'Google Drive is not configured. Set VITE_GOOGLE_CLIENT_ID before enabling the real Drive integration.',
-    };
-  }
-
-  try {
-    await loadGoogleIdentityScript();
-  } catch (error) {
-    return {
-      connected: false,
-      message: error instanceof Error ? error.message : 'Google Identity Services could not be loaded.',
-    };
-  }
-
+/** Opens Google's sign-in (must run from a click). `hint` pre-selects a known account. */
+export async function requestGoogleToken(hint?: string, firstTime = false): Promise<GoogleToken> {
+  const clientId = getGoogleDriveClientId() || (await loadGoogleConfig()).clientId;
+  if (!clientId) throw new Error('Google sign-in is not set up on this site yet.');
+  await loadGoogleIdentityScript();
   const oauth2 = window.google?.accounts?.oauth2;
-  if (!oauth2) {
-    return {
-      connected: false,
-      message: 'Google Identity Services is not available in this browser session.',
-    };
-  }
-
-  return new Promise((resolve) => {
-    const tokenClient = oauth2.initTokenClient({
+  if (!oauth2) throw new Error('Google sign-in is not available in this browser.');
+  return new Promise((resolve, reject) => {
+    const client = oauth2.initTokenClient({
       client_id: clientId,
       scope: driveScope,
-      callback: async (response) => {
-        if (response.error) {
-          resolve({
-            connected: false,
-            message: response.error_description ?? 'Google Drive authorization was denied.',
-          });
-          return;
-        }
-
-        const accessToken = response.access_token;
-        if (!accessToken) {
-          resolve({
-            connected: false,
-            message: 'Google Drive did not return an access token.',
-          });
-          return;
-        }
-
-        activeDriveAccessToken = accessToken;
-
-        try {
-          const profileResponse = await fetch(
-            'https://www.googleapis.com/drive/v3/about?fields=user(permissionId,displayName,emailAddress)',
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-              },
-            },
-          );
-
-          if (!profileResponse.ok) {
-            throw new Error(`Drive profile lookup failed: ${profileResponse.status}`);
-          }
-
-          const profile = await profileResponse.json();
-          const email = profile.user?.emailAddress ?? 'Google Drive account';
-
-          try {
-            const libraryRootId = await findOrCreateLibraryRoot();
-            resolve({
-              connected: true,
-              email,
-              rootFolderId: libraryRootId ?? 'pending-root-discovery',
-              message: libraryRootId
-                ? 'Google Drive authorization succeeded and the app root folder is available.'
-                : 'Google Drive authorization succeeded. Root discovery is ready, but no root folder was created yet.',
-            });
-          } catch {
-            resolve({
-              connected: true,
-              email,
-              rootFolderId: 'pending-root-discovery',
-              message: 'Google Drive authorization succeeded, but the library root could not be discovered or created yet.',
-            });
-          }
-        } catch {
-          resolve({
-            connected: false,
-            message: 'Google Drive token was acquired, but the Drive metadata request failed.',
-          });
-        }
+      callback: response => {
+        if (response.error || !response.access_token) { reject(new Error(response.error_description || 'Google sign-in was cancelled.')); return; }
+        resolve({ accessToken: response.access_token, expiresAt: Date.now() + (response.expires_in ?? 3600) * 1000 });
       },
+      error_callback: error => reject(new Error(error.type === 'popup_closed' ? 'Google sign-in was closed before finishing.' : error.message || 'Google sign-in failed.')),
     });
-
-    tokenClient.requestAccessToken({ prompt: 'consent' });
+    client.requestAccessToken({ prompt: firstTime ? 'consent' : '', ...(hint ? { login_hint: hint } : {}) });
   });
-};
+}
 
-export const disconnectGoogleDrive = (): GoogleDriveAuthResult => {
-  activeDriveAccessToken = null;
-  return {
-    connected: false,
-    message: 'Google Drive disconnected. The local library remains available offline.',
-  };
-};
+export function revokeGoogleToken(token: string) {
+  try { window.google?.accounts?.oauth2?.revoke?.(token); } catch { /* signing out locally is enough */ }
+}

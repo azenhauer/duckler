@@ -450,18 +450,32 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
   });
 
-  it('imports Cloudflare share fallback data into IndexedDB and cleans the URL', async () => {
+  it('asks before adding a shared item from the address, and cleans the URL', async () => {
     const shareId = `pages-share-${Date.now()}`;
     window.history.replaceState({}, '', `/?sharedId=${shareId}&sharedTitle=Cloudflare+share&sharedText=Saved+from+share&sharedUrl=https%3A%2F%2Fexample.com%2Fshare`);
 
     render(<App />);
 
-    expect(await screen.findByRole('article', { name: 'Open Cloudflare share' })).toBeInTheDocument();
+    // Any website can link to this address, so nothing is saved until the person agrees.
+    const dialog = await screen.findByRole('dialog', { name: 'Add shared items' });
+    expect(window.location.search).toBe('');
+    expect(within(dialog).getByText('Cloudflare share')).toBeInTheDocument();
+    expect((await readCards()).some((card) => card.id === shareId)).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add to library' }));
     await waitFor(async () => {
       expect((await readCards()).some((card) => card.id === shareId && card.sourceUrl === 'https://example.com/share')).toBe(true);
     });
-    expect(window.location.search).toBe('');
-    expect(screen.getByRole('status')).toHaveTextContent('Imported 1 shared item');
+    expect(await screen.findByRole('article', { name: 'Open Cloudflare share' })).toBeInTheDocument();
+  });
+
+  it('discards a shared item when the person says no', async () => {
+    const shareId = `pages-share-no-${Date.now()}`;
+    window.history.replaceState({}, '', `/?sharedId=${shareId}&sharedTitle=Unwanted&sharedUrl=https%3A%2F%2Fexample.com%2Fspam`);
+    render(<App />);
+    const dialog = await screen.findByRole('dialog', { name: 'Add shared items' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add shared items' })).not.toBeInTheDocument());
+    expect((await readCards()).some((card) => card.id === shareId)).toBe(false);
   });
 
   it('creates a card from the writing-focused composer', async () => {

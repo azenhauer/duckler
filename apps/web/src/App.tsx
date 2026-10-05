@@ -6,7 +6,6 @@ import {
   createCardFromInput,
   createCaptureReceipt,
   createCollectionFromInput,
-  createDriveStatus,
   createObsidianExportArchive,
   dedupeQueueItems,
   enqueueCapture,
@@ -35,13 +34,12 @@ import {
   saveCollection,
   setCardCollectionMembership,
 } from './lib/cardDb';
-import {
-  connectGoogleDrive,
-  disconnectGoogleDrive,
-  isGoogleDriveConfigured,
-} from './lib/googleDrive';
+import { useDriveSync } from './lib/useDriveSync';
+import { AccountSync, syncLabel } from './components/AccountSync';
+import { ShareDialog } from './components/ShareDialog';
+import { CollectionDescription } from './components/CollectionDescription';
+import { ProfileHover } from './components/ProfileHover';
 import { clearPendingShareItems, readPendingShareItems, type PendingShareItem } from './lib/shareQueue';
-import { parseExtensionCapture, type ExtensionCapture } from './lib/extensionCapture';
 import { parseShareTargetFallback } from './lib/shareTargetFallback';
 import { startExtensionBridge, getExtensionConnection } from './lib/extensionBridge';
 import { ExtensionSetup } from './components/ExtensionSetup';
@@ -63,7 +61,7 @@ import { BButton } from './components/BButton';
 import { ColorPopover } from './components/ColorPicker';
 import { TileMenu } from './components/TileMenu';
 import { inferImageTitle } from './lib/imageName';
-import { AvatarCropper } from './components/AvatarCropper';
+import { AvatarCropper, CARD_IMAGE_SHAPE } from './components/AvatarCropper';
 import { EditableName } from './components/EditableName';
 import { LibraryCard, type CardApi } from './components/LibraryCard';
 
@@ -79,7 +77,6 @@ const emptyCollectionForm = {
   name: '',
 };
 
-const processedExtensionCaptureIds = new Set<string>();
 
 type TypeFilter = 'all' | 'image' | 'link' | 'text';
 type SortMode = 'newest' | 'oldest';
@@ -116,16 +113,27 @@ const createCardFromSharedItem = (item: PendingShareItem): CardRecord | null => 
   });
 };
 
+// Profile images are only used when they are raster data URLs (what the cropper saves), never other text.
+const SAFE_IMAGE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const storedImage = (key: string) => { try { const value = localStorage.getItem(key) ?? ''; return SAFE_IMAGE.test(value) ? value : ''; } catch { return ''; } };
+
+// A reload keeps the page you were on: the browser keeps each history entry's state across reloads.
+const startEntry = (): NavigationEntry => {
+  try { const entry = window.history.state?.duckler; if (isNavigationEntry(entry)) return entry; } catch { /* no history */ }
+  return { view: 'home', collectionId: null, canvasId: null };
+};
+
 function App() {
   const sounds = useUiSounds();
+  const [initialEntry] = useState(startEntry);
   const [cards, setCards] = useState<CardRecord[]>([]);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(initialEntry.collectionId);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
-  const [activeView, setActiveView] = useState<ActiveView>('home');
-  const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<ActiveView>(initialEntry.view);
+  const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(initialEntry.canvasId);
   const navigationHistory = useRef<NavigationEntry[]>([]);
   const searchReturn = useRef(false);
   useEffect(() => {
@@ -152,9 +160,13 @@ function App() {
   // Clicking the identity card itself (not the photo) opens its colour picker.
   const [profileColorAnchor, setProfileColorAnchor] = useState<HTMLElement | null>(null);
   useEffect(() => { colorPickerOpenRef.current = !!profileColorAnchor; }, [profileColorAnchor]);
-  const pickCardColor = (event: React.MouseEvent<HTMLElement>) => { if (!(event.target as HTMLElement).closest('.avatar-upload')) setProfileColorAnchor(event.currentTarget); };
-  const [profilePhoto, setProfilePhoto] = useState(() => localStorage.getItem('visual-library-profile-photo') ?? '');
+  const pickCardColor = (event: React.MouseEvent<HTMLElement>) => { if (!(event.target as HTMLElement).closest('.avatar-upload, .profile-card-image')) setProfileColorAnchor(event.currentTarget); };
+  const [profilePhoto, setProfilePhoto] = useState(() => storedImage('visual-library-profile-photo'));
   const [profileCropFile, setProfileCropFile] = useState<File | null>(null);
+  // The profile card's own image, shown translucent behind the name (cropped and compressed like the photo).
+  const [profileCover, setProfileCover] = useState(() => storedImage('duckler-profile-cover'));
+  const [profileCoverFile, setProfileCoverFile] = useState<File | null>(null);
+  const coverStyle = profileCover ? { '--profile-cover': `url("${profileCover}")` } as CSSProperties : undefined;
   const [profileCardColor, setProfileCardColor] = useState(() => {
     const saved = localStorage.getItem('duckler-profile-card-color');
     return saved && /^#[\da-f]{6}$/i.test(saved) ? saved : '#779b91';
@@ -170,11 +182,14 @@ function App() {
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [captureQueue, setCaptureQueue] = useState<CaptureQueueItem[]>([]);
   const [captureReceipts, setCaptureReceipts] = useState<Record<string, string>>({});
-  const [syncState, setSyncState] = useState<string[]>(['card-1', 'card-2']);
-  const [driveConnected, setDriveConnected] = useState(false);
-  const [driveAccount, setDriveAccount] = useState<string>('Not connected');
-  const [driveRootId, setDriveRootId] = useState<string>('not-discovered');
-  const [driveMessage, setDriveMessage] = useState<string>('Local library is ready. Drive integration requires Google auth and a configured OAuth client.');
+  // Google account + Drive sync. When Drive brings changes, the library re-reads them.
+  const drive = useDriveSync((nextCards, nextCollections) => { setCards(nextCards); setCollections(nextCollections); }, () => ({
+    name: displayProfileName === 'My Library' ? '' : displayProfileName, photo: profilePhoto || undefined,
+    tag: displayProfileTag || undefined, bio: profileBio || undefined, color: profileCardColor, cover: profileCover || undefined,
+  }));
+  const [shareCollectionId, setShareCollectionId] = useState<string | null>(null);
+  // Shared-in items waiting for the person to accept them (see the share import on load).
+  const [incomingShares, setIncomingShares] = useState<CardRecord[]>([]);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
@@ -288,7 +303,9 @@ function App() {
     setIsOffline(!navigator.onLine);
     void measureStorage();
 
-    const extensionCaptureParam = new URLSearchParams(window.location.search).get('ducklerCapture');
+    // Items shared into Duckler (the OS share sheet, or its no-service-worker fallback in the address)
+    // are never saved on their own: any website can submit that form or link to that address, so the
+    // person confirms them first. The address parameters are removed straight away.
     let fallbackShare: PendingShareItem | null = null;
     let fallbackShareError: string | null = null;
     try {
@@ -296,125 +313,26 @@ function App() {
     } catch (error) {
       fallbackShareError = error instanceof Error ? error.message : 'The shared item could not be read.';
     }
-    const clearFallbackShareParams = () => {
+    if (['sharedId', 'sharedTitle', 'sharedText', 'sharedUrl'].some(key => new URLSearchParams(window.location.search).has(key))) {
       const cleanUrl = new URL(window.location.href);
       ['sharedId', 'sharedTitle', 'sharedText', 'sharedUrl'].forEach((key) => cleanUrl.searchParams.delete(key));
       window.history.replaceState(window.history.state, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
-    };
-    if (fallbackShareError && new URLSearchParams(window.location.search).has('sharedId')) {
-      clearFallbackShareParams();
-    }
-    let extensionCapture: ExtensionCapture | null = null;
-    let extensionCaptureError: string | null = null;
-    try {
-      extensionCapture = parseExtensionCapture(extensionCaptureParam);
-    } catch (error) {
-      extensionCaptureError = error instanceof Error ? error.message : 'Could not read the extension capture.';
-    }
-    let duplicateMountCapture = false;
-    if (extensionCapture && processedExtensionCaptureIds.has(extensionCapture.id)) {
-      extensionCapture = null;
-      duplicateMountCapture = true;
-    } else if (extensionCapture) {
-      processedExtensionCaptureIds.add(extensionCapture.id);
-    }
-    const clearExtensionCaptureParam = () => {
-      if (!extensionCaptureParam) return;
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('ducklerCapture');
-      window.history.replaceState(window.history.state, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
-    };
-    if (extensionCaptureParam && !extensionCapture && !duplicateMountCapture) {
-      clearExtensionCaptureParam();
     }
 
     void Promise.all([readCards(), readCollections(), readPendingShareItems()]).then(async ([storedCards, storedCollections, pendingSharedItems]) => {
-      const activeCollections = storedCollections;
       const shareItems = fallbackShare ? [...pendingSharedItems, fallbackShare] : pendingSharedItems;
-      const importedCards = shareItems
+      const incoming = shareItems
         .map((item) => createCardFromSharedItem(item))
         .filter((card): card is CardRecord => Boolean(card))
         .filter((card, index, all) => all.findIndex((candidate) => candidate.id === card.id) === index)
         .filter((card) => !storedCards.some((stored) => stored.id === card.id));
-      await Promise.all(importedCards.map(saveCard));
-      if (fallbackShare) clearFallbackShareParams();
-
-      let extensionCard: CardRecord | null = null;
-      if (extensionCapture && !storedCards.some((card) => card.id === extensionCapture?.id)) {
-        const cardType = extensionCapture.kind === 'image' || extensionCapture.kind === 'screenshot'
-          ? 'image'
-          : extensionCapture.kind === 'text'
-            ? 'text'
-            : 'bookmark';
-        const created = createCardFromInput({
-          id: extensionCapture.id,
-          type: cardType,
-          title: extensionCapture.title,
-          sourceUrl: extensionCapture.sourceUrl,
-          note: extensionCapture.note,
-          tags: extensionCapture.tags,
-          dataUrl: cardType === 'image' ? extensionCapture.payload : undefined,
-        });
-        extensionCard = extensionCapture.createdAt
-          ? { ...created, createdAt: extensionCapture.createdAt }
-          : created;
-        await saveCard(extensionCard);
-        if (extensionCapture.collectionName) {
-          const matchingCollection = activeCollections.find(
-            (collection) => collection.name.toLowerCase() === extensionCapture?.collectionName?.toLowerCase(),
-          );
-          if (matchingCollection) {
-            const updatedCollection = {
-              ...matchingCollection,
-              cardIds: Array.from(new Set([...matchingCollection.cardIds, extensionCard.id])),
-              updatedAt: new Date().toISOString(),
-            };
-            await saveCollection(updatedCollection);
-            activeCollections.splice(
-              activeCollections.findIndex((collection) => collection.id === updatedCollection.id),
-              1,
-              updatedCollection,
-            );
-          } else {
-            const createdCollection = createCollectionFromInput({
-              name: extensionCapture.collectionName,
-              cardIds: [extensionCard.id],
-            });
-            await saveCollection(createdCollection);
-            activeCollections.unshift(createdCollection);
-          }
-        }
-      }
-      if (extensionCapture && !extensionCard) {
-        clearExtensionCaptureParam();
-      } else if (extensionCard) {
-        clearExtensionCaptureParam();
-      }
-      setCollections(activeCollections);
-
-      if (importedCards.length > 0) {
-        const mergedCards = [...importedCards, ...(extensionCard ? [extensionCard] : []), ...storedCards];
-        setCards(mergedCards);
-        setSelectedId(importedCards[0]?.id ?? null);
-        setActiveView('library');
-        notify({ title: 'Imported', detail: `Imported ${importedCards.length} shared item${importedCards.length === 1 ? '' : 's'} from your share sheet.` });
-        void clearPendingShareItems();
-      } else {
-        if (extensionCard) {
-          const card = extensionCard;
-          setCards((current) => [card, ...current.filter((existing) => existing.id !== card.id)]);
-          setSelectedId(card.id);
-          setActiveView('library');
-          notify({ title: 'Captured', detail: `Added “${card.title}” from Duckler Capture.` });
-        } else if (extensionCaptureError || fallbackShareError) {
-          notify({ kind: 'error', title: 'Capture failed', detail: extensionCaptureError ?? fallbackShareError ?? undefined });
-        } else {
-          setCards(storedCards);
-        }
-      }
-
+      if (pendingSharedItems.length) void clearPendingShareItems();
+      setCollections(storedCollections);
+      setCards(storedCards);
+      if (incoming.length) setIncomingShares(incoming);
+      else if (fallbackShareError) notify({ kind: 'error', title: 'Share failed', detail: fallbackShareError });
     }).catch((error: unknown) => {
-      notify({ kind: 'error', title: 'Capture not saved', detail: error instanceof Error ? `Extension capture could not be saved: ${error.message}` : 'Extension capture could not be saved.' });
+      notify({ kind: 'error', title: 'Library not loaded', detail: error instanceof Error ? error.message : 'The library could not be read.' });
     }).finally(() => setLibraryLoaded(true));
 
     const storedQueue = localStorage.getItem('visual-library-capture-queue');
@@ -955,27 +873,6 @@ function App() {
     const receipt = createCaptureReceipt(itemId, 'saved');
     setCaptureQueue((current) => acknowledgeCapture(current, itemId, 'received'));
     setCaptureReceipts((current) => ({ ...current, [receipt.id]: itemId }));
-    setSyncState((current) => {
-      const next = [...current, itemId];
-      return Array.from(new Set(next)).sort();
-    });
-  };
-
-  const handleDriveConnection = async () => {
-    if (driveConnected) {
-      const disconnected = disconnectGoogleDrive();
-      setDriveConnected(false);
-      setDriveAccount('Not connected');
-      setDriveRootId('not-discovered');
-      setDriveMessage(disconnected.message);
-      return;
-    }
-
-    const result = await connectGoogleDrive();
-    setDriveConnected(result.connected);
-    setDriveAccount(result.email ?? 'Not connected');
-    setDriveRootId(result.rootFolderId ?? 'not-discovered');
-    setDriveMessage(result.message);
   };
 
   const handleInstall = async () => {
@@ -1004,6 +901,15 @@ function App() {
     setCollections(current => current.map(item => item.id === collectionId ? next : item));
     try { await saveCollection(next); notify({ title: 'Renamed', detail: `“${target.name}” → “${name}”` }); }
     catch { setCollections(current => current.map(item => item.id === collectionId ? target : item)); notify({ kind: 'error', title: "Couldn't rename collection" }); }
+  };
+
+  const handleDescribeCollection = async (collectionId: string, description: string) => {
+    const target = collectionsRef.current.find(item => item.id === collectionId);
+    if (!target || description === target.description) return;
+    const next = { ...target, description, updatedAt: new Date().toISOString() };
+    setCollections(current => current.map(item => item.id === collectionId ? next : item));
+    try { await saveCollection(next); window.dispatchEvent(new CustomEvent(UI_SOUND_EVENT, { detail: 'save' })); }
+    catch { setCollections(current => current.map(item => item.id === collectionId ? target : item)); notify({ kind: 'error', title: "Couldn't save the description" }); }
   };
 
   // Every canvas belongs to a collection, so an empty canvas is a new, empty collection opened on its board.
@@ -1282,8 +1188,7 @@ function App() {
     setQuickAddPosition({ left: Math.max(12, Math.min(point.x, window.innerWidth - 250)), top: Math.max(12, Math.min(point.y, window.innerHeight - 220)) });
   };
 
-  const syncStatus = createDriveStatus(driveConnected, syncState);
-  const sidebarStatusText = syncStatus.connected ? `Connected • ${syncState.length} update${syncState.length === 1 ? '' : 's'}` : 'Local only';
+  const sidebarStatusText = syncLabel(drive);
 
   const triggerDownload = (blob: Blob, fileName: string) => {
     const url = URL.createObjectURL(blob);
@@ -1361,7 +1266,7 @@ function App() {
     notify(persisted ? { title: 'Storage persisted', detail: 'Local storage persistence enabled for this device.' } : { kind: 'info', title: 'Not granted', detail: 'Storage persistence was not granted by the browser.' });
   };
 
-  const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const pickProfileImage = (event: React.ChangeEvent<HTMLInputElement>, open: (file: File) => void) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -1376,10 +1281,23 @@ function App() {
       setProfileMessage('That image is too large to open (30 MB at most).');
       return;
     }
-    // Any size is fine: the cropper saves a small square.
+    // Any size is fine: the cropper saves a small, compressed copy.
     setProfileMessage('');
     setAccountMenuOpen(false);
-    setProfileCropFile(file);
+    open(file);
+  };
+  const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => pickProfileImage(event, setProfileCropFile);
+  const handleProfileCoverChange = (event: React.ChangeEvent<HTMLInputElement>) => pickProfileImage(event, setProfileCoverFile);
+  const saveProfileCover = (dataUrl: string) => {
+    setProfileCoverFile(null);
+    try { localStorage.setItem('duckler-profile-cover', dataUrl); }
+    catch { setProfileError(true); setProfileMessage('The card image could not be saved in this browser.'); return; }
+    setProfileCover(dataUrl); setProfileError(false); setProfileMessage('Card image saved on this device.');
+    notify({ title: 'Card image updated', detail: 'Saved on this device.' });
+  };
+  const removeProfileCover = () => {
+    try { localStorage.removeItem('duckler-profile-cover'); } catch { /* nothing stored */ }
+    setProfileCover(''); setProfileMessage('Card image removed.'); setProfileError(false);
   };
 
   const saveCroppedProfilePhoto = (dataUrl: string) => {
@@ -1493,12 +1411,12 @@ function App() {
 
         <div className="sidebar-footer">
           <div className="sync-status" aria-live="polite">
-            <span className={`sync-dot ${syncStatus.connected ? 'online' : 'offline'}`} aria-hidden="true" />
+            <span className={`sync-dot ${drive.signedIn ? 'online' : 'offline'}`} aria-hidden="true" />
             <span>{sidebarStatusText}</span>
           </div>
-          <button type="button" className="settings-button secondary-settings" onClick={() => void handleDriveConnection()}>
+          <button type="button" className="settings-button secondary-settings" onClick={() => setSettingsOpen(true)}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5a2.5 2.5 0 0 1 2.4 1.7l.4 1.3 1.4.4a2.5 2.5 0 0 1 1.5 3.2l-.6 1.4 1 1.2a2.5 2.5 0 0 1 0 3.2l-1 1.2.6 1.4a2.5 2.5 0 0 1-1.5 3.2l-1.4.4-.4 1.3A2.5 2.5 0 0 1 12 22.5a2.5 2.5 0 0 1-2.4-1.7l-.4-1.3-1.4-.4a2.5 2.5 0 0 1-1.5-3.2l.6-1.4-1-1.2a2.5 2.5 0 0 1 0-3.2l1-1.2-.6-1.4a2.5 2.5 0 0 1 1.5-3.2l1.4-.4.4-1.3A2.5 2.5 0 0 1 12 1.5Zm0 4.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" fill="currentColor"/></svg>
-            <span>{driveConnected ? 'Settings' : 'Sync settings'}</span>
+            <span>Sync settings</span>
           </button>
           {storageEstimate && (
             <div className="storage-status" aria-live="polite">
@@ -1547,11 +1465,13 @@ function App() {
               : activeView === 'collections'
                 ? 'Collections'
                 : selectedCanvas?.name ?? 'Canvases'}
-          </h1></div>
+          </h1>
+          </div>
         </header>}
 
         {showLibraryFilters && (
           <div className="collection-shelf">
+            {selectedCollection && <div className="collection-owner-row"><ProfileHover showName label={`${displayProfileName}'s profile`} profile={{ name: displayProfileName, photo: profilePhoto || undefined, tag: displayProfileTag || undefined, bio: profileBio || undefined, color: profileCardColor, cover: profileCover || undefined }} /></div>}
             <div className="collection-menu" ref={collectionMenuRef} {...collectionHover}>
               <button type="button" className="collection-menu-trigger" aria-label="Choose collection" aria-expanded={collectionMenuOpen} aria-haspopup="true" onClick={() => setCollectionMenuOpen((open) => !open)}>
                 <span>{selectedCollection?.name ?? 'All notes'}</span>
@@ -1592,6 +1512,8 @@ function App() {
             </div>
             <div className="toolbar">
               <div className="toolbar-actions">
+                {selectedCollection && <button type="button" className={`collection-share ${drive.shares.has(selectedCollection.id) ? 'is-shared' : ''}`} aria-label={`Share ${selectedCollection.name}`} title={drive.shares.has(selectedCollection.id) ? 'Shared · manage link' : 'Share a view-only link'}
+                  onClick={() => setShareCollectionId(selectedCollection.id)}><InterfaceIcon name="link" /></button>}
                 <details className="library-options" {...detailsHover}>
               <summary aria-label="View options" title="View options"><InterfaceIcon name="more" /></summary>
               <div className="library-options-popover">
@@ -1629,6 +1551,11 @@ function App() {
             </div>
           </div>
         )}
+
+        {showLibraryFilters && selectedCollection && <div className="collection-description-row">
+          <CollectionDescription key={selectedCollection.id} value={selectedCollection.description}
+            onSave={description => void handleDescribeCollection(selectedCollection.id, description)} />
+        </div>}
 
         {showLibraryFilters && (
           <nav className="media-filter-row" aria-label="Filter by media type">
@@ -1894,24 +1821,6 @@ function App() {
             onTileContextMenu={(event, id) => openTileMenu(event, id, 'canvas')} renamingId={renamingCollectionId}
             onRename={(id, name) => void handleRenameCollection(id, name)} onCancelRename={() => setRenamingCollectionId(null)} />)}
 
-        <div className="sync-panel panel">
-          <h2>Sync status</h2>
-          <p>{syncStatus.connected ? 'Google Drive connected' : 'Google Drive offline'}</p>
-          <p>Account: {driveAccount}</p>
-          <p>Root folder: {driveRootId}</p>
-          <p>Status: {driveMessage}</p>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void handleDriveConnection()}
-            disabled={!isGoogleDriveConfigured() && !driveConnected}
-          >
-            {driveConnected ? 'Disconnect Drive' : 'Connect Drive'}
-          </button>
-          {!isGoogleDriveConfigured() && !driveConnected && (
-            <p className="status-banner">Set VITE_GOOGLE_CLIENT_ID to enable the real Google Drive OAuth flow. Until then, this app stays in local-only mode.</p>
-          )}
-        </div>
 
         {trashedCards.length > 0 && (
           <div className="trash-panel">
@@ -1950,9 +1859,34 @@ function App() {
         return <TileMenu title={target.name} position={tileMenu} onClose={() => setTileMenu(null)} items={[
           { label: tileMenu.kind === 'canvas' ? 'Open canvas' : 'Open collection', onSelect: () => navigateTo(tileMenu.kind === 'canvas' ? 'canvas' : 'library', target.id) },
           { label: 'Rename', onSelect: () => setRenamingCollectionId(target.id) },
+          { label: drive.shares.has(target.id) ? 'Shared · link…' : 'Share link…', onSelect: () => setShareCollectionId(target.id) },
           ...(tileMenu.kind === 'canvas' ? [{ label: 'Open as collection', onSelect: () => navigateTo('library', target.id) }] : [{ label: 'Open its canvas', onSelect: () => navigateTo('canvas', target.id) }]),
           ...(tileMenu.kind === 'collection' ? [{ label: 'Delete', danger: true, onSelect: () => { if (window.confirm(`Delete “${target.name}”? Its cards are kept.`)) void handleDeleteCollection(target.id); } }] : []),
         ]} />;
+      })()}
+      {incomingShares.length > 0 && <Dialog label="Add shared items" className="app-settings incoming-shares" onClose={() => setIncomingShares([])}>
+        <BButton className="close-detail" label="Discard shared items" onClick={() => setIncomingShares([])} />
+        <h2>Add {incomingShares.length === 1 ? 'this shared item' : `${incomingShares.length} shared items`}?</h2>
+        <p className="account-sync-note">Something was shared to Duckler. Check it before it goes into your library.</p>
+        <ul className="incoming-share-list">
+          {incomingShares.map(card => <li key={card.id}><strong>{card.title}</strong>{card.sourceUrl && <small>{(() => { try { return new URL(card.sourceUrl).hostname; } catch { return ''; } })()}</small>}{card.note && card.note !== card.title && <span>{card.note.slice(0, 200)}</span>}</li>)}
+        </ul>
+        <div className="avatar-crop-actions">
+          <button type="button" onClick={() => setIncomingShares([])}>Discard</button>
+          <button type="button" className="primary" onClick={() => {
+            const accepted = incomingShares;
+            setIncomingShares([]);
+            void Promise.all(accepted.map(saveCard)).then(() => {
+              setCards(current => [...accepted, ...current.filter(card => !accepted.some(item => item.id === card.id))]);
+              navigateTo('library');
+              notify({ title: 'Added', detail: `${accepted.length} shared item${accepted.length === 1 ? '' : 's'} added to your library.` });
+            }).catch(() => notify({ kind: 'error', title: 'Not saved', detail: 'The shared items could not be saved.' }));
+          }}>Add to library</button>
+        </div>
+      </Dialog>}
+      {shareCollectionId && (() => {
+        const target = collections.find(item => item.id === shareCollectionId);
+        return target ? <ShareDialog collection={target} drive={drive} onClose={() => setShareCollectionId(null)} /> : null;
       })()}
       <Notifications />
       <div className="bottom-scrim" aria-hidden="true" />
@@ -1968,7 +1902,11 @@ function App() {
         </button>
         <div className="profile-menu" ref={profileMenuRef}>
           {accountMenuOpen && <div ref={accountMenuExitRef} className="profile-popover account-menu" role="dialog" aria-label="Account menu" {...accountHover}>
-            <div className="profile-identity-card is-clickable" role="group" aria-label="Profile card" title="Click to change the card colour" onClick={pickCardColor}>
+            <div className={`profile-identity-card is-clickable ${profileCover ? 'has-cover' : ''}`} style={coverStyle} role="group" aria-label="Profile card" title="Click to change the card colour" onClick={pickCardColor}>
+              <label className="profile-card-image" title={profileCover ? 'Change card image' : 'Add a card image'} onClick={event => event.stopPropagation()}>
+                <InterfaceIcon name="image" />
+                <input className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" aria-label={profileCover ? 'Change profile card image' : 'Add profile card image'} onChange={handleProfileCoverChange} />
+              </label>
               <label className="profile-avatar profile-avatar-large avatar-upload" title={profilePhoto ? 'Change photo' : 'Add photo'}>
                 {profilePhoto ? <img src={profilePhoto} alt="" /> : <span aria-hidden="true">{displayProfileName.slice(0, 1).toUpperCase()}</span>}
                 <span className="avatar-upload-hint" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /></svg></span>
@@ -1996,7 +1934,9 @@ function App() {
             <div className="account-menu-actions">
               <button type="button" onClick={() => { setAccountMenuOpen(false); setSettingsOpen(true); }}>All settings</button>
               <button type="button" onClick={() => { setAccountMenuOpen(false); setExtensionSetupOpen(true); }}>Browser extension{extensionStatus && <small>{extensionStatus}</small>}</button>
-              {isGoogleDriveConfigured() && <button type="button" onClick={() => { setAccountMenuOpen(false); void handleDriveConnection(); }}>{driveConnected ? 'Disconnect Google Drive' : 'Connect Google Drive'}</button>}
+              {drive.configured && (drive.signedIn
+                ? <button type="button" onClick={() => { setAccountMenuOpen(false); setSettingsOpen(true); }}>Google account<small>{syncLabel(drive)}</small></button>
+                : <button type="button" onClick={() => { setAccountMenuOpen(false); void drive.signIn().catch(() => setSettingsOpen(true)); }}>{drive.account ? 'Resume sync' : 'Sign in with Google'}<small>{drive.account?.email ?? 'Sync with your Drive'}</small></button>)}
             </div>
           </div>}
           <button ref={accountTriggerRef} type="button" className={`profile-trigger ${accountMenuOpen ? 'active' : ''}`} aria-label="Account menu" title="Account" aria-haspopup="dialog" aria-expanded={accountMenuOpen} {...accountHover} 
@@ -2008,7 +1948,11 @@ function App() {
       {settingsOpen && <Dialog label="Settings" className="app-settings" onClose={() => setSettingsOpen(false)}>
         <BButton className="close-detail" label="Close settings" onClick={() => setSettingsOpen(false)} />
         <h2>Settings</h2>
-        <div className="settings-profile-card profile-identity-card is-clickable" title="Click to change the card colour" onClick={pickCardColor}>
+        <div className={`settings-profile-card profile-identity-card is-clickable ${profileCover ? 'has-cover' : ''}`} style={coverStyle} title="Click to change the card colour" onClick={pickCardColor}>
+          <label className="profile-card-image" title={profileCover ? 'Change card image' : 'Add a card image'} onClick={event => event.stopPropagation()}>
+                <InterfaceIcon name="image" />
+                <input className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" aria-label={profileCover ? 'Change profile card image' : 'Add profile card image'} onChange={handleProfileCoverChange} />
+              </label>
           <label className="profile-avatar settings-avatar avatar-upload" title={profilePhoto ? 'Change photo' : 'Add photo'}>
             {profilePhoto ? <img src={profilePhoto} alt="" /> : <span aria-hidden="true">{displayProfileName.slice(0, 1).toUpperCase()}</span>}
             <span className="avatar-upload-hint" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /></svg></span>
@@ -2051,6 +1995,7 @@ function App() {
                     Remove photo
                   </button>
                 )}
+                {profileCover && <button type="button" className="profile-remove-photo" onClick={removeProfileCover}>Remove card image</button>}
               </div>
               {profileMessage && <p className={`profile-message ${profileError ? 'error' : ''}`} role={profileError ? 'alert' : 'status'}>{profileMessage}</p>}
 
@@ -2059,11 +2004,8 @@ function App() {
             <span className="settings-row-icon" aria-hidden="true"><InterfaceIcon name="browser" /></span><span><strong>Browser extension</strong>{extensionStatus && <small>{extensionStatus}</small>}</span><InterfaceIcon name="link" />
           </button>
         </div>
-        <div className="settings-section">
-          <button type="button" className="settings-nav-row" onClick={() => void handleDriveConnection()} disabled={!isGoogleDriveConfigured() && !driveConnected} title={isGoogleDriveConfigured() || driveConnected ? 'Google Drive settings' : 'Configure VITE_GOOGLE_CLIENT_ID to enable Drive'}>
-            {driveConnected ? 'Drive settings' : 'Connect Drive'}
-          </button>
-        </div>
+        <h3>Account &amp; sync</h3>
+        <AccountSync drive={drive} />
           <details className="workspace-menu" {...detailsHover}>
             <summary aria-label="Storage settings" title="Storage settings">•••</summary>
             {storageEstimate && (
@@ -2090,6 +2032,7 @@ function App() {
       {extensionSetupOpen && <ExtensionSetup connectionStatus={extensionStatus} onClose={() => setExtensionSetupOpen(false)} onConnected={() => { setExtensionStatus('Connecting extension…'); setExtensionConnectionVersion(current => current + 1); }} />}
       {/* After Settings, so the cropper is the topmost dialog. */}
       {profileCropFile && <AvatarCropper file={profileCropFile} onCancel={() => setProfileCropFile(null)} onSave={saveCroppedProfilePhoto} />}
+      {profileCoverFile && <AvatarCropper file={profileCoverFile} shape={CARD_IMAGE_SHAPE} onCancel={() => setProfileCoverFile(null)} onSave={saveProfileCover} />}
       {undoMembership && <div className="membership-undo" role="status"><span>Removed from {undoMembership.collection.name}</span><button type="button" disabled={membershipSaving} onClick={() => void handleUndoMembership()}>Undo</button></div>}
       {quickAddPosition && <div ref={quickAddRef} className="quick-add-context" role="menu" aria-label="Quick add" tabIndex={-1} style={{ left: quickAddPosition.left, top: quickAddPosition.top }}
         onPointerEnter={() => { quickAddHovered.current = true; scheduleQuickAddClose(null); }}

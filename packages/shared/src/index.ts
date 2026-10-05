@@ -3,6 +3,8 @@ export * from './canvas';
 export * from './backup';
 export * from './obsidianCanvas';
 export * from './autofill';
+export * from './driveSync';
+export * from './share';
 
 export const cardTypeSchema = z.enum(['bookmark', 'text', 'image', 'pdf']);
 

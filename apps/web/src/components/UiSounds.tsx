@@ -17,50 +17,62 @@ export type Cue =
   | `hover-${Exclude<Zone, 'menu'>}` | `click-${Exclude<Zone, 'menu'>}`
   | 'notify' | 'notify-error' | 'notify-info' | 'select' | 'deselect' | 'gear' | 'hover-controls'
   | 'canvas-draw' | 'canvas-highlight' | 'canvas-shape' | 'canvas-text' | 'canvas-erase' | 'canvas-connect'
-  | 'canvas-place' | 'canvas-drop' | 'canvas-rotate' | 'canvas-undo' | 'canvas-redo' | 'canvas-tool';
-/** A pitched sample, or a short band-passed noise burst (pencil/eraser texture) from one shared buffer. */
-type Layer = { file: keyof typeof files; at: number; rate: number; gain: number } | { noise: true; at: number; duration: number; frequency: number; q: number; gain: number };
+  | 'canvas-place' | 'canvas-drop' | 'canvas-rotate' | 'canvas-undo' | 'canvas-redo' | 'canvas-tool' | 'share';
+/**
+ * A pitched sample, a short band-passed noise burst (pencil/eraser texture), or a synthesized tone.
+ * The two pack samples keep every cue in one family; each cue's own tone (waveform + pitch movement)
+ * makes it recognisable on its own: rising = forward/open/on, falling = back/off/undo, square = select,
+ * sine chords = success, low buzz = error.
+ */
+type Wave = 'sine' | 'triangle' | 'square' | 'sawtooth';
+type Layer =
+  | { file: keyof typeof files; at: number; rate: number; gain: number }
+  | { noise: true; at: number; duration: number; frequency: number; q: number; gain: number }
+  | { tone: Wave; at: number; duration: number; from: number; to: number; gain: number };
 const s = (file: keyof typeof files, rate: number, gain = 1, at = 0): Layer => ({ file, at, rate, gain });
 const n = (frequency: number, duration: number, gain: number, at = 0, q = 1.2): Layer => ({ noise: true, at, duration, frequency, q, gain });
-// Variety comes from pitching and layering the pack's two samples, so every cue stays in the same family.
-const cueLayers: Record<Cue, Layer[]> = {
+const t = (tone: Wave, from: number, to: number, duration: number, gain: number, at = 0): Layer => ({ tone, at, duration, from, to, gain });
+export const cueLayers: Record<Cue, Layer[]> = {
+  // Menus
   hover: [s('hover', 1)],
-  'hover-card': [s('hover', .84, .7)],
-  'hover-settings': [s('hover', 1.22, .55)],
-  'hover-canvas': [s('hover', 1.5, .4)],
   click: [s('click', 1)],
-  'click-card': [s('click', .9, .9), s('hover', .7, .35, .03)],
-  'click-settings': [s('click', 1.2, .75)],
-  'click-canvas': [s('click', 1.38, .65)],
-  open: [s('click', 1.12, .9), s('hover', 1.45, .55, .045)],
-  back: [s('click', .78, .9)],
-  'toggle-on': [s('hover', 1.38)],
-  'toggle-off': [s('hover', .84)],
-  save: [s('click', 1, .9), s('click', 1.26, .8, .09)],
-  delete: [s('click', .62), s('hover', .7, .5, .07)],
-  capture: [s('click', 1.18), s('hover', 1.32, .7, .085)],
-  // Achievement chime: three rising steps.
-  notify: [s('hover', 1.5, .8), s('click', 1.26, .6, .07), s('hover', 2, .45, .14)],
-  'notify-info': [s('hover', 1.3, .7), s('hover', 1.62, .45, .08)],
-  'notify-error': [s('click', .7, .9), s('click', .58, .7, .1)],
-  'canvas-tool': [s('hover', 1.42, .55)],
-  // Selecting a card: a bright two-step tick up; deselecting steps back down.
-  select: [s('click', 1.62, .7), s('hover', 2.05, .35, .035)],
-  deselect: [s('hover', 1.25, .45), s('click', .95, .5, .03)],
-  // Settings controls (gear, speaker): a low mechanical turn with a short click on top.
-  gear: [s('hover', .62, .7), s('click', 1.5, .45, .06), s('hover', .8, .3, .11)],
-  'hover-controls': [s('hover', .74, .5)],
-  'canvas-draw': [n(3200, .11, .5), s('hover', 1.7, .25, .02)],
-  'canvas-highlight': [n(1800, .16, .45, 0, .8), s('hover', 1.2, .22, .03)],
-  'canvas-shape': [s('click', 1.42, .7), s('hover', 1.1, .4, .04)],
-  'canvas-text': [s('click', 1.55, .6), s('click', 1.8, .4, .05)],
-  'canvas-erase': [n(1200, .09, .55, 0, .9), s('click', .7, .5, .03)],
-  'canvas-connect': [s('hover', 1.2, .6), s('hover', 1.6, .55, .06)],
-  'canvas-place': [s('click', 1.05, .8), s('hover', 1.35, .35, .05)],
-  'canvas-drop': [s('click', .85, .55)],
-  'canvas-rotate': [s('hover', 1.4, .45), s('hover', 1.55, .3, .04)],
-  'canvas-undo': [s('hover', 1.1, .6), s('hover', .88, .45, .05)],
-  'canvas-redo': [s('hover', .88, .45), s('hover', 1.1, .6, .05)],
+  open: [s('click', 1.12, .7), t('triangle', 440, 880, .09, .35, .01)],
+  back: [s('click', .78, .7), t('triangle', 660, 330, .1, .35, .01)],
+  // Cards
+  'hover-card': [s('hover', .84, .6), t('sine', 220, 230, .06, .18)],
+  'click-card': [s('click', .9, .8), t('sine', 330, 330, .05, .2, .02)],
+  select: [t('square', 880, 880, .04, .12), t('square', 1320, 1320, .05, .12, .045)],
+  deselect: [t('square', 1320, 1320, .04, .1), t('square', 880, 880, .05, .1, .045)],
+  save: [s('click', 1, .5), t('sine', 523, 523, .08, .3, .02), t('sine', 659, 659, .08, .3, .08), t('sine', 784, 784, .14, .3, .14)],
+  delete: [s('click', .62, .6), t('sawtooth', 300, 90, .2, .16), n(400, .12, .25, .02, .7)],
+  // Settings
+  gear: [n(2400, .02, .4), n(2400, .02, .35, .05), n(2400, .02, .3, .1), t('sine', 140, 120, .16, .25)],
+  'hover-controls': [t('sine', 1200, 1250, .04, .18)],
+  'hover-settings': [s('hover', 1.22, .45), t('triangle', 1600, 1600, .03, .12)],
+  'click-settings': [s('click', 1.2, .6), t('square', 600, 600, .03, .08, .01)],
+  'toggle-on': [t('sine', 600, 900, .08, .3)],
+  'toggle-off': [t('sine', 900, 600, .08, .3)],
+  // Canvas
+  'hover-canvas': [s('hover', 1.5, .35)],
+  'click-canvas': [s('click', 1.38, .55), t('triangle', 1100, 1100, .03, .1)],
+  'canvas-tool': [t('triangle', 1000, 1000, .05, .2), t('triangle', 1500, 1500, .06, .16, .03)],
+  'canvas-draw': [n(3200, .11, .5), s('hover', 1.7, .2, .02)],
+  'canvas-highlight': [n(1800, .16, .45, 0, .8), t('sine', 700, 760, .1, .1, .02)],
+  'canvas-shape': [t('square', 500, 500, .05, .1), t('sine', 750, 750, .08, .22, .02)],
+  'canvas-text': [s('click', 1.55, .5), s('click', 1.8, .35, .05), t('sine', 1400, 1400, .03, .12, .09)],
+  'canvas-erase': [n(1200, .09, .55, 0, .9), s('click', .7, .45, .03)],
+  'canvas-connect': [t('sine', 400, 1200, .14, .28)],
+  'canvas-place': [s('click', 1.05, .7), t('sine', 520, 520, .06, .18, .03)],
+  'canvas-drop': [s('click', .85, .5), t('sine', 260, 200, .08, .2)],
+  'canvas-rotate': [t('triangle', 700, 820, .07, .2), t('triangle', 820, 940, .07, .16, .06)],
+  'canvas-undo': [t('triangle', 900, 900, .05, .22), t('triangle', 600, 600, .07, .22, .06)],
+  'canvas-redo': [t('triangle', 600, 600, .05, .22), t('triangle', 900, 900, .07, .22, .06)],
+  // Alerts
+  notify: [t('sine', 784, 784, .1, .26), t('sine', 988, 988, .1, .26, .07), t('sine', 1319, 1319, .22, .24, .14)],
+  'notify-info': [t('sine', 880, 880, .09, .22), t('sine', 1175, 1175, .16, .2, .08)],
+  'notify-error': [t('square', 220, 220, .12, .1), t('square', 196, 196, .18, .1, .13)],
+  capture: [n(5000, .05, .5, 0, .6), s('click', 1.18, .7, .03), t('sine', 1760, 1760, .08, .14, .07)],
+  share: [t('sine', 660, 990, .1, .24), t('sine', 1320, 1320, .16, .2, .09)],
 };
 
 function load(): Preferences {
@@ -142,11 +154,23 @@ export function useUiSounds() {
       if ((!preferences.enabled && !force) || (preferences.muted.includes(kind) && !force) || !preferences.volume || document.hidden || !audio || audio.state !== 'running') return;
       stop(); const request = sequence.current;
       const layers = cueLayers[kind];
-      void Promise.all(layers.map(layer => 'noise' in layer ? null : load(audio, layer.file))).then(decoded => {
+      void Promise.all(layers.map(layer => 'file' in layer ? load(audio, layer.file) : null)).then(decoded => {
         if (request !== sequence.current || document.hidden || audio.state !== 'running') return;
         const start = audio.currentTime;
         layers.forEach((layer, index) => {
           const source = audio.createBufferSource(), gain = audio.createGain();
+          if ('tone' in layer) {
+            const oscillator = audio.createOscillator();
+            const at = start + layer.at, peak = preferences.volume * layer.gain;
+            oscillator.type = layer.tone;
+            oscillator.frequency.setValueAtTime(layer.from, at);
+            if (layer.to !== layer.from) oscillator.frequency.exponentialRampToValueAtTime(layer.to, at + layer.duration);
+            gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(peak, at + .005); gain.gain.exponentialRampToValueAtTime(.0001, at + layer.duration);
+            oscillator.connect(gain); gain.connect(audio.destination);
+            track(oscillator, [oscillator, gain]);
+            oscillator.start(at); oscillator.stop(at + layer.duration + .02);
+            return;
+          }
           if ('noise' in layer) {
             const filter = audio.createBiquadFilter();
             filter.type = 'bandpass'; filter.frequency.value = layer.frequency; filter.Q.value = layer.q;
@@ -210,7 +234,7 @@ export function useUiSounds() {
     { label: 'Cards', cues: ['hover-card', 'select', 'deselect', 'save', 'delete'] },
     { label: 'Settings', cues: ['gear', 'hover-controls', 'hover-settings', 'click-settings', 'toggle-on', 'toggle-off'] },
     { label: 'Canvas', cues: ['canvas-tool', 'canvas-draw', 'canvas-shape', 'canvas-erase', 'canvas-connect', 'canvas-undo'] },
-    { label: 'Alerts', cues: ['notify', 'notify-info', 'notify-error', 'capture'] },
+    { label: 'Alerts', cues: ['notify', 'notify-info', 'notify-error', 'capture', 'share'] },
   ];
   const settings = <section aria-label="UI sounds" className="settings-appearance sound-settings">
     <h3>PS2 UI sounds</h3>

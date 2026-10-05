@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent, CanvasBackup, LibraryBackup } from '@visual-library/shared';
+import type { Tombstone, CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent, CanvasBackup, LibraryBackup } from '@visual-library/shared';
 import { buildSearchText, createCardFromInput, createCollectionFromInput, createCanvasPlacement, canvasCardPosition, validateCanvasContent } from '@visual-library/shared';
 import { type Capture, hashBytes, MAX_CAPTURE_BYTES, validateCapture } from '../../../../packages/shared/src/captureProtocol';
 
@@ -14,6 +14,8 @@ class VisualLibraryDatabase extends Dexie {
   canvasPlacements!: Table<CanvasPlacement, string>;
   canvasElements!: Table<CanvasElement, string>;
   canvasConnectors!: Table<CanvasConnector, string>;
+  /** Deleted cards and collections, so Drive sync can delete them on other devices too. */
+  tombstones!: Table<Tombstone, string>;
 
   constructor() {
     super('visual-library-db');
@@ -24,10 +26,46 @@ class VisualLibraryDatabase extends Dexie {
     this.version(3).stores({ extensionReceipts: '&id, libraryId' });
     this.version(4).stores({ canvasLayouts: '&collectionId, updatedAt' });
     this.version(5).stores({ canvases: '&id, updatedAt', canvasPlacements: '&id, canvasId, cardId', canvasElements: '&id, canvasId, anchorPlacementId', canvasConnectors: '&id, canvasId, sourceId, targetId' });
+    this.version(6).stores({ tombstones: '&id, deletedAt' });
   }
 }
 
 export const cardDb = new VisualLibraryDatabase();
+
+/** Fired (debounced) after the library changes on this device, so Drive sync can follow. Sync's own writes are silent. */
+export const LIBRARY_CHANGED_EVENT = 'duckler-library-changed';
+let applyingSync = false;
+let changeTimer: ReturnType<typeof setTimeout> | undefined;
+const changed = () => {
+  if (applyingSync || typeof window === 'undefined') return;
+  clearTimeout(changeTimer);
+  changeTimer = setTimeout(() => window.dispatchEvent(new Event(LIBRARY_CHANGED_EVENT)), 50);
+};
+for (const table of [cardDb.cards, cardDb.collections]) {
+  table.hook('creating', () => { changed(); });
+  table.hook('updating', (modifications: object) => {
+    // Saving a grid thumbnail is a local cache, not an edit.
+    if (!(Object.keys(modifications).length === 1 && 'thumb' in modifications)) changed();
+  });
+  table.hook('deleting', () => { changed(); });
+}
+
+export const readTombstones = () => cardDb.tombstones.toArray();
+
+/** Applies a Drive merge on this device in one transaction, without counting it as a local change. */
+export async function applySyncedLibrary(change: { cardsToWrite: CardRecord[]; collectionsToWrite: CollectionRecord[]; cardsToDelete: string[]; collectionsToDelete: string[]; tombstones: Tombstone[] }) {
+  applyingSync = true;
+  try {
+    await cardDb.transaction('rw', cardDb.cards, cardDb.collections, cardDb.tombstones, async () => {
+      if (change.cardsToDelete.length) await cardDb.cards.bulkDelete(change.cardsToDelete);
+      if (change.collectionsToDelete.length) await cardDb.collections.bulkDelete(change.collectionsToDelete);
+      if (change.cardsToWrite.length) await cardDb.cards.bulkPut(change.cardsToWrite.map(card => ({ ...card, searchText: buildSearchText(card) })));
+      if (change.collectionsToWrite.length) await cardDb.collections.bulkPut(change.collectionsToWrite);
+      await cardDb.tombstones.clear();
+      if (change.tombstones.length) await cardDb.tombstones.bulkPut(change.tombstones);
+    });
+  } finally { applyingSync = false; }
+}
 
 // searchText is rebuilt on read so search always matches the card as stored (e.g. OCR that no longer
 // matches its image, or restored/synced cards that carried a stale or empty index).
@@ -70,8 +108,9 @@ export const saveCollection = async (collection: CollectionRecord): Promise<Coll
 };
 
 export const removeCard = async (cardId: string): Promise<void> => {
-  await cardDb.transaction('rw', cardDb.cards, cardDb.collections, async () => {
+  await cardDb.transaction('rw', cardDb.cards, cardDb.collections, cardDb.tombstones, async () => {
     await cardDb.cards.delete(cardId);
+    await cardDb.tombstones.put({ id: cardId, kind: 'card', deletedAt: new Date().toISOString() });
     await cardDb.collections.filter(collection => collection.cardIds.includes(cardId)).modify(collection => {
       collection.cardIds = collection.cardIds.filter(id => id !== cardId);
       collection.updatedAt = new Date().toISOString();
@@ -98,8 +137,9 @@ export const setCardCollectionMembership = async (
 });
 
 export const deleteCollection = async (collectionId: string): Promise<void> => {
-  await cardDb.transaction('rw', [cardDb.collections, cardDb.canvasLayouts, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors], async () => {
+  await cardDb.transaction('rw', [cardDb.collections, cardDb.tombstones, cardDb.canvasLayouts, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors], async () => {
     await cardDb.collections.delete(collectionId);
+    await cardDb.tombstones.put({ id: collectionId, kind: 'collection', deletedAt: new Date().toISOString() });
     // Sub-collections of a deleted parent move to the top level; their cards are untouched.
     const children = await cardDb.collections.filter(item => item.parentId === collectionId).toArray();
     if (children.length) await cardDb.collections.bulkPut(children.map(({ parentId: _parent, ...rest }) => ({ ...rest, updatedAt: new Date().toISOString() })));
