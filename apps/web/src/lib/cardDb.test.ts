@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCardFromInput, createCollectionFromInput, createCanvasPlacement, defaultCanvasStyle, mediaFingerprint, type CanvasContent } from '@visual-library/shared';
-import { cardDb, readCards, saveCardWithCollections, saveCanvasLayout, readCanvasLayout, deleteCollection, setCardCollectionMembership, readCanvasState, commitCanvasContent } from './cardDb';
+import { cardDb, linkCards, readCards, saveCardWithCollections, saveCanvasLayout, readCanvasLayout, deleteCollection, setCardCollectionMembership, readCanvasState, commitCanvasContent } from './cardDb';
 
 beforeEach(async () => { await cardDb.cards.clear(); await cardDb.collections.clear(); await cardDb.canvasLayouts.clear(); await cardDb.canvases.clear(); await cardDb.canvasPlacements.clear(); await cardDb.canvasElements.clear(); await cardDb.canvasConnectors.clear(); });
 
@@ -165,6 +165,21 @@ describe('canvas commands and legacy upgrade', () => {
     expect(await cardDb.canvasPlacements.toArray()).toEqual([]);
     expect(await cardDb.cards.get(card.id)).toEqual(card);
     await expect(readCanvasState('board')).rejects.toThrow('Collection no longer exists');
+  });
+});
+
+describe('connected cards', () => {
+  it('connects and disconnects two cards on both sides, without duplicates', async () => {
+    const a = createCardFromInput({ type: 'text', title: 'A' }), b = createCardFromInput({ type: 'image', title: 'B' });
+    await cardDb.cards.bulkPut([a, b]);
+    await linkCards(a.id, b.id); await linkCards(b.id, a.id);
+    expect((await cardDb.cards.get(a.id))?.links?.map(link => link.cardId)).toEqual([b.id]);
+    expect((await cardDb.cards.get(b.id))?.links?.map(link => link.cardId)).toEqual([a.id]);
+    await linkCards(a.id, b.id, false);
+    expect((await cardDb.cards.get(a.id))?.links).toEqual([]);
+    expect((await cardDb.cards.get(b.id))?.links).toEqual([]);
+    await expect(linkCards(a.id, a.id)).rejects.toThrow('itself');
+    await expect(linkCards(a.id, 'missing')).rejects.toThrow('no longer exists');
   });
 });
 

@@ -53,6 +53,8 @@ export const cardSchema = z.object({
   pdf: pdfDocumentSchema.optional(),
   /** Provenance for an image captured from a PDF page in the same library. */
   source: z.object({ pdfCardId: z.string().min(1), page: z.number().int().min(1), fileName: z.string().max(300).optional() }).optional(),
+  /** Cards connected to this one (stored on both sides); shown as a dialogue of message boxes. */
+  links: z.array(z.object({ cardId: z.string().min(1).max(200), createdAt: z.string().max(40) })).max(500).optional(),
 });
 
 export type CardRecord = z.infer<typeof cardSchema>;
@@ -706,6 +708,10 @@ export const createObsidianExportArchive = (
     }
     if (card.source) {
       bodyParts.push(`Captured from page ${card.source.page}${card.source.fileName ? ` of ${escapeMarkdownText(card.source.fileName)}` : ''}`);
+    }
+    const connected = (card.links ?? []).map(link => activeCardsById.get(link.cardId)).filter((item): item is CardRecord => Boolean(item));
+    if (connected.length) {
+      bodyParts.push(`Connected: ${connected.map(item => `[${escapeMarkdownText(item.title)}](${sanitizeObsidianFileStem(item.title || 'untitled-card')}--${encodeObsidianPathSegment(item.id)}.md)`).join(', ')}`);
     }
     if (card.note) {
       bodyParts.push('', card.note);

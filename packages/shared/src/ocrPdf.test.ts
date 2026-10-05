@@ -73,6 +73,18 @@ describe('OCR and PDF backups', () => {
   });
 });
 
+describe('card connections', () => {
+  it('round-trips links through backups and lists them in the Obsidian export', () => {
+    const a = { ...createCardFromInput({ id: 'a', type: 'text', title: 'Field notes', note: 'n' }), links: [{ cardId: 'b', createdAt: now }] };
+    const b = { ...createCardFromInput({ id: 'b', type: 'text', title: 'Harbour', note: 'm' }), links: [{ cardId: 'a', createdAt: now }] };
+    const parsed = parseLibraryBackup(JSON.stringify(createLibraryBackup([a, b], [], [], now)));
+    expect(parsed.cards.map(card => card.links)).toEqual([a.links, b.links]);
+    const md = createObsidianExportArchive([a, b], []).files.find(file => file.path.startsWith('cards/field-notes--'))?.content as string;
+    expect(md).toContain('Connected: [Harbour](harbour--b.md)');
+    expect(() => parseLibraryBackup(JSON.stringify(createLibraryBackup([{ ...a, links: [{ cardId: '', createdAt: now }] } as CardRecord], [], [], now)))).toThrow('not valid');
+  });
+});
+
 describe('Obsidian export with OCR and PDFs', () => {
   it('adds an OCR section for current text, the PDF attachment and page provenance', () => {
     const image = { ...imageCard(), ocr: ocrFor(imageA, 'Ação rápida', true) };

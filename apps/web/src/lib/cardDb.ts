@@ -37,6 +37,23 @@ export const readCards = async (): Promise<CardRecord[]> =>
 export const readCollections = async (): Promise<CollectionRecord[]> =>
   cardDb.collections.orderBy('updatedAt').reverse().toArray();
 
+/** Connects (or disconnects) two cards on both sides in one transaction; returns both stored cards. */
+export const linkCards = async (aId: string, bId: string, connect = true): Promise<[CardRecord, CardRecord]> => {
+  if (aId === bId) throw new Error('A card cannot connect to itself');
+  return cardDb.transaction('rw', cardDb.cards, async () => {
+    const [a, b] = await Promise.all([cardDb.cards.get(aId), cardDb.cards.get(bId)]);
+    if (!a || !b) throw new Error('Card no longer exists');
+    const now = new Date().toISOString();
+    const update = (card: CardRecord, otherId: string): CardRecord => {
+      const others = (card.links ?? []).filter(link => link.cardId !== otherId);
+      return { ...card, links: connect ? [...others, { cardId: otherId, createdAt: now }] : others, updatedAt: now };
+    };
+    const next: [CardRecord, CardRecord] = [update(a, bId), update(b, aId)];
+    await cardDb.cards.bulkPut(next);
+    return next;
+  });
+};
+
 export const saveCard = async (card: CardRecord): Promise<CardRecord> => {
   await cardDb.cards.put(card);
   return card;

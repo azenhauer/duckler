@@ -42,6 +42,13 @@ The current app stores a personal library in IndexedDB and syncs through the use
 
 No collaboration, open registration, DMs or comments before the corresponding security gates. This roadmap is an implementation record, not a claim of legal compliance.
 
+## Deferred by the owner — October 5, 2026 (parked, not started)
+
+Requested, then explicitly parked until the owner says to start. Both sit behind the multi-user gates above.
+
+- [ ] **Account-based extension.** Replace the manual setup-code / confirmation-code pairing with signing in to the same Duckler account in the extension and the library, so captures route to the account rather than to one paired browser. Needs gate 1 (identity + storage architecture) and the Drive content sync (M5b).
+- [ ] **Multi-user libraries, collection collaboration and sharing by link.** Private libraries per account, shared collections/moodboards with Viewer/Editor roles, revocable share links, async collaborative editing. Needs gates 1–3 and the M12 real-account Drive test.
+
 
 ## Security implementation started — October 4, 2026
 

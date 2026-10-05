@@ -1,5 +1,5 @@
 // PS2-schematic icon set: square caps, mitred corners, hardware-diagram shapes.
-export type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more' | 'sound' | 'mute' | 'restore' | 'close' | 'check';
+export type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more' | 'sound' | 'mute' | 'restore' | 'close' | 'check' | 'connect';
 export function InterfaceIcon({ name }: { name: IconName }) {
   const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'square' as const, strokeLinejoin: 'miter' as const };
   return <svg className={`ui-icon ui-icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
@@ -33,5 +33,7 @@ export function InterfaceIcon({ name }: { name: IconName }) {
     {/* Cross button */}
     {name === 'close' && <path {...p} d="M6 6l12 12M18 6L6 18" />}
     {name === 'check' && <path {...p} d="M4.5 12.5l4.5 4.5L19.5 6.5" />}
+    {/* Two terminals joined by a wire: connect cards */}
+    {name === 'connect' && <><path {...p} d="M3 8.5h5v7H3v-7ZM16 8.5h5v7h-5v-7Z" /><path {...p} d="M8 12h8M10.5 9.5 8 12l2.5 2.5" /></>}
   </svg>;
 }

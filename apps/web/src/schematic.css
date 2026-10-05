@@ -662,3 +662,24 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 .canvas-gallery-rename input { width: 100%; padding: 8px 10px; border: 1px solid var(--ui-accent-primary); border-radius: 4px; background: var(--ui-surface); color: var(--ui-text);
   font-family: inherit; font-size: .95rem; font-weight: 700; line-height: 1.2; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ui-accent-primary) 25%, transparent); }
 .note-caption { display:block; margin-top:12px; padding-top:8px; border-top:1px solid var(--sx-line-soft); color:var(--ui-text-muted); font-size:.8rem; white-space:pre-wrap; overflow-wrap:anywhere; }
+
+/* ---- Connected cards: badge, drop target, and the dialogue of message boxes in the editor. ---- */
+.card-link-badge { left: auto; right: 8px; background: color-mix(in srgb, var(--sx-tri) 38%, #000); }
+.card-source-badge ~ .card-link-badge { top: 30px; }
+.library-card .card-tile.is-connect-target { border-color: var(--sx-tri) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--sx-tri) 45%, transparent) !important; }
+.card-editor .editor-preview { position: relative; }
+.editor-dialogue { display: grid; gap: 6px; }
+.editor-dialogue-title { font: 700 .58rem/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ui-text-muted); }
+.editor-dialogue ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.editor-dialogue li { position: relative; display: flex; align-items: stretch; gap: 6px; }
+.dialogue-message { flex: 1; max-width: none; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; animation: none; }
+.dialogue-message img { grid-row: span 2; width: 40px; height: 40px; object-fit: cover; border-radius: 3px; }
+.dialogue-message b, .dialogue-message span { grid-column: 2; }
+.dialogue-message b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dialogue-unlink { flex: none; width: 28px; border: 1px solid var(--sx-line-soft); border-radius: 4px; background: transparent; color: var(--ui-text-muted); font-size: 1rem; cursor: pointer; transition: color var(--sx-fast) linear, border-color var(--sx-fast) linear, scale 70ms; }
+.dialogue-unlink:hover { color: var(--sx-cir); border-color: var(--sx-cir); }
+.dialogue-unlink:active { scale: .92; }
+.connect-hint { border-color: color-mix(in srgb, var(--sx-tri) 55%, transparent); }
+.connect-hint .glyph-tri, .selection-connect .glyph-tri { color: var(--sx-tri); }
+.app-shell:has(.connect-hint) .library-card .card-tile { cursor: crosshair; }
+.tile-menu { z-index: 1000 !important; } /* above dialogs: the content section rises to 200 while the editor is open */

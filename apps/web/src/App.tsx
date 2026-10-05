@@ -30,6 +30,7 @@ import {
   restoreLibraryBackup,
   saveCard,
   saveCardWithCollections,
+  linkCards,
   saveCollection,
   setCardCollectionMembership,
 } from './lib/cardDb';
@@ -47,7 +48,7 @@ import { Dialog } from './components/Dialog';
 import { CardEditor } from './components/CardEditor';
 import { ScreenshotNote } from './components/ScreenshotNote';
 import { SoundButton, UI_SOUND_EVENT, useUiSounds } from './components/UiSounds';
-import { CardActions } from './components/CardActions';
+import { CardActions, CONNECT_MIME } from './components/CardActions';
 import { CardCollectionControls } from './components/CollectionPicker';
 import { AppearanceSettings, appearancePresetNames } from './components/AppearanceSettings';
 import { CardStyleSettings } from './components/CardStyleSettings';
@@ -724,6 +725,47 @@ function App() {
         return sortMode === 'newest' ? rightTime - leftTime : leftTime - rightTime;
       });
   }, [cards, searchTerm, selectedCollection, sortMode, typeFilter]);
+
+  // ---- Connected cards ("dialogues") and notes made from selected text ----
+  const [connectFrom, setConnectFrom] = useState<string | null>(null);
+  const [textMenu, setTextMenu] = useState<{ left: number; top: number; text: string; cardId: string } | null>(null);
+  useEffect(() => {
+    if (!connectFrom) return;
+    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') setConnectFrom(null); };
+    document.addEventListener('keydown', cancel);
+    return () => document.removeEventListener('keydown', cancel);
+  }, [connectFrom]);
+  const connectCards = async (aId: string, bId: string, connect = true) => {
+    setConnectFrom(null);
+    if (aId === bId) return;
+    try {
+      const [a, b] = await linkCards(aId, bId, connect);
+      setCards(current => current.map(card => card.id === a.id ? a : card.id === b.id ? b : card));
+      window.dispatchEvent(new CustomEvent(UI_SOUND_EVENT, { detail: connect ? 'canvas-connect' : 'deselect' }));
+      notify(connect ? { title: 'Connected', detail: `“${a.title}” ⇄ “${b.title}”` } : { kind: 'info', title: 'Disconnected', detail: `“${a.title}” · “${b.title}”` });
+    } catch (error) {
+      notify({ kind: 'error', title: connect ? "Couldn't connect" : "Couldn't disconnect", detail: error instanceof Error ? error.message : undefined });
+    }
+  };
+  // A new note from selected text, connected to the card it came from and placed in its collections.
+  const createNoteFromText = async (sourceId: string, text: string) => {
+    const source = cards.find(card => card.id === sourceId);
+    if (!source || !text.trim()) return;
+    const words = text.replace(/\s+/g, ' ').trim();
+    const title = words.length > 60 ? `${words.slice(0, 57).replace(/\s\S*$/, '')}…` : words;
+    const base = createCardFromInput({ type: 'text', title, note: text.trim().slice(0, 100000) });
+    const memberOf = collections.filter(item => item.cardIds.includes(sourceId));
+    const changed = memberOf.map(item => ({ ...item, cardIds: [...new Set([...item.cardIds, base.id])], updatedAt: base.createdAt }));
+    await saveCardWithCollections(base, changed);
+    if (changed.length) setCollections(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
+    setCards(current => [base, ...current]);
+    setNewlyCreatedCardId(base.id);
+    const [created, updatedSource] = await linkCards(base.id, sourceId, true);
+    setCards(current => current.map(card => card.id === created.id ? created : card.id === updatedSource.id ? updatedSource : card));
+    notify({ title: 'Note created', detail: `Connected to “${source.title}”` });
+  };
+  const liveCardIds = useMemo(() => new Set(cards.filter(card => !card.trashed).map(card => card.id)), [cards]);
+  const connectionsOf = (card: CardRecord) => (card.links ?? []).filter(link => liveCardIds.has(link.cardId));
 
   const selectCard = (cardId: string, additive: boolean) => setSelectedCardIds(current => additive
     ? (current.includes(cardId) ? current.filter(id => id !== cardId) : [...current, cardId])
@@ -1699,9 +1741,14 @@ function App() {
           <button type="button" onClick={() => searchTerm ? changeSearch('') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : 'Connect your browser'}</button>
         </div>}
         {activeView === 'library' && <p id="card-select-hint" hidden>Click to select, double-click or Enter to edit.</p>}
+        {connectFrom && (() => { const from = cards.find(card => card.id === connectFrom); return from ? <div className="selection-hint connect-hint" role="status">
+          <span><b className="glyph-tri" aria-hidden="true">△</b>Pick a card to connect with “{from.title}”</span>
+          <button type="button" onClick={() => setConnectFrom(null)}><b className="glyph-cir" aria-hidden="true">○</b>Esc · Cancel</button>
+        </div> : null; })()}
         {activeView === 'library' && selectedCardIds.length > 0 && <div className="selection-hint" role="status">
           <span><b className="glyph-sqr" aria-hidden="true">□</b>{selectedCardIds.length} selected · click cards to add or remove</span>
           <span><b className="glyph-crs" aria-hidden="true">✕</b>Double-click to edit</span>
+          {selectedCardIds.length === 2 && <button type="button" className="selection-connect" onClick={() => { void connectCards(selectedCardIds[0], selectedCardIds[1]); setSelectedCardIds([]); }}><b className="glyph-tri" aria-hidden="true">△</b>Connect these two</button>}
           <button type="button" onClick={() => setSelectedCardIds([])}><b className="glyph-cir" aria-hidden="true">○</b>Esc · Clear</button>
         </div>}
         {activeView === 'library' && <div onClick={event => { if (event.target === event.currentTarget) setSelectedCardIds([]); }} className={`library-grid card-size-${cardSize} ${selectedCardIds.length ? 'has-selection' : ''}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
@@ -1731,7 +1778,7 @@ function App() {
                     onClick={(event) => event.stopPropagation()}
                   />
                 </div>
-              <CardActions title={card.title} collections={collections} onEdit={() => setSelectedId(card.id)} onDelete={() => { void handleDelete(card.id); }} onMove={async collectionId => {
+              <CardActions cardId={card.id} onConnect={() => { setSelectedCardIds([]); setConnectFrom(card.id); }} title={card.title} collections={collections} onEdit={() => setSelectedId(card.id)} onDelete={() => { void handleDelete(card.id); }} onMove={async collectionId => {
                 const updated = { ...card, updatedAt: new Date().toISOString() };
                 const nextCollections = collections.map(collection => ({ ...collection, cardIds: collection.id === collectionId ? [...new Set([...collection.cardIds, card.id])] : collection.cardIds.filter(id => id !== card.id), updatedAt: updated.updatedAt }));
                 await saveCardWithCollections(updated, nextCollections);
@@ -1745,7 +1792,23 @@ function App() {
                 aria-label={`Open ${card.title}`}
                 aria-describedby="card-select-hint"
                 // Each click adds or removes the card from the selection; a double click opens the editor.
-                onClick={(event) => { if (event.detail < 2) selectCard(card.id, true); }}
+                onClick={(event) => {
+                  if (connectFrom) { if (connectFrom !== card.id) void connectCards(connectFrom, card.id); return; }
+                  // Finishing a text selection inside the card isn't a click on the card.
+                  const picked = window.getSelection();
+                  if (picked?.toString().trim() && picked.anchorNode && event.currentTarget.contains(picked.anchorNode)) return;
+                  if (event.detail < 2) selectCard(card.id, true);
+                }}
+                onDragOver={event => { if (event.dataTransfer.types.includes(CONNECT_MIME)) { event.preventDefault(); event.dataTransfer.dropEffect = 'link'; event.currentTarget.classList.add('is-connect-target'); } }}
+                onDragLeave={event => event.currentTarget.classList.remove('is-connect-target')}
+                onDrop={event => { const from = event.dataTransfer.getData(CONNECT_MIME); event.currentTarget.classList.remove('is-connect-target'); if (from) { event.preventDefault(); void connectCards(from, card.id); } }}
+                onContextMenu={event => {
+                  // Right-click on text selected inside this card: make a new note from it.
+                  const selection = window.getSelection(), text = selection?.toString().trim() ?? '';
+                  if (!text || !selection?.anchorNode || !event.currentTarget.contains(selection.anchorNode)) return;
+                  event.preventDefault(); event.stopPropagation();
+                  setTextMenu({ left: event.clientX, top: event.clientY, text, cardId: card.id });
+                }}
                 onDoubleClick={() => setSelectedId(card.id)}
                 onKeyDown={(event) => {
                   if (event.target !== event.currentTarget) {
@@ -1765,6 +1828,7 @@ function App() {
                 {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt={card.title} className="card-image" /> : null}
                 {card.type === 'pdf' && <span className="card-pdf-badge">PDF · {card.pdf?.pageCount ?? '?'} p</span>}
                 {card.source && <span className="card-pdf-badge card-source-badge">Page {card.source.page}</span>}
+                {connectionsOf(card).length > 0 && <span className="card-pdf-badge card-link-badge" title="Connected cards">⇄ {connectionsOf(card).length}</span>}
                 {capturedCardIds.includes(card.id) && <span className="capture-flash" aria-hidden="true"><i /><i /><i /><i /></span>}
                 {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p>{card.caption && <small className="note-caption">{card.caption}</small>}</div> : null}
                 {card.type === 'bookmark' ? <div className="bookmark-card-preview">
@@ -1809,6 +1873,9 @@ function App() {
             pdfNotes={selectedCard.type === 'pdf' ? cards.filter(item => item.type === 'text' && !item.trashed && item.source?.pdfCardId === selectedCard.id)
               .map(item => ({ id: item.id, page: item.source!.page, title: item.title, note: item.note })) : undefined}
             onOpenCard={id => setSelectedId(id)}
+            connected={connectionsOf(selectedCard).map(link => cards.find(card => card.id === link.cardId)!).map(card => ({ id: card.id, title: card.title, note: card.note, type: card.type, dataUrl: card.dataUrl }))}
+            onDisconnect={id => void connectCards(selectedCard.id, id, false)}
+            onNoteFromSelection={text => createNoteFromText(selectedCard.id, text)}
             onCreateLinkedNote={selectedCard.type === 'pdf' || selectedCard.source ? async (text, page) => {
               // The note links to the PDF (and page) this card is, or was captured from, and joins its collections.
               const pdfCard = selectedCard.type === 'pdf' ? selectedCard : cards.find(item => item.id === selectedCard.source!.pdfCardId);
@@ -1914,6 +1981,10 @@ function App() {
       <ul className="ps-hints" aria-hidden="true">
         <li><b className="crs">✕</b>Enter</li><li><b className="cir">○</b>Back</li><li><b className="tri">△</b>Options</li><li><b className="sqr">□</b>Select</li>
       </ul>
+      {textMenu && <TileMenu title="Selected text" position={textMenu} onClose={() => setTextMenu(null)} items={[
+        { label: 'New note from selection', onSelect: () => { void createNoteFromText(textMenu.cardId, textMenu.text); } },
+        { label: 'Copy', onSelect: () => { void navigator.clipboard?.writeText(textMenu.text).catch(() => {}); } },
+      ]} />}
       {tileMenu && (() => {
         const target = collections.find(item => item.id === tileMenu.id);
         if (!target) return null;

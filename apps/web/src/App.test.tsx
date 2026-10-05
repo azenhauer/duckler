@@ -281,6 +281,21 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Account menu' })).not.toBeInTheDocument();
   });
 
+  it('connects two cards from the connect button and shows them as a dialogue', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Design note' }));
+    expect(document.querySelector('.connect-hint')).toHaveTextContent('Pick a card to connect with “Design note”');
+    fireEvent.click(screen.getByRole('article', { name: 'Open Spec checklist' }));
+    await waitFor(async () => expect((await readCards()).find(card => card.title === 'Design note')?.links?.length).toBe(1));
+    expect(await screen.findAllByText('⇄ 1')).toHaveLength(2);
+    fireEvent.doubleClick(screen.getByRole('article', { name: 'Open Design note' }));
+    const dialogue = screen.getByRole('region', { name: 'Connected cards' });
+    expect(within(dialogue).getByRole('button', { name: 'Open connected Spec checklist' })).toBeInTheDocument();
+    fireEvent.click(within(dialogue).getByRole('button', { name: 'Disconnect Spec checklist' }));
+    await waitFor(async () => expect((await readCards()).find(card => card.title === 'Spec checklist')?.links).toEqual([]));
+  });
+
   it('renames a collection from its right-click menu', async () => {
     render(<App />);
     await screen.findByRole('button', { name: 'All notes' });
