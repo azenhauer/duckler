@@ -23,6 +23,30 @@ beforeEach(async () => {
 });
 
 describe('App', () => {
+  it('deletes selected or keyboard-focused cards with Delete, but protects typing and dialogs', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+      const card = await screen.findByRole('article', { name: 'Open Design note' });
+      fireEvent.click(card);
+      fireEvent.keyDown(screen.getByPlaceholderText('Search all notes'), { key: 'Delete' });
+      expect(confirm).not.toHaveBeenCalled();
+      fireEvent.keyDown(document, { key: 'Delete' });
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(card).toBeInTheDocument();
+      fireEvent.doubleClick(card);
+      fireEvent.keyDown(document, { key: 'Delete' });
+      expect(confirm).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
+      fireEvent.keyDown(document, { key: 'Escape' });
+      confirm.mockReturnValue(true);
+      fireEvent.keyDown(card, { key: 'Delete' });
+      await waitFor(() => expect(card).not.toBeInTheDocument());
+      expect((await readCards()).some(item => item.title === 'Design note')).toBe(false);
+    } finally { confirm.mockRestore(); }
+  });
+
   it('removes a badge relationship, restores it with Undo and permits retry after failed Undo', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));

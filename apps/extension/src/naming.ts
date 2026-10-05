@@ -9,6 +9,11 @@ const text = (value: unknown, max = 300) => typeof value === 'string'
   : '';
 const squash = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
+/** The excerpt is a title; the complete selection remains in the note body. */
+export function selectionTitle(selection: string): string {
+  return shorten(text(selection), 60) || 'Saved text';
+}
+
 /** Trims to a word boundary so names never end mid-word. */
 export function shorten(value: string, max: number): string {
   if (value.length <= max) return value;

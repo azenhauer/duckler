@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { cleanPageTitle, screenshotTitle, shorten } from './naming';
+import { cleanPageTitle, screenshotTitle, selectionTitle, shorten } from './naming';
+
+it('gives selected text a short single-line title without changing the body', () => {
+  const selection = 'Use this lesson to explore how AI can be used by learners\n' + 'to develop their English. '.repeat(20);
+  const title = selectionTitle(selection);
+  expect(title.length).toBeLessThanOrEqual(60);
+  expect(title).toMatch(/…$/);
+  expect(title).not.toContain('\n');
+  expect(selection).toContain('\n');
+  expect(selectionTitle('A short\n note')).toBe('A short note');
+});
 
 describe('screenshot names', () => {
   it('prefers the text inside the captured region, then the page title, plus the site', () => {

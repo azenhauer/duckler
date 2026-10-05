@@ -3,7 +3,7 @@ import { CaptureQueue } from './queue';
 import { bridgeRequest, validateSender } from './bridge';
 import { isAllowedLibraryOrigin } from './origin';
 import { isSettingsSender } from './settingsSender';
-import { screenshotTitle, type RegionHint } from './naming';
+import { screenshotTitle, selectionTitle, type RegionHint } from './naming';
 import { fetchPdf } from './pdf';
 
 const queue = new CaptureQueue();
@@ -149,7 +149,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     } else if (info.menuItemId === 'duckler-save-link') {
       capture = { kind: 'bookmark', title: info.linkUrl, sourceUrl: info.linkUrl };
     } else {
-      capture = { kind: info.selectionText ? 'text' : 'bookmark', title: info.selectionText?.slice(0, 1000) || tab.title || info.pageUrl,
+      capture = { kind: info.selectionText ? 'text' : 'bookmark', title: info.selectionText ? selectionTitle(info.selectionText) : tab.title || info.pageUrl,
         note: info.selectionText || '', sourceUrl: info.pageUrl || tab.url };
     }
     await save(capture);

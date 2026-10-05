@@ -1055,6 +1055,21 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    const deleteSelected = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' || event.repeat || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || activeView !== 'library') return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (document.querySelector('[role="dialog"], [role="menu"]') || target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+      const focusedId = target?.closest('[data-card-id]')?.getAttribute('data-card-id');
+      const ids = selectedCardIds.length ? selectedCardIds : focusedId ? [focusedId] : [];
+      if (!ids.length) return;
+      event.preventDefault();
+      void (async () => { for (const id of ids) if (!removingCardIds.includes(id)) await handleDelete(id); })().catch(error => notify({ kind: 'error', title: "Couldn't delete card", detail: error instanceof Error ? error.message : undefined }));
+    };
+    document.addEventListener('keydown', deleteSelected);
+    return () => document.removeEventListener('keydown', deleteSelected);
+  });
+
   // Each card/collection relationship is serialized on its own: a toggle made while that relationship is
   // still saving is applied after it, so a stale response can never reverse a newer choice.
   const changeMembership = async (cardId: string, collectionId: string, included: boolean) => {
@@ -1785,6 +1800,7 @@ function App() {
                 setCards(current => current.map(item => item.id === card.id ? updated : item)); setCollections(nextCollections);
               }} />
               <article
+                data-card-id={card.id}
                 className={`card-tile card-type-${card.type} ${selectedId === card.id ? 'selected' : ''} ${selectedCardIds.includes(card.id) ? 'is-checked' : ''}`}
                 data-tinted={card.color ? 'true' : undefined}
                 style={card.color ? { '--card-tint': card.color } as CSSProperties : undefined}
@@ -2303,5 +2319,4 @@ function App() {
 }
 
 export default App;
-
 
