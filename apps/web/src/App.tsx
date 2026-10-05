@@ -11,6 +11,7 @@ import {
   dedupeQueueItems,
   enqueueCapture,
   collectionParentError,
+  appendCanvasesToObsidianArchive,
   createLibraryBackup,
   orderCollectionTree,
   parseLibraryBackup,
@@ -1087,7 +1088,8 @@ function App() {
   };
 
   const handleObsidianExport = async () => {
-    const archive = createObsidianExportArchive(cards, collections);
+    // Canvases become notes with an SVG preview and their text annotations.
+    const archive = appendCanvasesToObsidianArchive(createObsidianExportArchive(cards, collections), await readCanvasBackups().catch(() => []), cards);
     const zip = new JSZip();
 
     for (const file of archive.files) {
