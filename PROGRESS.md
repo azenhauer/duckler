@@ -37,7 +37,8 @@ Last updated: 2026-10-05
 ## Clip autofill (protocol: docs/ai-coop/PROTOCOL.md)
 Auto-add a clip to the best-matching collection(s) when no collection was chosen. Opt-in, add-only, zero retention on the server.
 - 1.1 ok — optional `pageExcerpt` in the capture protocol + autofill result types; never stored on cards. next=1.2 (pure ranking/decision rules)
-- [ ] **You:** confirm Workers AI `@cf/baai/bge-m3` (or name another provider) before 1.3
+- 1.2 ok — pure ranking + decision rules (profiles, margin, max 3, strict small collections, undo memory, low-text). next=1.3 (embed Worker)
+- [x] Provider confirmed: Workers AI `@cf/baai/bge-m3`
 
 ## Small patches (Oct 5, afternoon)
 - [x] Notifications: console "achievement" panels (✕ success · ○ error · △ info · □ progress), auto-dismiss, chime per kind; replace the old status banner
