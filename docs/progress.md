@@ -202,3 +202,25 @@ Remaining: trusted invite-only passkey/magic-link onboarding, rate limits/audit/
 - New Settings → Cards section: card background (match skin, presets, custom), frame (line/dashed/double/none), corners (square/soft/round), show titles, glow on hover. Stored per browser under `duckler-card-style-v1`.
 - Sound: a visible speaker button in the dock (click to mute or unmute; hover shows a volume slider, previewed on release). Cue variety comes from pitching and layering the two pack samples: hover, select, open, back/cancel/Escape, toggle on/off, save, delete and capture each sound different. Settings has preview buttons for each cue.
 - Note for the dev server: Vite sometimes misses edits made from Claude's shell (seen with an appended CSS file). If something looks stale, restart `npm run dev`.
+
+## OCR + PDF in progress — stopped here (October 5, 2026)
+
+The owner installed `tesseract.js@7` and `pdfjs-dist@6` (root `package.json`). This work is **written and typechecks, but has not been run in a browser yet**. The PDF browser test was interrupted before it ran.
+
+Done (uncommitted until this entry, now committed as work in progress):
+- Card schema: new `pdf` card type; optional `ocr` (text, source fingerprint, languages, engine, edited flag), `pdf` (file name, page count, PDF data URL, embedded text) and `source` (PDF card + page provenance). Helpers `mediaFingerprint`, `ocrIsCurrent`; `buildSearchText` now includes current OCR text and PDF text. The editor's save uses `buildSearchText`.
+- `apps/web/src/lib/ocr.ts`: lazy tesseract.js (EN+PT by default), worker/core bundled via Vite `?url` (SIMD core when supported), downscales to 2400 px, cancel via AbortSignal, one job at a time, 200k-char cap. Language data comes from the tesseract.js-data CDN unless `VITE_OCR_LANG_PATH` is set.
+- `apps/web/src/components/OcrPanel.tsx` in the card editor (image cards): EN/PT toggles, Extract / Cancel / Retry / Re-extract / Copy, progress bar, editable text marked "edited", stale warning when the image changed (stale text is excluded from search).
+- `apps/web/src/lib/pdf.ts`: lazy pdf.js with bundled worker; 25 MB / 200-page limits, `%PDF` signature check, password/corrupt messages, first-page thumbnail, embedded text extraction.
+- Upload now accepts PDFs (`handleAddPdf`): creates a PDF card (thumbnail as image, PDF bytes + text kept), added to the open collection.
+- `PdfViewer` in the editor for PDF cards: page navigation and **Capture page**, which creates an image card with `source` provenance (added to the same collections). Captured cards link back to their PDF in the editor.
+- Cards show a "PDF · n p" badge and a "Page n" badge for captured pages. PDF thumbnails render in the grid, canvas and collection previews.
+- Obsidian export: OCR section (current text only), PDF attachment link, page provenance.
+- CSP: `'wasm-unsafe-eval'` added to script-src; `https://cdn.jsdelivr.net` added to connect-src (OCR language data).
+
+Next steps:
+1. Restart `npm run dev`, then test: upload a PDF (text-based and scanned), page through it, capture a page; run Extract text on an image card (needs internet the first time for language data); search for an OCR'd word; edit the text and check the stale warning after replacing an image.
+2. Check `npm run build`: the tesseract core `.wasm.js` assets are large. Consider runtime caching for them in `vite.config.ts` (Workbox) and confirm the CSP allows the workers in production.
+3. Add tests: schema round-trip for `ocr`/`pdf`/`source` in backups, `ocrIsCurrent`, the PDF signature check.
+4. Optionally self-host `eng`/`por` traineddata under `public/ocr/lang` and set `VITE_OCR_LANG_PATH`.
+5. Move `tesseract.js` / `pdfjs-dist` from the root `package.json` into `apps/web/package.json` (run `npm install` on Windows after the move).

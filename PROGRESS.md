@@ -34,6 +34,9 @@ Last updated: 2026-10-04
 - [x] Visible speaker button with hover volume; more sound variety (open, back, toggle, save, delete…)
 - [ ] **You:** restart `npm run dev` if anything looks stale, then review at full desktop width
 
+## ⏸ Stopped here (Oct 5)
+OCR and PDF are written but untested; next steps are in docs/progress.md under "OCR + PDF in progress — stopped here". The dock and search bar textures were removed.
+
 ## Round 4 (Oct 4) — done
 - [x] Bulk selection bar: "+ New collection…" creates a collection on the spot with the selected cards
 - [x] Click the profile card to change its colour; profile description (256 chars) shown on the card
@@ -57,8 +60,9 @@ Legend: [x] done · [~] partial · [ ] not started · [!] blocked (reason given)
 - [!] Asynchronous collaborative editing (cards, collections, canvases, OCR, annotations) and offline collaborative sync: depends on Drive sync + sharing
 - [~] Conflict detection: the shared revision reducer keeps concurrent heads, but there's no UI · [ ] Keep Mine / Keep Other / Duplicate · [ ] delete-vs-edit recovery UI
 
-### OCR
-- [!] OCR (EN/PT), progress/cancel/retry/copy/edit/re-extract, OCR search, stale-OCR detection: needs `tesseract.js`, which can't be installed from Claude's environment (npm blocked). Run `npm i tesseract.js` on Windows and I'll build it.
+### OCR (in progress — written, typechecks, **not yet tested in the browser**)
+- [~] OCR for screenshots and images · [~] English and Portuguese · [~] progress, cancel, retry, copy, edit, re-extract · [~] search by OCR text · [~] stale-OCR detection
+- Next: test in the dev server (language data downloads once), production build check, tests. See docs/progress.md "stopped here".
 
 ### Canvas
 - [x] Card rotation · [x] Rotation reset
@@ -71,11 +75,12 @@ Legend: [x] done · [~] partial · [ ] not started · [!] blocked (reason given)
 ### Backup & export
 - [~] Backup format for V2: cards, collections (with nesting), canvases, drawings, connectors, rotation and per-card colour are included; OCR, conflicts and revision history aren't, because those features don't exist yet
 - [!] Shared-workspace backups · [!] Restore a shared workspace as a private copy: depend on shared workspaces
-- [!] Obsidian export with OCR: depends on OCR
 - [x] Obsidian export with text annotations · [x] Obsidian export with canvas previews (SVG)
 
-### PDF
-- [!] PDF ingestion, PDF cards, first-page thumbnails, built-in viewer, page capture as image cards, page provenance, PDF text search: need `pdfjs-dist` (npm blocked here). Run `npm i pdfjs-dist` on Windows and I'll build it.
+### PDF (in progress — written, typechecks, **not yet tested in the browser**)
+- [~] PDF ingestion · [~] PDF cards · [~] first-page thumbnails · [~] built-in viewer · [~] capture pages as image cards · [~] page provenance · [~] search text-based PDFs
+- [~] Obsidian export with OCR (code written, untested)
+- Next: upload a text PDF and a scanned PDF, page through, capture a page, search its text.
 
 ### Nested collections
 - [x] Nested collections · [x] Parent and child collections · [x] One additional hierarchy level
