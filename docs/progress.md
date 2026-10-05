@@ -304,5 +304,7 @@ Speed (measured on the production build with 300 cards, 100 of them images):
 - The grid shows 720 px thumbnails (`lib/thumbnails.ts`, made off the main thread, held for the session); the editor shows the original.
 - Arrivals start visible (opacity .6-.7, not 0), and exits take 90 ms instead of 140 ms.
 - Esc is Back when nothing smaller wants it (dialogs, menus, pickers, fields, selection and canvas tools come first).
-- Open: thumbnails are not persisted yet (made again each session); opening a 300-card view is still ~350 ms of layout.
+- Thumbnails are saved on the card (`thumb: { url, of }`; `of` fingerprints the source image, an empty url means the image is already small). They are made once and stored without touching `updatedAt`, and are left out of backups. After a reload, 100 images show on the first frame (it used to take ~15 s to remake them each session).
+- Open: opening a 300-card view is still ~350 ms of layout (batching would need a different grid; deferred).
+- Drive: cards are not uploaded to Drive yet (connect only creates the root folder), so deleting a card has nothing to remove there. Content sync (M5b) must propagate deletions when it is built.
 

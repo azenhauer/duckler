@@ -59,6 +59,11 @@ export const saveCard = async (card: CardRecord): Promise<CardRecord> => {
   return card;
 };
 
+/** Stores a card's grid thumbnail without touching anything else (it is a cache, not an edit). */
+export const saveCardThumb = async (cardId: string, thumb: NonNullable<CardRecord['thumb']>): Promise<void> => {
+  await cardDb.cards.update(cardId, { thumb });
+};
+
 export const saveCollection = async (collection: CollectionRecord): Promise<CollectionRecord> => {
   await cardDb.collections.put(collection);
   return collection;

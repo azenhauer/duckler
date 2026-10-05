@@ -24,6 +24,14 @@ describe('library backup', () => {
     expect(parsed.cards).toEqual([card]);
   });
 
+  it('leaves grid thumbnails out of backups (they are a local cache)', () => {
+    const withThumb: CardRecord = { ...card, type: 'image', dataUrl: 'data:image/png;base64,AA==', thumb: { url: 'data:image/webp;base64,BB==', of: '22:AA==' } };
+    const backup = createLibraryBackup([withThumb], [collection], [], now);
+    expect(backup.cards[0]).not.toHaveProperty('thumb');
+    expect(backup.cards[0].dataUrl).toBe(withThumb.dataUrl);
+    expect(withThumb.thumb).toBeDefined(); // the library's own card is untouched
+  });
+
   it('accepts v1 exports without canvases', () => {
     const parsed = parseLibraryBackup(JSON.stringify({ exportedAt: now, cards: [card], collections: [collection] }));
     expect(parsed.formatVersion).toBe(1);

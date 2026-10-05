@@ -41,8 +41,9 @@ const backupSchema = () => z.object({
   canvases: z.array(canvasBackupSchema).max(10000).default([]),
 });
 
+// Grid thumbnails are a local cache: leaving them out keeps backups small, and they are rebuilt on import.
 export const createLibraryBackup = (cards: CardRecord[], collections: CollectionRecord[], canvases: CanvasBackup[] = [], exportedAt = new Date().toISOString()): LibraryBackup =>
-  ({ formatVersion: LIBRARY_BACKUP_FORMAT, exportedAt, cards, collections, canvases });
+  ({ formatVersion: LIBRARY_BACKUP_FORMAT, exportedAt, cards: cards.map(({ thumb: _thumb, ...card }) => card), collections, canvases });
 
 /** Parses a v1 (cards/collections) or v2 (adds canvases) export. Throws on any invalid record. */
 export function parseLibraryBackup(json: string): LibraryBackup {

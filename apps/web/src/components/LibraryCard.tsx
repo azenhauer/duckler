@@ -4,7 +4,7 @@ import { CardActions, CONNECT_MIME } from './CardActions';
 import { InterfaceIcon } from './InterfaceIcon';
 import { ScreenshotNote } from './ScreenshotNote';
 import { CardCollectionControls } from './CollectionPicker';
-import { useThumbnail } from '../lib/thumbnails';
+import { useThumbnail, type CardThumb } from '../lib/thumbnails';
 
 /** What a card can ask the library to do. Read at event time, so cards never re-render for it. */
 export type CardApi = {
@@ -19,6 +19,7 @@ export type CardApi = {
   changeMembership: (cardId: string, collectionId: string, included: boolean) => void;
   createCollection: (cardId: string, name: string) => void | Promise<void>;
   openCollection: (collectionId: string) => void;
+  storeThumb: (cardId: string, thumb: CardThumb) => void;
 };
 
 type Props = {
@@ -44,7 +45,7 @@ const hostOf = (url?: string) => {
  */
 export const LibraryCard = memo(function LibraryCard({ card, collections, api, isOpen, isChecked, isNew, isCaptured, isRemoving, connectionCount }: Props) {
   const sourceLabel = hostOf(card.sourceUrl);
-  const picture = useThumbnail(`${card.id}:${card.updatedAt}`, card.type === 'image' || card.type === 'pdf' ? card.dataUrl : undefined);
+  const picture = useThumbnail(card, card.type === 'image' || card.type === 'pdf' ? card.dataUrl : undefined, (cardId, thumb) => api().storeThumb(cardId, thumb));
   return (
     <div className={`library-card ${isNew ? 'is-new' : ''} ${isCaptured ? 'is-captured' : ''} ${isRemoving ? 'is-removing' : ''} ${isChecked ? 'is-checked' : ''}`}>
       <div className="tile-header">

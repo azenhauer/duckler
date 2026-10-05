@@ -56,6 +56,9 @@ export const cardSchema = z.object({
   source: z.object({ pdfCardId: z.string().min(1), page: z.number().int().min(1), fileName: z.string().max(300).optional() }).optional(),
   /** Cards connected to this one (stored on both sides); shown as a dialogue of message boxes. */
   links: z.array(z.object({ cardId: z.string().min(1).max(200), createdAt: z.string().max(40) })).max(500).optional(),
+  /** Grid-sized copy of the image (made once, on this device). `of` fingerprints the image it was made from;
+   *  an empty `url` means the image is already small. Never exported: backups rebuild it. */
+  thumb: z.object({ url: z.string().max(1_000_000), of: z.string().max(80) }).optional(),
 });
 
 export type CardRecord = z.infer<typeof cardSchema>;

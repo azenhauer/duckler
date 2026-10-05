@@ -29,6 +29,7 @@ import {
   removeCard,
   restoreLibraryBackup,
   saveCard,
+  saveCardThumb,
   saveCardWithCollections,
   linkCards,
   saveCollection,
@@ -792,6 +793,11 @@ function App() {
     changeMembership: (cardId, collectionId, included) => { void changeMembership(cardId, collectionId, included); },
     createCollection: async (cardId, name) => { await handleCreateCollectionForCard(cardId, name); },
     openCollection: collectionId => navigateTo('library', collectionId),
+    // Saved quietly: no updatedAt change, so it is not an edit.
+    storeThumb: (cardId, thumb) => {
+      void saveCardThumb(cardId, thumb).catch(() => {});
+      setCards(current => current.map(item => item.id === cardId ? { ...item, thumb } : item));
+    },
   };
   const getCardApi = useCallback(() => cardApiRef.current!, []);
   // Esc is the Back button once nothing smaller (a dialog, menu, picker, selection, rename or search) wants it.
