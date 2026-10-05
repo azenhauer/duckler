@@ -34,6 +34,16 @@ Last updated: 2026-10-05
 - [x] Visible speaker button with hover volume; more sound variety (open, back, toggle, save, delete…)
 - [ ] **You:** restart `npm run dev` if anything looks stale, then review at full desktop width
 
+## Small patches (Oct 5, afternoon)
+- [x] Notifications: console "achievement" panels (✕ success · ○ error · △ info · □ progress), auto-dismiss, chime per kind; replace the old status banner
+- [x] Sounds separated by zone (menus, cards, settings, canvas) + canvas tool sounds (draw, highlight, shape, text, erase, connect, place, move, rotate, undo/redo); grouped previews in Settings
+- [x] Motion polish, action-only: press feedback, one-time grid arrival, selection pops (scale/translate only, nothing loops, off with reduced motion)
+- [x] "All cards" shown as a collection on the Collections page
+- [x] Search typed on Home goes back to Home when emptied
+- [x] PDF page text → "Note from selection" (linked to PDF + page), shown as message boxes over the page; scanned pages can be read with OCR; captured page images can do the same
+- [x] Screenshot names inferred from the page (heading/caption/alt inside the selection, page title, site) instead of "Screenshot — …"; uploads use image metadata or a meaningful file name
+- [ ] "All cards" canvas (canvases still need a real collection)
+
 ## OCR + PDF verified (Oct 5)
 - [x] Lint, typecheck, 132 unit tests, production build and all 7 Playwright smoke scripts pass
 - [x] PDF tested in the browser: text + scanned PDFs, paging, capture page with provenance, PDF text search, errors (corrupt, not a PDF, password, >25 MB, >200 pages)
@@ -41,7 +51,7 @@ Last updated: 2026-10-05
 - [x] Production build under the real CSP: pdf.js and tesseract workers + WASM run with no CSP violations; OCR cores cached on first use (not precached)
 - [x] Bugs fixed along the way: PDF capture could save the previous page; large PDFs could hang on "Loading page…"; stale OCR still matched search; popovers off-centre/off-screen (animation overrode centering); Settings overflow at 320px; reduced motion ignored on Home artwork and + button
 - [ ] Optional: self-host eng/por language data (`VITE_OCR_LANG_PATH`) instead of jsdelivr
-- [ ] **You:** decide whether status notices (e.g. "PDFs can be up to 25 MB.") should auto-dismiss; today they stay until replaced
+- [x] Status notices auto-dismiss (now notifications)
 
 ## Round 4 (Oct 4) — done
 - [x] Bulk selection bar: "+ New collection…" creates a collection on the spot with the selected cards
