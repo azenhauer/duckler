@@ -4,7 +4,8 @@ import { useHoverIntent } from '../lib/hoverIntent';
 import { useExitAnimation } from '../lib/exitAnimation';
 import { NOTICE_EVENT } from './Notifications';
 
-type Preferences = { enabled: boolean; volume: number };
+/** `muted` lists individual cues switched off in Settings; everything else plays. */
+type Preferences = { enabled: boolean; volume: number; muted: Cue[] };
 const key = 'duckler-ui-sounds-v1';
 const files = { hover: '/sounds/ps2/deck_ui_navigation.wav', click: '/sounds/ps2/deck_ui_default_activation.wav' };
 /** Dispatch `new CustomEvent(UI_SOUND_EVENT, { detail: 'capture' })` to play an app-event cue. */
@@ -65,8 +66,9 @@ const cueLayers: Record<Cue, Layer[]> = {
 function load(): Preferences {
   try {
     const value = JSON.parse(localStorage.getItem(key) ?? 'null');
-    return { enabled: typeof value?.enabled === 'boolean' ? value.enabled : true, volume: Number.isFinite(value?.volume) ? Math.max(0, Math.min(1, value.volume)) : .15 };
-  } catch { return { enabled: true, volume: .15 }; }
+    const muted = Array.isArray(value?.muted) ? value.muted.filter((cue: unknown): cue is Cue => typeof cue === 'string' && cue in cueLayers) : [];
+    return { enabled: typeof value?.enabled === 'boolean' ? value.enabled : true, volume: Number.isFinite(value?.volume) ? Math.max(0, Math.min(1, value.volume)) : .15, muted };
+  } catch { return { enabled: true, volume: .15, muted: [] }; }
 }
 
 /** Canvas tools and boards, settings and editor sheets, cards and collection tiles; everything else is menu UI. */
@@ -137,7 +139,7 @@ export function useUiSounds() {
     };
     const play = (kind: Cue, force = false) => {
       const audio = context.current;
-      if ((!preferences.enabled && !force) || !preferences.volume || document.hidden || !audio || audio.state !== 'running') return;
+      if ((!preferences.enabled && !force) || (preferences.muted.includes(kind) && !force) || !preferences.volume || document.hidden || !audio || audio.state !== 'running') return;
       stop(); const request = sequence.current;
       const layers = cueLayers[kind];
       void Promise.all(layers.map(layer => 'noise' in layer ? null : load(audio, layer.file))).then(decoded => {
@@ -214,10 +216,20 @@ export function useUiSounds() {
     <h3>PS2 UI sounds</h3>
     <label><input type="checkbox" checked={preferences.enabled} onChange={event => setPreferences({ ...preferences, enabled: event.target.checked })} /> UI sounds</label>
     <label>Volume<input aria-label="UI sound volume" type="range" min="0" max="1" step=".05" value={preferences.volume} onChange={event => setPreferences({ ...preferences, volume: Number(event.target.value) })} /></label>
-    {previews.map(group => <div key={group.label} className="sound-preview-row" role="group" aria-label={`${group.label} sounds`}>
-      <span className="sound-preview-label">{group.label}</span>
-      {group.cues.map(cue => <button type="button" key={cue} disabled={!preferences.enabled} onClick={() => preview(cue)}>{/^(hover|click)\b/.test(cue) ? cue.split('-')[0] : cue.replace(/^(canvas|notify)-/, '').replace(/^notify$/, 'success')}</button>)}
-    </div>)}
+    <p className="sound-preview-hint">Click a sound to switch it off or on (switching on plays it). Click a group name to switch the whole group.</p>
+    {previews.map(group => {
+      const allOff = group.cues.every(cue => preferences.muted.includes(cue));
+      return <div key={group.label} className="sound-preview-row" role="group" aria-label={`${group.label} sounds`}>
+        <button type="button" className="sound-preview-label" aria-pressed={!allOff} disabled={!preferences.enabled} title={allOff ? `Turn ${group.label.toLowerCase()} sounds on` : `Turn ${group.label.toLowerCase()} sounds off`}
+          onClick={() => setPreferences({ ...preferences, muted: allOff ? preferences.muted.filter(cue => !group.cues.includes(cue)) : [...new Set([...preferences.muted, ...group.cues])] })}>{group.label}</button>
+        {group.cues.map(cue => {
+          const on = !preferences.muted.includes(cue);
+          const name = cue === 'hover-controls' ? 'controls' : /^(hover|click)\b/.test(cue) ? cue.split('-')[0] : cue.replace(/^(canvas|notify)-/, '').replace(/^notify$/, 'success');
+          return <button type="button" key={cue} disabled={!preferences.enabled} aria-pressed={on} aria-label={`${group.label} ${name} sound`} title={on ? 'On · click to switch off' : 'Off · click to switch on'}
+            onClick={() => { setPreferences({ ...preferences, muted: on ? [...preferences.muted, cue] : preferences.muted.filter(item => item !== cue) }); if (!on) preview(cue); }}>{name}</button>;
+        })}
+      </div>;
+    })}
   </section>;
   return { preferences, setPreferences, preview, settings };
 }

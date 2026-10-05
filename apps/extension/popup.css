@@ -200,10 +200,19 @@ html.capture-popup,.capture-popup body,.capture-popup main { transition:none!imp
 
 /* Screenshot mode, site access prompt and the instant-save toggle. */
 .capture-popup .capture-modes { grid-template-columns:repeat(5,minmax(0,1fr)); }
-.shot-preview { display:block; width:100%; max-height:180px; margin-top:8px; object-fit:contain; border:1px solid #53697845; border-radius:4px; background:#0a0d10; }
+.shot-preview { display:block; width:100%; max-height:120px; margin-top:8px; object-fit:contain; border:1px solid #53697845; border-radius:4px; background:#0a0d10; }
 .shot-preview[hidden] { display:none; }
 .site-access { display:grid; gap:8px; margin:0 0 10px; padding:10px 12px; border:1px solid #f2d33d55; border-left:3px solid #f2d33d; border-radius:4px; background:#14181ccc; color:#e8ebed; font-size:12px; line-height:1.4; }
 .site-access[hidden] { display:none; }
 .site-access button { justify-self:start; padding:6px 10px; border:1px solid #f2d33d88; border-radius:4px; background:transparent; color:#f2d33d; font:600 11px/1 system-ui; letter-spacing:.04em; cursor:pointer; }
 .instant-shot { display:flex; align-items:center; gap:7px; margin:2px 0 8px; color:#9aa6b5; font-size:11px; }
 .instant-shot[hidden] { display:none; }
+
+/* Card colour swatches (same tints as the library's card editor). */
+.card-colour-field { display:grid; gap:5px; margin:2px 0 8px; }
+.card-colours { display:flex; flex-wrap:wrap; gap:5px; }
+.card-colour { width:22px; height:22px; padding:0; border:1px solid #ffffff26; border-radius:3px; cursor:pointer; transition:transform 70ms; }
+.card-colour:active { transform:scale(.9); }
+.card-colour.is-default { background:linear-gradient(135deg,transparent 46%,#ff4b4b 46%,#ff4b4b 54%,transparent 54%),#14181c; }
+.card-colour[aria-pressed='true'] { outline:2px solid #f2d33d; outline-offset:1px; }
+.card-colour-field { display:flex; align-items:center; gap:8px; margin:0 0 6px; } .card-colour-field .note-label { margin:0; flex:none; } .card-colours { gap:4px; } .card-colour { width:18px; height:18px; }

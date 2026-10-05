@@ -140,6 +140,7 @@ export async function importExtensionBytes(bytes: Uint8Array, expected: { id: st
         title: capture.title, sourceUrl: capture.sourceUrl, note: capture.note, caption: capture.caption, tags: capture.tags,
         dataUrl: pdfContent?.thumbnail ?? (['image', 'screenshot'].includes(capture.kind) ? capture.payload : undefined) }),
       ...(pdfContent ? { pdf: pdfContent.pdf } : {}),
+      ...(capture.color ? { color: capture.color } : {}),
       createdAt: capture.createdAt, capturePayloadHash: expected.hash,
     };
     if (!existing) await cardDb.cards.add({ ...created, searchText: buildSearchText(created) });

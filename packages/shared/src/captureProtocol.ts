@@ -13,6 +13,8 @@ export type Capture = {
   sourceUrl?: string;
   note?: string;
   caption?: string;
+  /** Optional card colour chosen while capturing (#rrggbb). */
+  color?: string;
   collectionName?: string;
   collectionIds?: string[];
   collectionNames?: string[];
@@ -65,7 +67,8 @@ export function validateCapture(value: unknown): Capture {
     throw new Error('Image capture must contain PNG, JPEG, or WebP data.');
   }
   return {
-    id: c.id, kind: c.kind as Capture['kind'], title: c.title.trim(), sourceUrl, note, caption: caption || undefined, payload, collectionName: typeof c.collectionName === 'string' ? c.collectionName.trim() : undefined, collectionIds, collectionNames,
+    id: c.id, kind: c.kind as Capture['kind'], title: c.title.trim(), sourceUrl, note, caption: caption || undefined,
+    ...(typeof c.color === 'string' && /^#[0-9a-f]{6}$/i.test(c.color) ? { color: c.color.toLowerCase() } : {}), payload, collectionName: typeof c.collectionName === 'string' ? c.collectionName.trim() : undefined, collectionIds, collectionNames,
     tags: Array.isArray(c.tags) ? c.tags.filter((tag): tag is string => typeof tag === 'string' && Boolean(tag.trim())).slice(0, 100).map(tag => tag.trim().slice(0, 100)) : [],
     createdAt: c.createdAt,
   };

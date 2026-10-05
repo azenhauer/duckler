@@ -167,11 +167,12 @@ try {
   await expect(metaPopup.locator('#capture-title')).toHaveValue('Lighthouse crop · Example Journal');
   await metaPopup.locator('#capture-title').fill('Lighthouse crop');
   await metaPopup.locator('#note-text').fill('');
+  await metaPopup.getByRole('button', { name: 'Card colour #ff4b4b' }).click();
   await metaPopup.locator('#save-page').click();
   await library.waitForFunction(async () => {
     const { cardDb } = await import('/src/lib/cardDb.ts');
     const card = await cardDb.cards.filter(card => card.title === 'Lighthouse crop').first();
-    return card?.type === 'image' && card.dataUrl?.startsWith('data:image/png') && !card.note;
+    return card?.type === 'image' && card.dataUrl?.startsWith('data:image/png') && !card.note && card.color === '#ff4b4b';
   }, undefined, { timeout: 15000 });
   await expect.poll(() => metaPopup.isClosed(), { timeout: 5000 }).toBe(true);
   console.log('Metadata autofill and in-panel screenshot review (no note needed) passed.');

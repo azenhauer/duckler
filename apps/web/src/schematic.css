@@ -683,3 +683,10 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 .connect-hint .glyph-tri, .selection-connect .glyph-tri { color: var(--sx-tri); }
 .app-shell:has(.connect-hint) .library-card .card-tile { cursor: crosshair; }
 .tile-menu { z-index: 1000 !important; } /* above dialogs: the content section rises to 200 while the editor is open */
+
+/* ---- Settings: each UI sound is a switch; off sounds are struck through and dimmed. ---- */
+.sound-preview-hint { flex-basis: 100%; margin: 6px 0 0; color: var(--ui-text-muted); font-size: .72rem; }
+.sound-preview-row .sound-preview-label { padding: 3px 0; border: 0 !important; background: transparent !important; text-align: left; cursor: pointer; }
+.sound-preview-row .sound-preview-label[aria-pressed='false'] { text-decoration: line-through; opacity: .5; }
+.sound-preview-row button[aria-pressed='true']:not(.sound-preview-label) { border-color: color-mix(in srgb, var(--ui-accent-primary) 55%, transparent); color: var(--ui-text); }
+.sound-preview-row button[aria-pressed='false']:not(.sound-preview-label) { opacity: .45; text-decoration: line-through; }

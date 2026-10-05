@@ -6,6 +6,22 @@ let collectionPage = 0, queuePage = 0;
 let collectionOptions = [], selectedCollectionIds = [], selectedCollectionNames = [];
 // Fields the person has typed in are never overwritten by autofill or new highlights.
 const edited = new Set();
+// Card colour chosen in the panel (same tints as the library editor); null keeps the default card style.
+const CARD_TINTS = ['#3cc8ff', '#2a2ca6', '#f2d33d', '#3ddc84', '#ff4b4b', '#ff7ad9', '#9aa6ff', '#e6f6ff'];
+let cardColour = null;
+function renderColours() {
+  const box = $('#card-colours'); if (!box) return;
+  box.replaceChildren();
+  for (const colour of [null, ...CARD_TINTS]) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'card-colour' + (colour ? '' : ' is-default');
+    if (colour) button.style.background = colour;
+    button.setAttribute('aria-label', colour ? `Card colour ${colour}` : 'Default card colour'); button.title = colour || 'Default';
+    button.setAttribute('aria-pressed', String(cardColour === colour));
+    button.addEventListener('click', () => { cardColour = colour; renderColours(); });
+    box.append(button);
+  }
+}
+renderColours();
 // Optional browser APIs: each feature quietly switches off where the API is missing.
 const store = { get: async key => (await chrome.storage?.local?.get(key)) ?? {}, set: async value => { await chrome.storage?.local?.set(value); } };
 const hasSiteAccess = async () => { try { return !chrome.permissions?.contains || await chrome.permissions.contains({ origins: ['<all_urls>'] }); } catch { return true; } };
@@ -78,7 +94,7 @@ async function initialize() {
   currentTab = tab;
   page = undefined;
   for (const id of ['capture-title', 'note-text', 'caption-text', 'tags', 'pdf-url']) $('#' + id).value = '';
-  edited.clear(); lastAutoNote = ''; screenshot = null; $('#shot-preview').hidden = true; $('#site-access').hidden = true;
+  edited.clear(); lastAutoNote = ''; screenshot = null; cardColour = null; renderColours(); $('#shot-preview').hidden = true; $('#site-access').hidden = true;
   selectedCollectionIds = []; selectedCollectionNames = []; $('#collection-search')?.dispatchEvent(new Event('input'));
   for (const id of ['mode-page', 'mode-selection', 'mode-pdf', 'mode-shot', 'capture-region']) $('#' + id).disabled = false;
   if (!tab?.id || !/^https?:\/\//i.test(tab.url || '')) throw new Error('Open a website to save a link or screenshot. You can still write a note.');
@@ -149,6 +165,7 @@ function setMode(next) {
   const note = next === 'note';
   $('#pdf-field').hidden = next !== 'pdf';
   $('#shot-preview').hidden = !(next === 'screenshot' && screenshot);
+  $('.instant-shot').hidden = next !== 'screenshot';
   $('#mode-shot').classList.toggle('active', next === 'screenshot'); $('#mode-shot').setAttribute('aria-pressed', String(next === 'screenshot'));
   $('#mode-pdf').classList.toggle('active', next === 'pdf'); $('#mode-pdf').setAttribute('aria-pressed', String(next === 'pdf'));
   $('#selection-preview').hidden = true;
@@ -249,6 +266,7 @@ async function saveCapture(send = false) {
       collectionName: selectedCollectionNames[0] || '',
       title: $('#capture-title').value.trim() || (mode === 'note' || mode === 'text' ? note.slice(0, 160) : mode === 'screenshot' ? screenshot.title : page.title || page.url),
       sourceUrl: mode === 'screenshot' ? screenshot.sourceUrl || page?.url || '' : page?.url || '', note,
+      ...(cardColour ? { color: cardColour } : {}),
       ...(mode === 'screenshot' ? { payload: screenshot.payload } : {}), caption: mode === 'text' || mode === 'note' ? $('#caption-text').value.trim() : '',
       tags: $('#tags').value.split(',').map(tag => tag.trim()).filter(Boolean) } });
     showStatus('Queued on this device. Ready for your library.');
