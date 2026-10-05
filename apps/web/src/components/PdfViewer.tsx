@@ -1,40 +1,41 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PdfDocument } from '@visual-library/shared';
+import type { LoadedPdf } from '../lib/pdf';
 
 /** Page-by-page PDF viewer (lazy pdf.js) with "capture this page as an image card". */
 export function PdfViewer({ pdf, onCapture }: { pdf: PdfDocument; onCapture?: (page: number, image: string) => Promise<void> }) {
   const [page, setPage] = useState(1);
-  const [image, setImage] = useState('');
+  // The rendered image remembers its page, so a stale picture is never captured under a new page number.
+  const [rendered, setRendered] = useState<{ page: number; src: string } | null>(null);
   const [error, setError] = useState('');
   const [capturing, setCapturing] = useState(false);
-  const docRef = useRef<Awaited<ReturnType<typeof import('../lib/pdf')['openPdf']>> | null>(null);
+  const [doc, setDoc] = useState<LoadedPdf | null>(null);
 
   useEffect(() => {
     let disposed = false;
+    let opened: LoadedPdf | null = null;
+    setDoc(null); setRendered(null); setError(''); setPage(1);
     void import('../lib/pdf').then(async ({ openPdf }) => {
-      const doc = await openPdf(pdf.data);
-      if (disposed) { void doc.loadingTask.destroy(); return; }
-      docRef.current = doc;
-      setPage(1);
+      opened = await openPdf(pdf.data);
+      if (disposed) { void opened.loadingTask.destroy(); return; }
+      setDoc(opened);
     }).catch(reason => { if (!disposed) setError(reason instanceof Error ? reason.message : 'This PDF could not be opened.'); });
-    return () => { disposed = true; void docRef.current?.loadingTask.destroy(); docRef.current = null; };
+    return () => { disposed = true; void opened?.loadingTask.destroy(); };
   }, [pdf.data]);
 
   useEffect(() => {
+    if (!doc) return;
     let disposed = false;
-    const render = async () => {
-      for (let attempt = 0; attempt < 40 && !docRef.current && !disposed; attempt += 1) await new Promise(resolve => setTimeout(resolve, 50));
-      const doc = docRef.current; if (!doc || disposed) return;
-      const { renderPdfPage } = await import('../lib/pdf');
-      const next = await renderPdfPage(doc, page, 1100);
-      if (!disposed) setImage(next);
-    };
-    void render().catch(() => { if (!disposed) setError('This page could not be rendered.'); });
+    void import('../lib/pdf')
+      .then(({ renderPdfPage }) => renderPdfPage(doc, page, 1100))
+      .then(src => { if (!disposed) setRendered({ page, src }); })
+      .catch(() => { if (!disposed) setError('This page could not be rendered.'); });
     return () => { disposed = true; };
-  }, [page, pdf.data]);
+  }, [doc, page]);
+  const image = rendered?.page === page ? rendered.src : '';
 
   return <div className="pdf-viewer">
-    <div className="pdf-page">{error ? <p className="editor-error" role="alert">{error}</p> : image ? <img src={image} alt={`Page ${page} of ${pdf.fileName}`} /> : <span className="pdf-loading">Loading page…</span>}</div>
+    <div className="pdf-page">{error ? <p className="editor-error" role="alert">{error}</p> : rendered ? <img src={rendered.src} alt={`Page ${rendered.page} of ${pdf.fileName}`} aria-busy={!image} /> : <span className="pdf-loading">Loading page…</span>}</div>
     <div className="pdf-controls">
       <button type="button" className="editor-icon-button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>‹</button>
       <span className="pdf-page-number">{page} / {pdf.pageCount}</span>

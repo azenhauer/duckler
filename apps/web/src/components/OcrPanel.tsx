@@ -42,7 +42,7 @@ export function OcrPanel({ dataUrl, value, onChange }: { dataUrl: string; value:
       {status === 'running'
         ? <button type="button" className="editor-action" onClick={() => job.current?.abort()}><b className="glyph-cir" aria-hidden="true">○</b>Cancel</button>
         : <button type="button" className="editor-action" onClick={() => void run()}><b className="glyph-tri" aria-hidden="true">△</b>{status === 'error' ? 'Retry' : value ? 'Re-extract' : 'Extract text'}</button>}
-      {value?.text && status !== 'running' && <button type="button" className="editor-action" onClick={() => { void navigator.clipboard?.writeText(value.text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }).catch(() => {}); }}><b className="glyph-sqr" aria-hidden="true">□</b>{copied ? 'Copied' : 'Copy'}</button>}
+      {value?.text && status !== 'running' && <button type="button" className="editor-action" onClick={() => { setError(''); void (navigator.clipboard?.writeText(value.text) ?? Promise.reject()).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }).catch(() => setError("Couldn't copy. Select the text below and copy it instead.")); }}><b className="glyph-sqr" aria-hidden="true">□</b>{copied ? 'Copied' : 'Copy'}</button>}
     </div>
     {status === 'running' && <div className="ocr-progress" role="progressbar" aria-label="Extracting text" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress.value * 100)}>
       <span style={{ transform: `scaleX(${Math.max(.03, progress.value)})` }} /><small>{progress.label}</small></div>}

@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent, CanvasBackup, LibraryBackup } from '@visual-library/shared';
-import { createCardFromInput, createCollectionFromInput, createCanvasPlacement, canvasCardPosition, validateCanvasContent } from '@visual-library/shared';
+import { buildSearchText, createCardFromInput, createCollectionFromInput, createCanvasPlacement, canvasCardPosition, validateCanvasContent } from '@visual-library/shared';
 import { type Capture, hashBytes, MAX_CAPTURE_BYTES, validateCapture } from '../../../../packages/shared/src/captureProtocol';
 
 type ExtensionReceipt = { id: string; hash: string; libraryId: string; savedAt: string };
@@ -29,8 +29,10 @@ class VisualLibraryDatabase extends Dexie {
 
 export const cardDb = new VisualLibraryDatabase();
 
+// searchText is rebuilt on read so search always matches the card as stored (e.g. OCR that no longer
+// matches its image, or restored/synced cards that carried a stale or empty index).
 export const readCards = async (): Promise<CardRecord[]> =>
-  cardDb.cards.orderBy('createdAt').reverse().toArray();
+  (await cardDb.cards.orderBy('createdAt').reverse().toArray()).map(card => ({ ...card, searchText: buildSearchText(card) }));
 
 export const readCollections = async (): Promise<CollectionRecord[]> =>
   cardDb.collections.orderBy('updatedAt').reverse().toArray();

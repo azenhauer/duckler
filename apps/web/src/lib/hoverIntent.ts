@@ -26,7 +26,7 @@ export function useHoverIntent(setOpen: (open: boolean) => void, options: { open
     clear();
     timer.current = window.setTimeout(() => setOpen(false), closeDelay);
   }, [closeDelay, enabled, setOpen]);
-  return { onPointerEnter, onPointerLeave, cancel: clear };
+  return { onPointerEnter, onPointerLeave };
 }
 
 const detailsTimers = new WeakMap<HTMLDetailsElement, number>();

@@ -3,7 +3,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MAX_PDF_BYTES, MAX_PDF_PAGES, type PdfDocument } from '@visual-library/shared';
 
 type PdfJs = typeof import('pdfjs-dist');
-type LoadedPdf = Awaited<ReturnType<PdfJs['getDocument']>['promise']>;
+export type LoadedPdf = Awaited<ReturnType<PdfJs['getDocument']>['promise']>;
 let pdfjsPromise: Promise<PdfJs> | null = null;
 const loadPdfJs = () => pdfjsPromise ??= import('pdfjs-dist').then(module => { module.GlobalWorkerOptions.workerSrc = pdfWorkerUrl; return module; });
 
