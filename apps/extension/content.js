@@ -18,7 +18,7 @@
     const heading = document.createElement('h2'); heading.textContent = 'Review screenshot';
     const image = document.createElement('img'); image.src = capture.payload; image.alt = 'Captured screenshot';
     const titleLabel = document.createElement('label'); titleLabel.htmlFor = 'capture-title'; titleLabel.textContent = 'Title';
-    const title = document.createElement('input'); title.id = 'capture-title'; title.maxLength = 1000; title.value = capture.title || 'Screenshot';
+    const title = document.createElement('input'); title.id = 'capture-title'; title.maxLength = 1000; title.value = capture.title || 'Captured area';
     const collectionLabel = document.createElement('label'); collectionLabel.htmlFor = 'capture-collection'; collectionLabel.textContent = 'Collection';
     const collection = document.createElement('input'); collection.id = 'capture-collection'; collection.maxLength = 200; collection.placeholder = 'Collection name (optional)';
     const label = document.createElement('label'); label.htmlFor = 'capture-note'; label.textContent = 'Add a note';
@@ -64,6 +64,49 @@
     const savedHost = toastHost;
     setTimeout(() => savedHost.remove(), error ? 8000 : 3500);
   };
+  // Names a capture from the page itself: the most prominent text inside the selected area (headings,
+  // captions, image alt text, product names), else the nearest heading above it, plus page title metadata.
+  const regionHint = rect => {
+    const box = { left: Math.min(rect.left, rect.right), top: Math.min(rect.top, rect.bottom), right: Math.max(rect.left, rect.right), bottom: Math.max(rect.top, rect.bottom) };
+    const clean = value => (value || '').replace(/\s+/g, ' ').trim();
+    const inside = r => {
+      const area = r.width * r.height;
+      if (!area) return 0;
+      return Math.max(0, Math.min(r.right, box.right) - Math.max(r.left, box.left)) * Math.max(0, Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top)) / area;
+    };
+    const weight = el => {
+      const tag = el.tagName;
+      if (/^H[1-6]$/.test(tag)) return 7 - Number(tag[1]);
+      if (el.getAttribute('role') === 'heading' || el.getAttribute('itemprop') === 'name') return 4;
+      if (['FIGCAPTION', 'CAPTION', 'LEGEND'].includes(tag)) return 3.5;
+      if (tag === 'IMG') return 2.5;
+      if (['STRONG', 'B', 'TH', 'DT', 'LABEL'].includes(tag)) return 2;
+      return 1;
+    };
+    let best = null, bestScore = 0, scanned = 0;
+    for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"],[itemprop="name"],figcaption,caption,legend,img[alt],strong,b,th,dt,label,p,li,a')) {
+      if (++scanned > 4000) break;
+      const r = el.getBoundingClientRect();
+      if (r.bottom < box.top || r.top > box.bottom || r.right < box.left || r.left > box.right || inside(r) < .6) continue;
+      const value = clean(el.tagName === 'IMG' ? el.getAttribute('alt') : el.innerText).slice(0, 200);
+      if (value.length < 3) continue;
+      const size = parseFloat(getComputedStyle(el).fontSize) || 16;
+      const score = weight(el) * (size / 16) * (value.length > 100 ? .5 : 1);
+      if (score > bestScore) { best = value; bestScore = score; }
+    }
+    if (!best || bestScore < 1.5) {
+      // Nothing prominent inside: use the closest heading just above the selection.
+      let closest = null, distance = Infinity;
+      for (const el of document.querySelectorAll('h1,h2,h3,h4,[role="heading"]')) {
+        const r = el.getBoundingClientRect(), gap = box.top - r.bottom;
+        if (gap < -4 || gap > 600 || r.right < box.left || r.left > box.right) continue;
+        if (gap < distance) { distance = gap; closest = clean(el.innerText).slice(0, 200); }
+      }
+      if (closest && closest.length >= 3) best = closest;
+    }
+    const meta = name => clean(document.querySelector(`meta[property="${name}"],meta[name="${name}"]`)?.getAttribute('content')).slice(0, 300);
+    return { subject: best || '', pageTitle: clean(document.title).slice(0, 300), ogTitle: meta('og:title') || meta('twitter:title'), siteName: meta('og:site_name') || meta('application-name'), host: location.hostname };
+  };
   const unchanged = () => viewport && location.href === viewport.url && innerWidth === viewport.width && innerHeight === viewport.height
     && scrollX === viewport.scrollX && scrollY === viewport.scrollY && devicePixelRatio === viewport.dpr
     && Math.abs((visualViewport?.scale || 1) - 1) < 0.01 && !invalid;
@@ -94,7 +137,8 @@
     try {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (!unchanged()) throw new Error('The page changed. Start the screenshot again.');
-      const response = await chrome.runtime.sendMessage({ type: 'prepare-region-review', rect, viewport: { width: viewport.width, height: viewport.height }, url: viewport.url });
+      const hint = regionHint(rect);
+      const response = await chrome.runtime.sendMessage({ type: 'prepare-region-review', rect, viewport: { width: viewport.width, height: viewport.height }, url: viewport.url, hint });
       if (response?.error === 'Unsupported capture request.') throw new Error('Reload Duckler Capture in Extensions, refresh this website, and try again.');
       if (!response?.ok) throw new Error(response?.error || 'Could not save this screenshot.');
       cancel();

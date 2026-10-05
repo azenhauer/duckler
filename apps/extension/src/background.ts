@@ -3,6 +3,7 @@ import { CaptureQueue } from './queue';
 import { bridgeRequest, validateSender } from './bridge';
 import { isAllowedLibraryOrigin } from './origin';
 import { isSettingsSender } from './settingsSender';
+import { screenshotTitle, type RegionHint } from './naming';
 
 const queue = new CaptureQueue();
 const trustedPorts = new Set<chrome.runtime.Port>();
@@ -46,6 +47,8 @@ const openLibrary = async () => {
   } else await chrome.tabs.create({ url: target.href });
 };
 
+const hostOf = (url?: string) => { try { return url ? new URL(url).hostname : ''; } catch { return ''; } };
+
 async function captureRegion(sender: chrome.runtime.MessageSender, request: Record<string, unknown>) {
   const tabId = sender.tab?.id, windowId = sender.tab?.windowId;
   if (!Number.isInteger(tabId) || !Number.isInteger(windowId) || sender.frameId !== 0 || !sender.documentId) throw new Error('Start a screenshot from a regular website.');
@@ -69,7 +72,7 @@ async function captureRegion(sender: chrome.runtime.MessageSender, request: Reco
     if (!ctx) throw new Error('Could not crop this screenshot.');
     ctx.drawImage(bitmap, bounds.left, bounds.top, bounds.width, bounds.height, 0, 0, bounds.width, bounds.height);
     const blob = await canvas.convertToBlob({ type: 'image/png' });
-    return { kind: 'screenshot', title: `Screenshot — ${sender.tab?.title || 'Captured area'}`.slice(0, 1000), sourceUrl: request.url, payload: `data:image/png;base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` };
+    return { kind: 'screenshot', title: screenshotTitle(request.hint as RegionHint | undefined, sender.tab?.title), sourceUrl: request.url, payload: `data:image/png;base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` };
   } finally { bitmap.close(); }
 }
 
@@ -108,7 +111,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       const response = await fetch(imageUrl.href, { credentials: 'omit', signal: AbortSignal.timeout(15000) });
       const blob = await response.blob();
       if (!response.ok || !['image/png', 'image/jpeg', 'image/webp'].includes(blob.type) || blob.size > 10 * 1024 * 1024) throw new Error('Could not read this image. Use Capture region instead.');
-      capture = { kind: 'image', title: tab.title || 'Saved image', sourceUrl: info.pageUrl, payload: `data:${blob.type};base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` };
+      capture = { kind: 'image', title: screenshotTitle({ pageTitle: tab.title, host: hostOf(info.pageUrl) }) || 'Saved image', sourceUrl: info.pageUrl, payload: `data:${blob.type};base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}` };
     } else if (info.menuItemId === 'duckler-save-link') {
       capture = { kind: 'bookmark', title: info.linkUrl, sourceUrl: info.linkUrl };
     } else {
