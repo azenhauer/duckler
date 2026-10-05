@@ -7,6 +7,7 @@ import { screenshotTitle, type RegionHint } from './naming';
 import { fetchPdf } from './pdf';
 
 const queue = new CaptureQueue();
+void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 const trustedPorts = new Set<chrome.runtime.Port>();
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Capture could not be saved.';
 const badge = async (error = false) => {
@@ -34,8 +35,10 @@ const save = async (capture: Record<string, unknown>) => {
   await notify();
   return item;
 };
-const openLibrary = async () => {
+const openLibrary = async (background = false) => {
+  if (background && trustedPorts.size) { await notify(); return; }
   const pairing = await queue.pairing();
+  if (background && !pairing) throw new Error('Connect your library before sending captures.');
   const url = pairing?.origin ?? (await chrome.storage.local.get('duckler-app-url'))['duckler-app-url'] ?? 'https://duckler.pages.dev';
   const target = new URL(url);
   if (!['https:', 'http:'].includes(target.protocol)) throw new Error('Invalid library address.');
@@ -43,9 +46,10 @@ const openLibrary = async () => {
     try { return tab.url && new URL(tab.url).origin === target.origin; } catch { return false; }
   });
   if (existing?.id) {
+    if (background) return;
     await chrome.tabs.update(existing.id, { active: true });
     if (existing.windowId) await chrome.windows.update(existing.windowId, { focused: true });
-  } else await chrome.tabs.create({ url: target.href });
+  } else await chrome.tabs.create({ url: target.href, active: !background });
 };
 
 const hostOf = (url?: string) => { try { return url ? new URL(url).hostname : ''; } catch { return ''; } };
@@ -142,7 +146,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { items: rows.map(row => ({ ...JSON.parse(new TextDecoder().decode(row.bytes)), byteLength: row.byteLength })), budget: MAX_QUEUE_BYTES };
       }
       case 'delete-capture': await queue.captures.delete(message.id); await notify(); return {};
-      case 'deliver-capture': case 'open-library': await openLibrary(); return {};
+      case 'deliver-capture': await openLibrary(true); return {};
+      case 'open-library': await openLibrary(); return {};
       case 'start-region': await beginRegion(message.tabId); return {};
       case 'prepare-region-review': return { capture: await captureRegion(sender, message) };
       case 'capture-region': throw new Error('Refresh this website before taking a screenshot. The screenshot review has been updated.');

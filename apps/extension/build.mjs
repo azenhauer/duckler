@@ -7,7 +7,7 @@ const dev = process.argv.includes('--dev');
 const output = join(root, 'dist', dev ? 'development' : 'production');
 await mkdir(output, { recursive: true });
 await build({ entryPoints: [join(root, 'src/background.ts')], bundle: true, format: 'iife', target: 'chrome120', outfile: join(output, 'background.js') });
-for (const file of ['content.js', 'popup.html', 'popup.css', 'popup.js', 'options.html', 'options.js']) await copyFile(join(root, file), join(output, file));
+for (const file of ['content.js', 'selection.js', 'popup.html', 'popup.css', 'popup.js', 'options.html', 'options.js']) await copyFile(join(root, file), join(output, file));
 await mkdir(join(output, 'fonts'), { recursive: true });
 for (const weight of [400, 500, 600]) await copyFile(join(root, '../../node_modules/@fontsource/inter/files', `inter-latin-${weight}-normal.woff2`), join(output, 'fonts', `inter-${weight}.woff2`));
 await copyFile(join(root, '../web/public/duckler-logo.svg'), join(output, 'duckler-logo.svg'));

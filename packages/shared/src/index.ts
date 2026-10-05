@@ -37,6 +37,7 @@ export const cardSchema = z.object({
   type: cardTypeSchema,
   title: z.string().min(1),
   note: z.string().default(''),
+  caption: z.string().max(10000).optional(),
   sourceUrl: z.string().url().optional().or(z.literal('')),
   tags: z.array(z.string().min(1)).default([]),
   createdAt: z.string(),
@@ -61,6 +62,7 @@ export type CreateCardInput = {
   type: CardType;
   title: string;
   note?: string;
+  caption?: string;
   sourceUrl?: string;
   tags?: string[];
   dataUrl?: string;
@@ -73,6 +75,7 @@ export const createCardInputSchema = z.object({
   type: cardTypeSchema,
   title: z.string().min(1),
   note: z.string().optional().default(''),
+  caption: z.string().max(10000).optional(),
   sourceUrl: z.string().url().optional().or(z.literal('')),
   tags: z.array(z.string().min(1)).optional().default([]),
   dataUrl: z.string().optional(),
@@ -466,8 +469,8 @@ export const toggleCardInCollection = (collection: Pick<CollectionRecord, 'cardI
     : [...nextIds, cardId];
 };
 
-export const buildSearchText = (card: Pick<CardRecord, 'title' | 'note' | 'sourceUrl' | 'tags'> & Partial<Pick<CardRecord, 'ocr' | 'pdf' | 'dataUrl'>>): string =>
-  [card.title, card.note, card.sourceUrl ?? '', ...card.tags, ocrIsCurrent(card) ? card.ocr!.text : '', card.pdf?.text.slice(0, 200000) ?? '']
+export const buildSearchText = (card: Pick<CardRecord, 'title' | 'note' | 'sourceUrl' | 'tags'> & Partial<Pick<CardRecord, 'ocr' | 'pdf' | 'dataUrl' | 'caption'>>): string =>
+  [card.title, card.note, card.caption ?? '', card.sourceUrl ?? '', ...card.tags, ocrIsCurrent(card) ? card.ocr!.text : '', card.pdf?.text.slice(0, 200000) ?? '']
     .join(' ')
     .toLowerCase();
 
@@ -503,6 +506,7 @@ export const createCardFromInput = (input: CreateCardInput): CardRecord => {
     type: normalized.type,
     title: normalized.title,
     note: normalized.note,
+    caption: normalized.caption,
     sourceUrl: normalized.sourceUrl || undefined,
     tags: normalizeTags(normalized.tags),
     createdAt: now,
@@ -513,6 +517,7 @@ export const createCardFromInput = (input: CreateCardInput): CardRecord => {
     searchText: buildSearchText({
       title: normalized.title,
       note: normalized.note,
+      caption: normalized.caption,
       sourceUrl: normalized.sourceUrl || undefined,
       tags: normalizeTags(normalized.tags),
     }),

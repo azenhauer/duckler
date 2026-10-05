@@ -661,3 +661,4 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 .canvas-gallery-rename { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 3; }
 .canvas-gallery-rename input { width: 100%; padding: 8px 10px; border: 1px solid var(--ui-accent-primary); border-radius: 4px; background: var(--ui-surface); color: var(--ui-text);
   font-family: inherit; font-size: .95rem; font-weight: 700; line-height: 1.2; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ui-accent-primary) 25%, transparent); }
+.note-caption { display:block; margin-top:12px; padding-top:8px; border-top:1px solid var(--sx-line-soft); color:var(--ui-text-muted); font-size:.8rem; white-space:pre-wrap; overflow-wrap:anywhere; }

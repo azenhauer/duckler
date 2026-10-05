@@ -59,6 +59,7 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
             <input aria-label="Title" className="editor-title" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Untitled" maxLength={1000} /></label>
           <label className="editor-field editor-field-note"><span>Note</span>
             <textarea aria-label="Note" placeholder="Type here…" value={draft.note} rows={card.type === 'text' ? 6 : 3} onChange={event => setDraft({ ...draft, note: event.target.value })} /></label>
+          {draft.caption !== undefined && <label className="editor-field"><span>Caption</span><textarea aria-label="Caption" value={draft.caption} maxLength={10000} rows={2} onChange={event => setDraft({ ...draft, caption: event.target.value })} /></label>}
           {card.type === 'image' && card.dataUrl && <OcrPanel dataUrl={card.dataUrl} value={draft.ocr} onChange={ocr => setDraft({ ...draft, ocr })}
             onCreateNote={card.source && onCreateLinkedNote ? text => onCreateLinkedNote(text) : undefined} noteTarget={card.source ? `page ${card.source.page} of ${pdfSource?.title ?? card.source.fileName ?? 'its PDF'}` : undefined} />}
           {card.source && <p className="editor-provenance">From page {card.source.page} of {pdfSource ? <button type="button" className="editor-link" onClick={pdfSource.open}>{pdfSource.title}</button> : <span>{card.source.fileName ?? 'a PDF no longer in your library'}</span>}</p>}

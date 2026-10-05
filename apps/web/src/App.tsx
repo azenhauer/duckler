@@ -1763,7 +1763,7 @@ function App() {
                 {card.type === 'pdf' && <span className="card-pdf-badge">PDF · {card.pdf?.pageCount ?? '?'} p</span>}
                 {card.source && <span className="card-pdf-badge card-source-badge">Page {card.source.page}</span>}
                 {capturedCardIds.includes(card.id) && <span className="capture-flash" aria-hidden="true"><i /><i /><i /><i /></span>}
-                {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p></div> : null}
+                {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p>{card.caption && <small className="note-caption">{card.caption}</small>}</div> : null}
                 {card.type === 'bookmark' ? <div className="bookmark-card-preview">
                   <span className="card-kind">LINK <InterfaceIcon name="link" /></span>
                   <h2>{card.title}</h2>{card.note && <p>{card.note}</p>}
@@ -2229,6 +2229,5 @@ function App() {
 }
 
 export default App;
-
 
 

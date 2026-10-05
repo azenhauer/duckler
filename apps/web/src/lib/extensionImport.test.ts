@@ -10,6 +10,13 @@ const envelope = async () => {
   return { bytes, metadata: { id: capture.id, hash: await hashBytes(bytes), libraryId: 'library-1' } };
 };
 describe('extension atomic import', () => {
+  it('keeps the highlighted note and caption separate and searchable', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ ...capture, note: 'Original highlighted text', caption: 'My interpretation' }));
+    const metadata = { id: capture.id, hash: await hashBytes(bytes), libraryId: 'library-1' };
+    await importExtensionBytes(bytes, metadata);
+    expect(await cardDb.cards.get(capture.id)).toMatchObject({ note: 'Original highlighted text', caption: 'My interpretation' });
+    expect((await cardDb.cards.get(capture.id))?.searchText).toContain('my interpretation');
+  });
   it('creates or reuses the named collection and keeps duplicate imports idempotent', async () => {
     const bytes = new TextEncoder().encode(JSON.stringify({ ...capture, collectionName: ' Inspiration ' }));
     const metadata = { id: capture.id, hash: await hashBytes(bytes), libraryId: 'library-1' };

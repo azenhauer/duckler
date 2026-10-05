@@ -120,7 +120,7 @@ export async function importExtensionBytes(bytes: Uint8Array, expected: { id: st
     if (existing && existing.capturePayloadHash !== expected.hash) throw new Error('A different card already uses this capture ID.');
     const created = existing ?? {
       ...createCardFromInput({ id: capture.id, type: capture.kind === 'pdf' ? 'pdf' : capture.kind === 'image' || capture.kind === 'screenshot' ? 'image' : capture.kind === 'text' ? 'text' : 'bookmark',
-        title: capture.title, sourceUrl: capture.sourceUrl, note: capture.note, tags: capture.tags,
+        title: capture.title, sourceUrl: capture.sourceUrl, note: capture.note, caption: capture.caption, tags: capture.tags,
         dataUrl: pdfContent?.thumbnail ?? (['image', 'screenshot'].includes(capture.kind) ? capture.payload : undefined) }),
       ...(pdfContent ? { pdf: pdfContent.pdf } : {}),
       createdAt: capture.createdAt, capturePayloadHash: expected.hash,

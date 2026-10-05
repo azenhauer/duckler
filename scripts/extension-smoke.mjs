@@ -64,7 +64,8 @@ try {
   await library.keyboard.press('Escape');
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${id}/popup.html`);
-  assert.equal(await popup.locator('body').evaluate(element => getComputedStyle(element).width), '440px');
+  assert.equal(await popup.evaluate(async () => (await chrome.sidePanel.getPanelBehavior()).openPanelOnActionClick), true);
+  assert.equal(await popup.evaluate(() => chrome.runtime.getManifest().side_panel.default_path), 'popup.html');
   await popup.close();
   // Exercise the actual worker and connected web receiver; no browser APIs mocked.
   const response = await options.evaluate(() => chrome.runtime.sendMessage({ type: 'queue-capture', capture: { kind: 'text', title: 'Extension delivery check', note: 'Real Chromium worker, real local receiver.', tags: ['test'] } }));
@@ -91,7 +92,7 @@ try {
   await pdfPopup.locator('#new-collection-name').fill('PDF research');
   await pdfPopup.getByRole('button', { name: '+ Create new collection' }).click();
   await pdfPopup.getByRole('button', { name: 'Save PDF', exact: true }).click();
-  await expect(pdfPopup.locator('#status')).toContainText('Queued on this device');
+  await expect(pdfPopup.locator('#status')).toContainText('Saved');
   await library.waitForFunction(async () => {
     const { cardDb } = await import('/src/lib/cardDb.ts');
     const card = await cardDb.cards.filter(card => card.title === 'Saved PDF fixture').first();
@@ -99,9 +100,42 @@ try {
     return card?.type === 'pdf' && card.pdf?.pageCount === 1 && card.pdf.text.includes('PDF capture fixture') && collection?.cardIds.includes(card.id);
   }, undefined, { timeout: 30000 });
   await options.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: 'list-captures' })).items.length === 0);
+  // Keep the capture document open while selecting text in the website.
+  await website.evaluate(() => {
+    const paragraph = document.createElement('p'); paragraph.id = 'highlight-fixture'; paragraph.textContent = 'This passage becomes my note.'; document.body.append(paragraph);
+    const range = document.createRange(); range.selectNodeContents(paragraph);
+    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+  });
+  await expect(pdfPopup.locator('#note-text')).toHaveValue('This passage becomes my note.');
+  await pdfPopup.locator('#capture-title').fill('Highlight with caption');
+  await pdfPopup.locator('#caption-text').fill('My independent caption');
+  await pdfPopup.locator('#caption-text').press('Control+Enter');
+  await library.waitForFunction(async () => {
+    const { cardDb } = await import('/src/lib/cardDb.ts');
+    const card = await cardDb.cards.filter(card => card.title === 'Highlight with caption').first();
+    return card?.note === 'This passage becomes my note.' && card.caption === 'My independent caption';
+  });
+  assert.equal(await pdfPopup.isClosed(), false);
+  await pdfPopup.locator('#capture-title').fill('Edited highlight shortcut');
+  await pdfPopup.locator('#note-text').fill('I refined the highlighted note.');
+  await website.keyboard.press('Control+Enter');
+  await library.waitForFunction(async () => {
+    const { cardDb } = await import('/src/lib/cardDb.ts');
+    const card = await cardDb.cards.filter(card => card.title === 'Edited highlight shortcut').first();
+    return card?.note === 'I refined the highlighted note.' && card.caption === 'My independent caption';
+  });
   await library.reload();
   await library.getByRole('button', { name: 'All notes', exact: true }).click();
   await expect(library.getByRole('article', { name: 'Open Saved PDF fixture' })).toBeVisible();
+  await expect(library.getByRole('article', { name: 'Open Highlight with caption' }).locator('.note-caption')).toHaveText('My independent caption');
+  console.log('Live page highlighting, separate captions and Ctrl+Enter delivery passed with the capture document open.');
+  await pdfPopup.close();
+  await website.bringToFront();
+  await options.evaluate(async () => { await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id }); });
+  await expect.poll(() => options.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length)).toBe(1);
+  await website.locator('#highlight-fixture').click();
+  assert.equal(await options.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length), 1);
+  console.log('Native side panel stays open while interacting with the website.');
   console.log('PDF downloaded through the extension popup, parsed, stored in its collection and retained after reload.');
   console.log(`Manifest V3 loads; pairing, live note delivery and post-commit queue acknowledgement passed (${id}).`);
 } finally { await context.close(); await new Promise(resolve => server.close(resolve)); }
