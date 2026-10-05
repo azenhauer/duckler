@@ -42,7 +42,21 @@ export default defineConfig({
       workbox: {
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,wav}'],
+        // The ~4 MB OCR cores are only needed when someone runs OCR, so they are cached on first use instead of precached.
+        globIgnores: ['**/tesseract-core-*.js'],
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/assets\/(tesseract-core-|pdf\.worker\.min-)/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'duckler-engines', expiration: { maxEntries: 8 } },
+          },
+          {
+            urlPattern: ({ url }) => url.origin === 'https://cdn.jsdelivr.net' && url.pathname.startsWith('/npm/@tesseract.js-data/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'duckler-ocr-languages', expiration: { maxEntries: 8 }, cacheableResponse: { statuses: [0, 200] } },
+          },
+        ],
       },
     }),
   ],

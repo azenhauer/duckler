@@ -104,7 +104,6 @@ describe('App', () => {
     const dialog = screen.getByRole('dialog', { name: 'Card details' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Note' }), { target: { value: 'Revised note' } });
     expect((await readCards()).find(card => card.title === 'Design note')?.note).toBe('A design observation');
-    fireEvent.click(within(dialog).getByRole('button', { name: /Collections/ }));
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Research' }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument());
@@ -266,9 +265,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open collection Inbox' }));
     expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
-    expect(screen.getByRole('heading', { name: 'Collections' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Collections' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
-    expect(screen.getByRole('button', { name: 'Open collections' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open collections' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open canvas' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Go back' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getAllByRole('button')).toHaveLength(4);
@@ -379,6 +378,6 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Open canvas Inbox' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open canvas Research' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
-    expect(screen.getByRole('button', { name: 'Open canvas' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open canvas' })).toBeInTheDocument();
   });
 });

@@ -47,7 +47,7 @@ export function OcrPanel({ dataUrl, value, onChange }: { dataUrl: string; value:
     {status === 'running' && <div className="ocr-progress" role="progressbar" aria-label="Extracting text" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress.value * 100)}>
       <span style={{ transform: `scaleX(${Math.max(.03, progress.value)})` }} /><small>{progress.label}</small></div>}
     {error && <p className="editor-error" role="alert">{error}</p>}
-    {stale && <p className="ocr-stale" role="status">The image changed after this text was extracted, so it isn't used in search. Re-extract to update it.</p>}
+    {stale && <p className="ocr-stale" role="status">The image changed after this text was extracted, so it isn&apos;t used in search. Re-extract to update it.</p>}
     {value && <textarea aria-label="Extracted text" rows={4} value={value.text} onChange={event => onChange({ ...value, text: event.target.value.slice(0, 200000), editedByUser: true })} placeholder="No text found" />}
     {value?.editedByUser && <small className="ocr-meta">Edited by you · re-extracting replaces your edits</small>}
   </fieldset>;
