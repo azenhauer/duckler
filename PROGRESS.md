@@ -34,6 +34,53 @@ Last updated: 2026-10-04
 - [x] Visible speaker button with hover volume; more sound variety (open, back, toggle, save, delete…)
 - [ ] **You:** restart `npm run dev` if anything looks stale, then review at full desktop width
 
+## Round 4 (Oct 4) — done
+- [x] Bulk selection bar: "+ New collection…" creates a collection on the spot with the selected cards
+- [x] Click the profile card to change its colour; profile description (256 chars) shown on the card
+- [x] Closing animation for dialogs and popovers
+- [x] + button tilts the other way; icon light: cyan on hover, yellow when selected; only icons react (no box highlight); same light on the two Home artworks
+- [x] Back = controller circle button (black cap, red ring)
+- [x] Volume + Settings moved to the top right; reference-style layout (back top-left, tools top-right, small left-aligned title)
+- [x] Round avatar, matte titles, tiny worn texture on panels
+- [x] Collection pages keep only the smaller title
+- [x] Each step committed to git
+
+## V2 feature checklist
+Legend: [x] done · [~] partial · [ ] not started · [!] blocked (reason given)
+
+### Accounts, workspaces & sharing
+- [!] Multiple users with separate private libraries: needs account-scoped storage (M9) **and** Drive content sync, which doesn't exist yet (only sign-in + root folder)
+- [~] Google account login (GIS sign-in exists) · [ ] safe account switching
+- [!] Private Drive-backed workspace per user: Drive content sync not built
+- [!] Shared workspaces, Viewer/Editor roles, invites, join flow, upgrade/downgrade/revoke: blocked on the M12 real-account Drive test (needs 3 disposable Google accounts)
+- [!] Copy cards / collections / canvases into a shared workspace, copy preview: depends on shared workspaces
+- [!] Asynchronous collaborative editing (cards, collections, canvases, OCR, annotations) and offline collaborative sync: depends on Drive sync + sharing
+- [~] Conflict detection: the shared revision reducer keeps concurrent heads, but there's no UI · [ ] Keep Mine / Keep Other / Duplicate · [ ] delete-vs-edit recovery UI
+
+### OCR
+- [!] OCR (EN/PT), progress/cancel/retry/copy/edit/re-extract, OCR search, stale-OCR detection: needs `tesseract.js`, which can't be installed from Claude's environment (npm blocked). Run `npm i tesseract.js` on Windows and I'll build it.
+
+### Canvas
+- [x] Card rotation · [x] Rotation reset
+- [x] Connectors · [x] Arrows and lines between cards/elements · [x] Connector labels · [x] Connector direction controls (line / arrow / double) · [x] Connectors follow moved/rotated objects
+- [x] Pen · [x] Highlighter · [x] Rectangles · [x] Ellipses · [x] Text annotations · [x] Object eraser/delete
+- [x] Annotation selection and movement · [x] Annotation colours · [x] Stroke sizes · [x] Opacity
+- [x] Undo and redo · [x] Annotations attached to card placements · [x] Canvas-global annotations
+- [x] Board background colour
+
+### Backup & export
+- [~] Backup format for V2: cards, collections (with nesting), canvases, drawings, connectors, rotation and per-card colour are included; OCR, conflicts and revision history aren't, because those features don't exist yet
+- [!] Shared-workspace backups · [!] Restore a shared workspace as a private copy: depend on shared workspaces
+- [!] Obsidian export with OCR: depends on OCR
+- [x] Obsidian export with text annotations · [x] Obsidian export with canvas previews (SVG)
+
+### PDF
+- [!] PDF ingestion, PDF cards, first-page thumbnails, built-in viewer, page capture as image cards, page provenance, PDF text search: need `pdfjs-dist` (npm blocked here). Run `npm i pdfjs-dist` on Windows and I'll build it.
+
+### Nested collections
+- [x] Nested collections · [x] Parent and child collections · [x] One additional hierarchy level
+- [x] Moving collections between parents · [x] Hierarchy preserved in export and restore
+
 ## Collections
 - [x] Many-to-many memberships, multiple badges
 - [x] Remove one membership with 7 s Undo
