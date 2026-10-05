@@ -1308,7 +1308,7 @@ function App() {
           </button>}
         </div>}
         {!isHome && <header className="page-header">
-          <button type="button" className="page-back b-button" aria-label="Go back" title="Back" onClick={goBack}><span className="b-ring" aria-hidden="true" /></button>
+          <button type="button" className="page-back b-button" aria-label="Go back" onClick={goBack}><span className="b-ring" aria-hidden="true" /><span className="b-label" aria-hidden="true">Back</span></button>
           <div>
           <h1 className={activeView === 'library' ? 'visually-hidden' : undefined}>
             {activeView === 'library'
