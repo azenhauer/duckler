@@ -1,6 +1,6 @@
 // PDF support, loaded only when a PDF is added or opened. pdf.js and its worker are bundled assets.
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { MAX_PDF_BYTES, MAX_PDF_PAGES, type PdfDocument } from '@visual-library/shared';
+import { hasPdfSignature, MAX_PDF_BYTES, MAX_PDF_PAGES, type PdfDocument } from '@visual-library/shared';
 
 type PdfJs = typeof import('pdfjs-dist');
 export type LoadedPdf = Awaited<ReturnType<PdfJs['getDocument']>['promise']>;
@@ -65,7 +65,7 @@ async function extractPdfText(pdf: LoadedPdf, maxChars = 500000): Promise<string
 export async function readPdfFile(file: File): Promise<{ title: string; thumbnail: string; pdf: PdfDocument }> {
   if (file.size > MAX_PDF_BYTES) throw new Error('PDFs can be up to 25 MB.');
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!(bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) throw new Error('This file is not a PDF.');
+  if (!hasPdfSignature(bytes)) throw new Error('This file is not a PDF.');
   const pdf = await openPdf(bytes);
   try {
     if (pdf.numPages > MAX_PDF_PAGES) throw new Error(`PDFs can have up to ${MAX_PDF_PAGES} pages.`);

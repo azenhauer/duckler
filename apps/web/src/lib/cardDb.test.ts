@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCardFromInput, createCollectionFromInput, createCanvasPlacement, defaultCanvasStyle, type CanvasContent } from '@visual-library/shared';
-import { cardDb, saveCardWithCollections, saveCanvasLayout, readCanvasLayout, deleteCollection, setCardCollectionMembership, readCanvasState, commitCanvasContent } from './cardDb';
+import { createCardFromInput, createCollectionFromInput, createCanvasPlacement, defaultCanvasStyle, mediaFingerprint, type CanvasContent } from '@visual-library/shared';
+import { cardDb, readCards, saveCardWithCollections, saveCanvasLayout, readCanvasLayout, deleteCollection, setCardCollectionMembership, readCanvasState, commitCanvasContent } from './cardDb';
 
 beforeEach(async () => { await cardDb.cards.clear(); await cardDb.collections.clear(); await cardDb.canvasLayouts.clear(); await cardDb.canvases.clear(); await cardDb.canvasPlacements.clear(); await cardDb.canvasElements.clear(); await cardDb.canvasConnectors.clear(); });
 
@@ -165,5 +165,19 @@ describe('canvas commands and legacy upgrade', () => {
     expect(await cardDb.canvasPlacements.toArray()).toEqual([]);
     expect(await cardDb.cards.get(card.id)).toEqual(card);
     await expect(readCanvasState('board')).rejects.toThrow('Collection no longer exists');
+  });
+});
+
+describe('reading cards', () => {
+  it('rebuilds the search index so stale OCR and missing indexes match the stored card', async () => {
+    const image = 'data:image/png;base64,QUJD';
+    const ocr = { text: 'Pineapple', sourceHash: mediaFingerprint(image), languages: ['eng'], engine: 'tesseract.js', engineVersion: '7', createdAt: 'now', editedByUser: false };
+    const base = createCardFromInput({ type: 'image', title: 'Scan', dataUrl: 'data:image/png;base64,REVG' });
+    await cardDb.cards.put({ ...base, ocr, searchText: 'scan pineapple' });
+    const pdf = createCardFromInput({ type: 'pdf', title: 'Report' });
+    await cardDb.cards.put({ ...pdf, pdf: { fileName: 'r.pdf', pageCount: 1, data: 'data:application/pdf;base64,JVBERg==', text: 'Zebracorn' }, searchText: '' });
+    const cards = await readCards();
+    expect(cards.find(card => card.id === base.id)?.searchText).not.toContain('pineapple');
+    expect(cards.find(card => card.id === pdf.id)?.searchText).toContain('zebracorn');
   });
 });

@@ -21,12 +21,15 @@ export type OcrText = z.infer<typeof ocrTextSchema>;
 export const pdfDocumentSchema = z.object({
   fileName: z.string().max(300),
   pageCount: z.number().int().min(1).max(10000),
-  data: z.string().regex(/^data:application\/pdf;base64,/),
+  data: z.string().regex(/^data:application\/pdf;base64,[a-z0-9+/=\s]+$/i),
   text: z.string().max(500000).default(''),
 });
 export type PdfDocument = z.infer<typeof pdfDocumentSchema>;
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 export const MAX_PDF_PAGES = 200;
+/** True when the bytes start with the %PDF file signature. */
+export const hasPdfSignature = (bytes: Uint8Array): boolean =>
+  bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
 export type CardType = z.infer<typeof cardTypeSchema>;
 
 export const cardSchema = z.object({
