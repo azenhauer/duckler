@@ -14,7 +14,7 @@ export type Zone = 'menu' | 'card' | 'settings' | 'canvas';
 export type Cue =
   | 'hover' | 'click' | 'open' | 'back' | 'toggle-on' | 'toggle-off' | 'save' | 'delete' | 'capture'
   | `hover-${Exclude<Zone, 'menu'>}` | `click-${Exclude<Zone, 'menu'>}`
-  | 'notify' | 'notify-error' | 'notify-info'
+  | 'notify' | 'notify-error' | 'notify-info' | 'select' | 'deselect' | 'gear' | 'hover-controls'
   | 'canvas-draw' | 'canvas-highlight' | 'canvas-shape' | 'canvas-text' | 'canvas-erase' | 'canvas-connect'
   | 'canvas-place' | 'canvas-drop' | 'canvas-rotate' | 'canvas-undo' | 'canvas-redo' | 'canvas-tool';
 /** A pitched sample, or a short band-passed noise burst (pencil/eraser texture) from one shared buffer. */
@@ -43,6 +43,12 @@ const cueLayers: Record<Cue, Layer[]> = {
   'notify-info': [s('hover', 1.3, .7), s('hover', 1.62, .45, .08)],
   'notify-error': [s('click', .7, .9), s('click', .58, .7, .1)],
   'canvas-tool': [s('hover', 1.42, .55)],
+  // Selecting a card: a bright two-step tick up; deselecting steps back down.
+  select: [s('click', 1.62, .7), s('hover', 2.05, .35, .035)],
+  deselect: [s('hover', 1.25, .45), s('click', .95, .5, .03)],
+  // Settings controls (gear, speaker): a low mechanical turn with a short click on top.
+  gear: [s('hover', .62, .7), s('click', 1.5, .45, .06), s('hover', .8, .3, .11)],
+  'hover-controls': [s('hover', .74, .5)],
   'canvas-draw': [n(3200, .11, .5), s('hover', 1.7, .25, .02)],
   'canvas-highlight': [n(1800, .16, .45, 0, .8), s('hover', 1.2, .22, .03)],
   'canvas-shape': [s('click', 1.42, .7), s('hover', 1.1, .4, .04)],
@@ -75,6 +81,9 @@ export function zoneFor(element: Element): Zone {
 export function cueFor(element: HTMLElement): Cue {
   const label = `${element.getAttribute('aria-label') ?? ''} ${element.textContent ?? ''}`.trim().toLowerCase();
   const zone = zoneFor(element);
+  // A card click toggles its selection (read before React updates the class).
+  if (element.matches('article.card-tile')) return element.classList.contains('is-checked') ? 'deselect' : 'select';
+  if (element.matches('.settings-gear')) return 'gear';
   if (element instanceof HTMLInputElement && element.type === 'checkbox') return element.checked ? 'toggle-off' : 'toggle-on';
   if (element.getAttribute('type') === 'submit' || /^(✕)?\s*save\b/.test(label)) return 'save';
   if (/\b(delete|remove|trash)\b/.test(label)) return 'delete';
@@ -166,7 +175,7 @@ export function useUiSounds() {
       const now = performance.now();
       if (now - lastHover < 100 || now - lastClick < 100) return;
       const zone = zoneFor(element);
-      lastHover = now; play(zone === 'menu' ? 'hover' : `hover-${zone}`);
+      lastHover = now; play(element.closest('.top-actions') ? 'hover-controls' : zone === 'menu' ? 'hover' : `hover-${zone}`);
     };
     const click = (event: Event) => {
       const element = target(event);
@@ -196,8 +205,8 @@ export function useUiSounds() {
   }, []);
   const previews: { label: string; cues: Cue[] }[] = [
     { label: 'Menus', cues: ['hover', 'click', 'open', 'back'] },
-    { label: 'Cards', cues: ['hover-card', 'click-card', 'save', 'delete'] },
-    { label: 'Settings', cues: ['hover-settings', 'click-settings', 'toggle-on', 'toggle-off'] },
+    { label: 'Cards', cues: ['hover-card', 'select', 'deselect', 'save', 'delete'] },
+    { label: 'Settings', cues: ['gear', 'hover-controls', 'hover-settings', 'click-settings', 'toggle-on', 'toggle-off'] },
     { label: 'Canvas', cues: ['canvas-tool', 'canvas-draw', 'canvas-shape', 'canvas-erase', 'canvas-connect', 'canvas-undo'] },
     { label: 'Alerts', cues: ['notify', 'notify-info', 'notify-error', 'capture'] },
   ];

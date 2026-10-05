@@ -113,7 +113,7 @@ describe('App', () => {
     expect(card.note).toBe('Revised note');
     expect((await cardDb.collections.toArray()).find(collection => collection.name === 'Research')?.cardIds).toContain(card.id);
   });
-  it('selects a card with one click, adds with Ctrl, clears with Escape and edits on double click', async () => {
+  it('selects cards by clicking them, shows the commands, clears with Escape and edits on double click', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
     const design = await screen.findByRole('article', { name: 'Open Design note' });
@@ -121,13 +121,15 @@ describe('App', () => {
     fireEvent.click(design);
     expect(design).toHaveClass('is-checked');
     expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
-    fireEvent.click(spec, { ctrlKey: true });
-    expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
     fireEvent.click(spec);
-    expect(design).not.toHaveClass('is-checked');
-    expect(spec).toHaveClass('is-checked');
-    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
+    expect(document.querySelector('.selection-hint')).toHaveTextContent('Double-click to edit');
+    fireEvent.click(spec);
+    expect(design).toHaveClass('is-checked');
     expect(spec).not.toHaveClass('is-checked');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(design).not.toHaveClass('is-checked');
+    expect(document.querySelector('.selection-hint')).toBeNull();
     fireEvent.doubleClick(design);
     expect(screen.getByRole('dialog', { name: 'Card details' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close details' })).toHaveClass('b-button');

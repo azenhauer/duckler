@@ -9,6 +9,8 @@ import { readCanvasState, commitCanvasContent, saveCanvasViewport, saveCanvasBac
 import { CanvasIcon, type CanvasIconName } from './CanvasIcon';
 import { Dialog } from './Dialog';
 import { CanvasArtwork } from './CanvasArtwork';
+import { NavigationIcon } from './NavigationIcon';
+import { InterfaceIcon } from './InterfaceIcon';
 import { UI_SOUND_EVENT, type Cue } from './UiSounds';
 
 /** Tool sounds play when a change lands, never per pointer move, so drawing stays cheap. */
@@ -85,8 +87,10 @@ const isLightColor = (hex: string) => {
 };
 const tools: { id: Tool; label: string }[] = [{ id: 'select', label: 'Select' }, { id: 'hand', label: 'Hand' }, { id: 'pen', label: 'Pen' }, { id: 'highlighter', label: 'Highlighter' }, { id: 'rectangle', label: 'Rectangle' }, { id: 'ellipse', label: 'Ellipse' }, { id: 'text', label: 'Text' }, { id: 'connector', label: 'Connector' }, { id: 'eraser', label: 'Eraser' }];
 
-export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard, onBack }: {
+export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard, onBack, onNavigate }: {
   collection: CollectionRecord; cards: CardRecord[]; onEditCard: (id: string) => void; onRestoreCard: (id: string) => void; onBack?: () => void;
+  /** Phones hide the app dock on a canvas, so its destinations live in the board's top bar. */
+  onNavigate?: (target: 'home' | 'collections' | 'canvases' | 'settings') => void;
 }) {
   const [board, setBoard] = useState<CanvasState>();
   const current = useRef<CanvasState | undefined>(undefined);
@@ -315,6 +319,12 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
 
       <div className="canvas-float canvas-topbar" role="toolbar" aria-label="Canvas actions">
         {onBack && <button type="button" className="b-button b-button-small" aria-label="Go back" onClick={onBack}><span className="b-ring" aria-hidden="true" /><span className="b-label" aria-hidden="true">Back</span></button>}
+        {onNavigate && <span className="canvas-nav" role="group" aria-label="Go to">
+          <button type="button" className="canvas-icon-button" aria-label="Duckler home" data-tip="Home" onClick={() => onNavigate('home')}><span className="brand-mark duckler-mark" aria-hidden="true" /></button>
+          <button type="button" className="canvas-icon-button" aria-label="Collections" data-tip="Collections" onClick={() => onNavigate('collections')}><NavigationIcon name="collections" /></button>
+          <button type="button" className="canvas-icon-button" aria-label="All canvases" data-tip="Canvases" onClick={() => onNavigate('canvases')}><NavigationIcon name="canvas" /></button>
+          <button type="button" className="canvas-icon-button settings-gear" aria-label="Open settings" data-tip="Settings" onClick={() => onNavigate('settings')}><InterfaceIcon name="settings" /></button>
+        </span>}
         <span className="canvas-title" title={collection.name}>{collection.name}</span>
         <label className={`canvas-find ${boardFind ? 'has-query' : ''}`} data-tip="Find on board">
           <svg className="canvas-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.7" /><path d="m16 16 5 5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>

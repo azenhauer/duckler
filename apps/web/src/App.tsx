@@ -1296,7 +1296,7 @@ function App() {
   </button>;
 
   return (
-    <main className="app-shell" aria-busy={!libraryLoaded} onContextMenu={openQuickAddMenu} onKeyDown={event => { if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) openQuickAddMenu(event); }} {...cardStyle.shellProps} style={{ '--profile-accent': profileCardColor, ...appearanceStyle(appearance.values, theme), ...cardStyle.shellStyle } as CSSProperties}>
+    <main className="app-shell" data-canvas-open={activeView === 'canvas' && selectedCanvas ? 'true' : undefined} aria-busy={!libraryLoaded} onContextMenu={openQuickAddMenu} onKeyDown={event => { if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) openQuickAddMenu(event); }} {...cardStyle.shellProps} style={{ '--profile-accent': profileCardColor, ...appearanceStyle(appearance.values, theme), ...cardStyle.shellStyle } as CSSProperties}>
       <button type="button" className="mobile-menu-toggle" onClick={() => setMobileSidebarOpen((current) => !current)} aria-label="Toggle navigation">
         ☰
       </button>
@@ -1679,6 +1679,11 @@ function App() {
           <button type="button" onClick={() => searchTerm ? changeSearch('') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : 'Connect your browser'}</button>
         </div>}
         {activeView === 'library' && <p id="card-select-hint" hidden>Click to select, double-click or Enter to edit.</p>}
+        {activeView === 'library' && selectedCardIds.length > 0 && <div className="selection-hint" role="status">
+          <span><b className="glyph-sqr" aria-hidden="true">□</b>{selectedCardIds.length} selected · click cards to add or remove</span>
+          <span><b className="glyph-crs" aria-hidden="true">✕</b>Double-click to edit</span>
+          <button type="button" onClick={() => setSelectedCardIds([])}><b className="glyph-cir" aria-hidden="true">○</b>Esc · Clear</button>
+        </div>}
         {activeView === 'library' && <div onClick={event => { if (event.target === event.currentTarget) setSelectedCardIds([]); }} className={`library-grid card-size-${cardSize} ${selectedCardIds.length ? 'has-selection' : ''}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
           {visibleCards.map((card) => {
             const sourceLabel = card.sourceUrl
@@ -1719,8 +1724,8 @@ function App() {
                 tabIndex={0}
                 aria-label={`Open ${card.title}`}
                 aria-describedby="card-select-hint"
-                // One click selects (Ctrl/Cmd/Shift adds to the selection); a double click opens the editor.
-                onClick={(event) => selectCard(card.id, event.ctrlKey || event.metaKey || event.shiftKey)}
+                // Each click adds or removes the card from the selection; a double click opens the editor.
+                onClick={(event) => { if (event.detail < 2) selectCard(card.id, true); }}
                 onDoubleClick={() => setSelectedId(card.id)}
                 onKeyDown={(event) => {
                   if (event.target !== event.currentTarget) {
@@ -1837,7 +1842,8 @@ function App() {
         )}
 
         {activeView === 'canvas' && (selectedCanvas
-          ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack} />
+          ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack}
+            onNavigate={target => target === 'settings' ? setSettingsOpen(true) : navigateTo(target === 'home' ? 'home' : target === 'collections' ? 'collections' : 'canvas')} />
           : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} onCreateCanvas={() => void handleCreateEmptyCanvas()} />)}
 
         <div className="sync-panel panel">
@@ -1884,6 +1890,7 @@ function App() {
         <li><b className="crs">✕</b>Enter</li><li><b className="cir">○</b>Back</li><li><b className="tri">△</b>Options</li><li><b className="sqr">□</b>Select</li>
       </ul>
       <Notifications />
+      <div className="bottom-scrim" aria-hidden="true" />
       <nav className={`bottom-dock ${isHome ? 'home-dock' : ''}`} aria-label="Main navigation">
         <button type="button" className={`dock-item dock-home ${isHome ? 'active' : ''}`} aria-label="Duckler home" aria-current={isHome ? 'page' : undefined} onClick={() => { navigateTo('home'); setSortMode('newest'); }}>
           <span className="brand-mark duckler-mark" aria-hidden="true" />

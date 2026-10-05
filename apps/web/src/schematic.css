@@ -447,9 +447,9 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 @keyframes notice-pulse { from { opacity: 1; } to { opacity: .45; } }
 @keyframes notice-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (max-width: 640px) {
-  .notice-stack { top: auto; bottom: calc(env(safe-area-inset-bottom) + 112px); right: 16px; left: 16px; align-items: stretch; }
+  .notice-stack { top: calc(max(22px, env(safe-area-inset-top)) + 118px); right: 16px; left: 16px; align-items: stretch; }
   .notice { width: auto; }
-  @keyframes notice-in { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: none; } }
+  @keyframes notice-in { from { opacity: 0; translate: 0 -10px; } to { opacity: 1; translate: none; } }
 }
 @media (prefers-reduced-motion: reduce) { .notice, .notice-glyph, .notice-progress .notice-glyph { animation: none !important; } .notice-timer { display: none; } }
 
@@ -549,3 +549,50 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 .collection-rename { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 3; }
 .collection-rename input { width: 100%; padding: 8px 10px; border: 1px solid var(--ui-accent-primary); border-radius: 4px; background: var(--ui-surface); color: var(--ui-text); font: 700 .95rem/1.2 inherit; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ui-accent-primary) 25%, transparent); }
 @media (hover: none) { .collection-rename-button { opacity: 1; } }
+
+/* ---- Profile hover: a translucent circle that glows softly (lighter on dark themes, darker on light). ---- */
+.profile-trigger { transition: background-color 120ms linear, border-color 120ms linear, box-shadow 160ms ease, transform 140ms cubic-bezier(.2,.8,.2,1) !important; }
+.profile-trigger:hover, .profile-trigger.active {
+  background: color-mix(in srgb, #fff 9%, transparent) !important; border-color: color-mix(in srgb, #fff 22%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ui-accent-primary) 32%, transparent), inset 0 0 8px color-mix(in srgb, #fff 6%, transparent) !important; }
+html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark']) .profile-trigger.active {
+  background: color-mix(in srgb, #000 9%, transparent) !important; border-color: color-mix(in srgb, #000 18%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ui-accent-primary) 28%, transparent) !important; }
+
+/* ---- Sound + settings and the dock: no box, icons float over the page like the rest of the UI. ---- */
+.top-actions, html:not([data-theme='dark']) .top-actions { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+.bottom-dock, html:not([data-theme='dark']) .bottom-dock { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+.bottom-dock .profile-trigger { border-left: 0 !important; }
+.bottom-dock .dock-item span { text-shadow: 0 1px 6px var(--ui-bg); }
+/* A soft fade behind the dock keeps it readable over cards without drawing a box. */
+.bottom-scrim { position: fixed; left: 0; right: 0; bottom: 0; z-index: 44; height: calc(env(safe-area-inset-bottom) + 112px); pointer-events: none;
+  background: linear-gradient(transparent, color-mix(in srgb, var(--ui-bg) 82%, transparent) 55%, var(--ui-bg)); }
+.ps-hints { z-index: 45 !important; }
+.app-shell[data-canvas-open] .bottom-scrim { display: none; }
+
+/* ---- Selection: a gentler lean, and a small command strip while anything is selected. ---- */
+.library-card .card-tile.is-checked { transform: skewX(-2deg) !important; }
+.selection-hint { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 104px); z-index: 46; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px;
+  width: max-content; max-width: calc(100vw - 32px); padding: 7px 12px; translate: -50% 0; border: 1px solid var(--sx-line-soft); border-radius: 6px; background: var(--sx-panel);
+  color: var(--ui-text-muted); font: 700 .62rem/1.2 var(--sx-label); letter-spacing: .1em; text-transform: uppercase; box-shadow: 4px 4px 0 color-mix(in srgb, #000 35%, transparent);
+  animation: notice-in-up 150ms cubic-bezier(.2,.9,.3,1.15) both; }
+.selection-hint span, .selection-hint button { display: inline-flex; align-items: center; gap: 6px; }
+.selection-hint b { font-size: .8rem; }
+.selection-hint .glyph-sqr { color: var(--sx-sqr); } .selection-hint .glyph-crs { color: var(--sx-crs); } .selection-hint .glyph-cir { color: var(--sx-cir); }
+.selection-hint button { padding: 3px 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.selection-hint button:hover { color: var(--ui-text); border-color: var(--sx-line-soft); }
+@keyframes notice-in-up { from { opacity: 0; translate: -50% 8px; } to { opacity: 1; translate: -50% 0; } }
+
+/* ---- Phones: on an open canvas the app dock and + give way to the board; navigation sits in the top bar. ---- */
+.canvas-nav { display: none; align-items: center; gap: 2px; }
+.canvas-nav .duckler-mark { width: 22px; height: 22px; }
+.canvas-nav .dock-icon { width: 22px; height: 22px; }
+@media (max-width: 700px) {
+  .canvas-nav { display: inline-flex; }
+  .app-shell[data-canvas-open] .bottom-dock, .app-shell[data-canvas-open] .add-menu, .app-shell[data-canvas-open] .ps-hints, .app-shell[data-canvas-open] .top-actions { display: none !important; }
+  .app-shell[data-canvas-open] .canvas-studio .canvas-surface { height: calc(100dvh - 32px) !important; }
+  /* Pinch zooms on phones; the zoom buttons would sit under the tool bar. */
+  .app-shell[data-canvas-open] .canvas-studio .react-flow__controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) { .selection-hint { animation: none !important; } .profile-trigger { transition: none !important; } }
+.app-shell:has([aria-modal='true']) .bottom-scrim { display: none; }

@@ -25,6 +25,15 @@ describe('UI sound zones', () => {
     expect(cueFor($('#select'))).toBe('toggle-off');
   });
 
+  it('gives card selection and the settings controls their own sounds', () => {
+    const $ = build(`
+      <article class="card-tile" tabindex="0" id="off"></article><article class="card-tile is-checked" tabindex="0" id="on"></article>
+      <div class="top-actions"><button class="settings-gear" id="gear" aria-label="Open settings"></button></div>`);
+    expect(cueFor($('#off'))).toBe('select');
+    expect(cueFor($('#on'))).toBe('deselect');
+    expect(cueFor($('#gear'))).toBe('gear');
+  });
+
   it('keeps semantic cues (save, delete, back, open) in every zone', () => {
     const $ = build(`
       <div class="card-editor"><button id="save" type="submit">✕ Save</button><button id="trash" aria-label="Move to trash"></button><button id="close" aria-label="Close details"></button></div>
