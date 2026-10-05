@@ -37,6 +37,8 @@ export type CanvasElement = CanvasGeometry & {
 };
 export type CanvasConnector = {
   id: string; canvasId: string; sourceId: string; targetId: string; label: string; color: string;
+  /** Arrowheads: absent or 'none' = plain line, 'end' = toward the target, 'both' = both ends. */
+  arrow?: 'none' | 'end' | 'both';
 };
 export type CanvasContent = { placements: CanvasPlacement[]; elements: CanvasElement[]; connectors: CanvasConnector[] };
 export type CanvasState = CanvasContent & { document: CanvasDocument; viewport?: CanvasViewport };
@@ -78,7 +80,8 @@ export function validateCanvasContent(canvasId: string, content: CanvasContent):
   }
   const endpointIds = new Set(ids);
   for (const connector of content.connectors) {
-    strictFields(connector, ['id', 'canvasId', 'sourceId', 'targetId', 'label', 'color']);
+    strictFields(connector, ['id', 'canvasId', 'sourceId', 'targetId', 'label', 'color', 'arrow']);
+    if (connector.arrow !== undefined && !['none', 'end', 'both'].includes(connector.arrow)) throw new Error('Invalid canvas connector');
     if (connector.canvasId !== canvasId || !validId(connector.id) || ids.has(connector.id) || !endpointIds.has(connector.sourceId) || !endpointIds.has(connector.targetId) || connector.sourceId === connector.targetId || typeof connector.label !== 'string' || connector.label.length > 1000 || !/^#[0-9a-f]{6}$/i.test(connector.color)) throw new Error('Invalid canvas connector');
     ids.add(connector.id);
   }

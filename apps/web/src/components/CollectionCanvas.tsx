@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Background, Controls, ReactFlow, NodeResizer, Handle, Position, applyNodeChanges, useUpdateNodeInternals, type Node, type NodeProps, type ReactFlowInstance, type Viewport, type ResizeParams } from '@xyflow/react';
+import { Background, Controls, MarkerType, ReactFlow, NodeResizer, Handle, Position, applyNodeChanges, useUpdateNodeInternals, type Node, type NodeProps, type ReactFlowInstance, type Viewport, type ResizeParams } from '@xyflow/react';
 import {
   CANVAS_CARD_MIME, CANVAS_LIMITS, createCanvasPlacement, canvasGestureElement, canvasAnchorPoint,
   defaultCanvasStyle, normalizeRotation, visibleCanvasElements, visibleCanvasConnectors,
@@ -234,7 +234,16 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
   };
   const edges = visibleCanvasConnectors(content).filter(connector => {
     const globalIds = new Set(nodes.map(node => node.id)); return globalIds.has(connector.sourceId) && globalIds.has(connector.targetId);
-  }).map(connector => ({ id: connector.id, source: connector.sourceId, target: connector.targetId, sourceHandle: 'source', targetHandle: 'target', label: connector.label, selected: selectedEdge === connector.id, style: { stroke: connector.color, strokeWidth: 2 } }));
+  }).map(connector => {
+    const marker = { type: MarkerType.ArrowClosed, color: connector.color, width: 18, height: 18 };
+    return { id: connector.id, source: connector.sourceId, target: connector.targetId, sourceHandle: 'source', targetHandle: 'target', label: connector.label, selected: selectedEdge === connector.id, style: { stroke: connector.color, strokeWidth: 2 },
+      markerEnd: connector.arrow === 'end' || connector.arrow === 'both' ? marker : undefined, markerStart: connector.arrow === 'both' ? marker : undefined };
+  });
+  const setConnectorArrow = (arrow: 'none' | 'end' | 'both') => {
+    const state = current.current; if (!state || !selectedEdge) return;
+    void commit({ ...contentOf(state), connectors: state.connectors.map(item => item.id === selectedEdge ? { ...item, arrow } : item) });
+  };
+  const selectedArrow = content.connectors.find(item => item.id === selectedEdge)?.arrow ?? 'none';
   const hiddenCount = content.placements.filter(item => item.removed).length + content.elements.length - visibleCanvasElements(content).length + content.connectors.length - visibleCanvasConnectors(content).length;
   // Pointer previews and node measurements must not invalidate every mounted card's context.
   const callbacks = useRef<NodeContextValue | null>(null);
@@ -274,7 +283,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
           onNodeClick={(_, node) => { setSelectedAnnotation(null); if (tool === 'eraser') removeObjects([node.id], null); }}
           onPaneClick={() => { setSelectedAnnotation(null); setSelectedEdge(null); }} onEdgeClick={(_, edge) => { if (tool === 'eraser') removeObjects([], edge.id); else { setSelectedEdge(edge.id); setEdgeLabel(content.connectors.find(item => item.id === edge.id)?.label ?? ''); } }}
           onConnect={connection => { const state = current.current; if (!state || !connection.source || !connection.target || connection.source === connection.target) return;
-            void commit({ ...contentOf(state), connectors: [...state.connectors, { id: crypto.randomUUID(), canvasId: collection.id, sourceId: connection.source, targetId: connection.target, label: '', color: style.color }] }); }}
+            void commit({ ...contentOf(state), connectors: [...state.connectors, { id: crypto.randomUUID(), canvasId: collection.id, sourceId: connection.source, targetId: connection.target, label: '', color: style.color, arrow: 'end' }] }); }}
           onMove={(_, next) => setViewport(next)} onMoveEnd={(_, next) => { setViewport(next);
             viewportWrites.current = viewportWrites.current.then(() => saveCanvasViewport(collection.id, next)).catch(() => setError('Canvas view could not be saved.'));
           }}>
@@ -353,6 +362,11 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
             const state = current.current; if (!state) return;
             void commit({ ...contentOf(state), elements: state.elements.map(item => item.id === selectedAnnotation ? { ...item, sourceRevision: cardMap.get(state.placements.find(placement => placement.id === item.anchorPlacementId)?.cardId ?? '')?.updatedAt } : item) });
           }}><CanvasIcon name="check" />Mark reviewed</button></>}
+        {selectedEdge && <span className="canvas-arrow-group" role="group" aria-label="Connector direction">
+          {(['none', 'end', 'both'] as const).map(arrow => <button type="button" key={arrow} className="canvas-icon-button" aria-label={arrow === 'none' ? 'Line' : arrow === 'end' ? 'Arrow' : 'Double arrow'} data-tip={arrow === 'none' ? 'Line' : arrow === 'end' ? 'Arrow' : 'Double arrow'} aria-pressed={selectedArrow === arrow} disabled={saving} onClick={() => setConnectorArrow(arrow)}>
+            <svg className="canvas-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16" fill="none" stroke="currentColor" strokeWidth="1.6" />{arrow !== 'none' && <path d="m15 7 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" />}{arrow === 'both' && <path d="m9 7-5 5 5 5" fill="none" stroke="currentColor" strokeWidth="1.6" />}</svg>
+          </button>)}
+        </span>}
         {selectedEdge && <label className="canvas-connector-label">Connector label<input aria-label="Connector label" maxLength={1000} value={edgeLabel} onChange={event => setEdgeLabel(event.target.value)} onBlur={() => {
           const state = current.current; if (state) void commit({ ...contentOf(state), connectors: state.connectors.map(item => item.id === selectedEdge ? { ...item, label: edgeLabel } : item) });
         }} /></label>}
