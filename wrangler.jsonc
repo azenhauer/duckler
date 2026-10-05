@@ -3,8 +3,6 @@
 	"name": "duckler",
 	"compatibility_date": "2026-10-03",
 	"pages_build_output_dir": "./apps/web/dist",
-	// Clip autofill embed service (functions/api/embed): Workers AI model + daily usage counters (EMBED_USAGE).
-	// Counters hold only hashed ids and a number: zero retention, docs/ai-coop/PROTOCOL.md I3b.
 	"ai": { "binding": "AI" },
 	"kv_namespaces": [
 		{

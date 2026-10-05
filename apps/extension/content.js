@@ -3,7 +3,9 @@
   const alive = () => { try { return Boolean(chrome.runtime?.id); } catch { return false; } };
   if (window.__ducklerRegionPickerAlive?.()) return;
   window.__ducklerRegionPickerAlive = alive;
-  let host, surface, selection, start, viewport, invalid = false, busy = false, toastHost;
+  let host, surface, selection, start, viewport, invalid = false, busy = false, toastHost, reply;
+  // The panel that started the picker waits for the result: the cropped screenshot, or why there is none.
+  const finish = result => { const send = reply; reply = undefined; send?.(result); };
   const toast = (text, error = false) => {
     toastHost?.remove();
     toastHost = document.createElement('div');
@@ -64,9 +66,15 @@
   const unchanged = () => viewport && location.href === viewport.url && innerWidth === viewport.width && innerHeight === viewport.height
     && scrollX === viewport.scrollX && scrollY === viewport.scrollY && devicePixelRatio === viewport.dpr
     && Math.abs((visualViewport?.scale || 1) - 1) < 0.01 && !invalid;
+  const snapshot = () => ({ url: location.href, width: innerWidth, height: innerHeight, scrollX, scrollY, dpr: devicePixelRatio });
+  // The side panel resizes the page as it opens. Before the drag, follow the viewport; during it, the
+  // crop is checked against the viewport at pointerdown (unchanged()), so a real change fails there.
+  const viewportChanged = () => { if (!start && !busy) viewport = snapshot(); };
   const cancel = () => {
+    finish({ ok: false, cancelled: true });
     invalid = true; host?.remove(); host = undefined; surface = undefined; selection = undefined; start = undefined;
-    for (const event of ['scroll', 'resize', 'pagehide', 'blur']) window.removeEventListener(event, cancel, true);
+    for (const event of ['scroll', 'resize']) window.removeEventListener(event, viewportChanged, true);
+    window.removeEventListener('pagehide', cancel, true);
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('visibilitychange', visibility, true);
   };
@@ -75,6 +83,7 @@
   const coordinate = event => ({ x: Math.max(0, Math.min(innerWidth, event.clientX)), y: Math.max(0, Math.min(innerHeight, event.clientY)) });
   const begin = event => {
     if (event.button !== 0 || busy) return;
+    viewport = snapshot();
     event.preventDefault(); start = coordinate(event); surface.setPointerCapture(event.pointerId); selection.hidden = false;
   };
   const move = event => {
@@ -92,13 +101,11 @@
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (!unchanged()) throw new Error('The page changed. Start the screenshot again.');
       const hint = regionHint(rect);
-      const response = await chrome.runtime.sendMessage({ type: 'prepare-region-review', rect, viewport: { width: viewport.width, height: viewport.height }, url: viewport.url, hint });
+      const response = await chrome.runtime.sendMessage({ type: 'crop-region', rect, viewport: { width: viewport.width, height: viewport.height }, url: viewport.url, hint });
       if (response?.error === 'Unsupported capture request.') throw new Error('Reload Duckler Capture in Extensions, refresh this website, and try again.');
-      if (!response?.ok) throw new Error(response?.error || 'Could not save this screenshot.');
-      cancel();
-      // Screenshots are reviewed in the side panel; without one they are saved straight away.
-      toast(response.inPanel ? 'Screenshot ready in the Duckler panel' : 'Screenshot saved to Duckler');
-    } catch (error) { toast(error.message || 'Could not save this screenshot.', true); }
+      if (!response?.ok) throw new Error(response?.error || 'Could not take this screenshot.');
+      finish({ ok: true, capture: response.capture });
+    } catch (error) { toast(error.message || 'Could not take this screenshot.', true); finish({ ok: false, error: error.message || 'Could not take this screenshot.' }); }
     finally { busy = false; cancel(); }
   };
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {
@@ -109,8 +116,8 @@
     if (message?.type !== 'start-region-capture') return false;
     if (!/^https?:$/.test(location.protocol) || Math.abs((visualViewport?.scale || 1) - 1) >= 0.01) { respond({ ok: false, error: 'Use screenshot upload for this page or reset pinch zoom.' }); return false; }
     if (busy) { respond({ ok: false, error: 'Finish the current screenshot first.' }); return false; }
-    cancel(); invalid = false; toastHost?.remove();
-    viewport = { url: location.href, width: innerWidth, height: innerHeight, scrollX, scrollY, dpr: devicePixelRatio };
+    cancel(); invalid = false; toastHost?.remove(); reply = respond;
+    viewport = snapshot();
     host = document.createElement('div'); host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;';
     const shadow = host.attachShadow({ mode: 'closed' }), style = document.createElement('style');
     style.textContent = ':host{all:initial}.surface{position:fixed;inset:0;background:#0003;cursor:crosshair;touch-action:none}.hint{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:#242821;color:#faf8ef;padding:12px 20px;border-radius:999px;font:14px system-ui;pointer-events:none}.selection{position:absolute;border:2px solid #d5e4a9;box-shadow:0 0 0 10000px #0003;pointer-events:none}';
@@ -119,8 +126,11 @@
     selection = document.createElement('div'); selection.className = 'selection'; selection.hidden = true;
     surface.append(hint, selection); shadow.append(style, surface); document.documentElement.append(host);
     surface.addEventListener('pointerdown', begin); surface.addEventListener('pointermove', move); surface.addEventListener('pointerup', end); surface.addEventListener('pointercancel', cancel);
-    for (const event of ['scroll', 'resize', 'pagehide', 'blur']) window.addEventListener(event, cancel, true);
+    // The side panel takes focus from the page while starting a capture. Blur is expected;
+    // hidden tabs and viewport changes still cancel, and the worker verifies the active tab.
+    for (const event of ['scroll', 'resize']) window.addEventListener(event, viewportChanged, true);
+    window.addEventListener('pagehide', cancel, true);
     document.addEventListener('keydown', onKey, true); document.addEventListener('visibilitychange', visibility, true);
-    respond({ ok: true }); return false;
+    return true; // Answered when the drag ends or is cancelled.
   });
 })();

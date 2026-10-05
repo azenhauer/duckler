@@ -13,6 +13,9 @@ export function Dialog({ label, onClose, children, className = '' }: { label: st
     const focusable = () => Array.from(ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea, select, [tabindex="0"]') ?? []).filter(el => !el.closest('[hidden]'));
     (focusable()[0] ?? ref.current)?.focus();
     const key = (event: KeyboardEvent) => {
+      // A dialog opened from another (the photo cropper over Settings) owns the keyboard.
+      const open = document.querySelectorAll('.reader-backdrop');
+      if (ref.current && !open[open.length - 1]?.contains(ref.current)) return;
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeRef.current(); }
       if (event.key === 'Tab') {
         const items = focusable(), first = items[0], last = items[items.length - 1];

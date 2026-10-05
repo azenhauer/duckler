@@ -369,18 +369,85 @@ describe('App', () => {
     expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getAllByRole('button')).toHaveLength(4);
   });
 
-  it('stores an uploaded profile photo locally and supports removing it', async () => {
+  it('Esc works as the Back button, but only when nothing smaller wants it', async () => {
     render(<App />);
-
+    await screen.findByRole('button', { name: 'All notes' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open collections' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open collection Inbox' }));
+    // Typing in a field: Esc belongs to the field.
+    const search = screen.getByRole('textbox', { name: 'Search' });
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    // An open dialog closes first, and the page stays.
     fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
-    fireEvent.change(screen.getByLabelText('Choose profile photo'), {
-      target: { files: [new File(['profile-image'], 'profile.png', { type: 'image/png' })] },
-    });
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(await screen.findByRole('heading', { name: 'Collections' })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(await screen.findByRole('button', { name: 'Open collections' })).toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(localStorage.getItem('visual-library-profile-photo')).toMatch(/^data:image\/png;base64,/));
-    expect(screen.getByRole('button', { name: 'Account menu' }).querySelector('img')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
+  it('crops a large profile photo to a small square, stores it locally and supports removing it', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:profile');
+    URL.revokeObjectURL = vi.fn();
+    const drawImage = vi.fn();
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ fillRect: vi.fn(), translate: vi.fn(), scale: vi.fn(), drawImage } as unknown as CanvasRenderingContext2D);
+    const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,cropped');
+    try {
+      render(<App />);
+      fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
+      // Well over the old 1 MB limit: the cropper makes it small.
+      const big = new File([new Uint8Array(3 * 1024 * 1024)], 'profile.png', { type: 'image/png' });
+      fireEvent.change(screen.getByLabelText('Choose profile photo'), { target: { files: [big] } });
+      const cropper = await screen.findByRole('dialog', { name: 'Crop profile photo' });
+      const photo = cropper.querySelector('img')!;
+      Object.defineProperties(photo, { naturalWidth: { value: 1200 }, naturalHeight: { value: 800 } });
+      fireEvent.load(photo);
+      fireEvent.change(within(cropper).getByRole('slider', { name: 'Zoom' }), { target: { value: '2' } });
+      fireEvent.click(within(cropper).getByRole('button', { name: 'Use photo' }));
+
+      expect(localStorage.getItem('visual-library-profile-photo')).toBe('data:image/jpeg;base64,cropped');
+      expect(toDataURL).toHaveBeenCalledWith('image/jpeg', 0.88);
+      expect(drawImage).toHaveBeenCalledWith(photo, -360, -240, 720, 480); // 1200×800 covering 240 px, zoomed ×2
+      expect(screen.queryByRole('dialog', { name: 'Crop profile photo' })).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Account menu' }).querySelector('img')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
+      expect(localStorage.getItem('visual-library-profile-photo')).toBeNull();
+    } finally { getContext.mockRestore(); toDataURL.mockRestore(); }
+  });
+
+  it('Escape closes only the photo cropper, not Settings underneath', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:profile');
+    URL.revokeObjectURL = vi.fn();
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
+    fireEvent.change(screen.getByLabelText('Choose profile photo'), { target: { files: [new File(['x'], 'p.png', { type: 'image/png' })] } });
+    await screen.findByRole('dialog', { name: 'Crop profile photo' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Crop profile photo' })).not.toBeInTheDocument());
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
     expect(localStorage.getItem('visual-library-profile-photo')).toBeNull();
+  });
+
+  it('renames the profile by clicking the name on the profile card', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
+    const settings = screen.getByRole('dialog', { name: 'Settings' });
+    fireEvent.click(within(settings).getByRole('button', { name: 'Rename profile My Library' }));
+    const input = within(settings).getByRole('textbox', { name: 'Rename profile' });
+    fireEvent.change(input, { target: { value: 'Duck notes' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(within(settings).getByRole('button', { name: 'Rename profile Duck notes' })).toBeInTheDocument();
+    await waitFor(() => expect(localStorage.getItem('visual-library-profile-name')).toBe('Duck notes'));
+    // Escape puts the previous name back and leaves Settings open.
+    fireEvent.click(within(settings).getByRole('button', { name: 'Rename profile Duck notes' }));
+    fireEvent.change(within(settings).getByRole('textbox', { name: 'Rename profile' }), { target: { value: 'Oops' } });
+    fireEvent.keyDown(within(settings).getByRole('textbox', { name: 'Rename profile' }), { key: 'Escape' });
+    expect(within(settings).getByRole('button', { name: 'Rename profile Duck notes' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
   });
 
   it('imports Cloudflare share fallback data into IndexedDB and cleans the URL', async () => {

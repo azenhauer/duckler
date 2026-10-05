@@ -7,13 +7,14 @@ Legend: `[x]` done · `[~]` partial · `[ ]` not started · `[!]` blocked (outsi
 Last updated: 2026-10-05 (evening)
 
 ## ▶ Start here (agents: Claude Code / Codex)
-- **Clip autofill** follows `docs/ai-coop/PROTOCOL.md`; its live state is the last line of `docs/ai-coop/STATE.jsonl`. Boot per the protocol before touching it.
+- **Focus (owner, Oct 5):** make the app better and simpler; remove over-engineering rather than add machinery.
+- **Clip autofill / all AI work is FROZEN by the owner.** Do not resume it until the owner says so. The code stays (`/api/embed` answers 503 and nothing calls it); its state is in `docs/ai-coop/STATE.jsonl`.
 - **Deploys:** the Cloudflare Pages project `duckler` is git-connected — every push to `main` deploys to production. Push only what passes `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
-- **Checks on Windows:** all of the above plus the Playwright smokes (`scripts/*.mjs`, dev server on :5176; `npm run build:extension:dev` before `extension-smoke.mjs`).
+- **Checks on Windows:** all of the above plus the Playwright smokes (`scripts/*.mjs`, dev server on :5176; `npm run build:extension:dev` before `extension-smoke.mjs` and `extension-native-smoke.mjs`).
 
-**Built (main):** PS2-schematic web app (cards, collections incl. "All cards", canvases incl. empty ones, OCR + PDF with page notes, card connections/"dialogues", notes from selected text, notifications, zoned UI sounds with per-sound switches, custom colour picker, right-click rename) · Chrome/Edge side-panel extension (highlights, autofill from page metadata, card colour, screenshots reviewed in the panel, Alt+Shift+S / Esc / close-on-send) · clip autofill 1.1–1.3 (+1.4 bindings).
+**Built (main):** PS2-schematic web app (cards, collections incl. "All cards", canvases incl. empty ones, OCR + PDF with page notes, card connections/"dialogues", notes from selected text, notifications, zoned UI sounds with per-sound switches, custom colour picker, right-click rename, profile photo cropper, click-to-rename on the profile card) · Chrome/Edge side-panel extension (highlights, autofill from page metadata, card colour, screenshots owned by the panel, Alt+Shift+S / Alt+Shift+D / Esc / close-on-send; all-websites access at install like Obsidian Web Clipper) · clip autofill 1.1–1.3 (+1.4 bindings), frozen.
 
-**Next:** autofill 1.4 verify (live `/api/embed/token` must return 200) → 2.1 extension sends `pageExcerpt` + setting + D6 (no last-used preselect when autofill is on) → 2.2 library: classify after save, local profile cache, rejection store → 2.3 setting toggle + disclosure + "Added to X · Undo" → 2.4 tuning (needs 30–50 real clips from the owner) → 2.5 manual test checklist.
+**Next:** owner-directed polish and simplification. Candidates: headed check of Alt+Shift+D in real Chrome; trim remaining extension complexity (per-tab drafts, frames listener); review other over-built areas with the owner before cutting.
 
 **Missing / open:** Google client ID for the deployed build (`VITE_GOOGLE_CLIENT_ID`; Drive sign-in shows a developer note) · Drive content sync (M5b) · conflict UI · self-hosted OCR language data (optional) · "All cards" canvas · Codex-side items from its own log.
 

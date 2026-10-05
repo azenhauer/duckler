@@ -11,7 +11,7 @@ export function CardActions({ cardId, title, collections, onEdit, onMove, onDele
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState('');
   const hover = useHoverIntent(setOpen);
-  return <div className="card-external-actions" role="group" aria-label={`Actions for ${title}`}>
+  return <div className={`card-external-actions ${open ? 'is-open' : ''}`} role="group" aria-label={`Actions for ${title}`}>
     <button type="button" aria-label={`Edit ${title}`} title="Edit" onClick={onEdit}><InterfaceIcon name="edit" /></button>
     {onConnect && <button type="button" aria-label={`Connect ${title}`} title="Connect to another card (click, then pick a card — or drag onto it)" onClick={onConnect}
       draggable={!!cardId} onDragStart={event => { if (!cardId) return; event.dataTransfer.setData(CONNECT_MIME, cardId); event.dataTransfer.effectAllowed = 'link'; }}><InterfaceIcon name="connect" /></button>}

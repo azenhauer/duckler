@@ -278,3 +278,31 @@ Clip autofill (docs/ai-coop):
 - Zero retention verified by tests; Workers AI keeps no inputs/outputs unless storage is attached.
 
 Notes for the next agent: Wrangler's OAuth login on this PC expired during 1.4 (re-run `npx wrangler login` for CLI work; pushes still deploy). Untracked `ai-coop/` (owner's PT checklist) and `.claude/` are intentionally not committed.
+
+## Simplify the extension, profile photo cropper, AI frozen — October 5, 2026 (night)
+
+The owner froze all AI integration (clip autofill) and asked for a better, simpler app with less over-engineering.
+
+Extension, modelled on Obsidian Web Clipper and simov/screenshot-capture:
+- Permissions: `<all_urls>` is now a required host permission (Obsidian does the same). The optional grant, the "Allow on all websites" banner and every `hasSiteAccess` branch are gone. The panel follows the active tab, and `activeTab` alone never covered that.
+- Screenshots belong to the panel: it injects `content.js`, sends `start-region-capture` and waits. The picker answers when the drag ends, with the crop (from the worker's `crop-region`) or a cancel or error. That removed the worker's panel receipts, delivery timeouts, the `panelFor` polling, start-region window checks, the buffered screenshots and the `prepare-region-review` path (it was part of Codex's uncommitted draft, which never cleared its `initializing` flag, so screenshots were buffered forever).
+- Alt+Shift+D: an open panel gets `start-shot` on its port. Otherwise the worker opens the panel and leaves `duckler-start-shot` in `storage.session`, which the panel picks up on load.
+- Picker: it follows the viewport until pointerdown; a resize mid-drag no longer cancels, and the final `unchanged()` check refuses a crop whose viewport really changed.
+- Tests: new `background.test.ts` / `content.test.ts` / `popup.test.ts` cases. `scripts/extension-native-smoke.mjs` drives the real side panel (4/4 runs pass) and uses `viewport: null`, because an emulated viewport never matches `captureVisibleTab`. The duplicate real-drag step in `extension-smoke.mjs` was removed.
+
+Web app:
+- Profile photo: any JPEG/PNG/WebP/GIF/AVIF up to 30 MB opens a cropper (drag, wheel/slider zoom, arrow keys). It saves a 256 px JPEG of a few dozen KB; a 4.9 MB test image became 11 KB. This replaces the 1 MB rejection.
+- Clicking the name on either profile card renames in place (Enter or blur keeps it, Escape restores the old name).
+- Dialog: only the topmost dialog handles Escape and Tab, so Escape in the cropper no longer closes Settings underneath.
+- `wrangler.jsonc`: removed the JSON comments, which broke `scripts/deployment-config.test.ts` from caf31f0 until now.
+
+Speed (measured on the production build with 300 cards, 100 of them images):
+- Selecting a card took ~340 ms; now ~25-35 ms. A search keystroke took ~33 ms; now ~5-15 ms.
+- Cards are a memoized `LibraryCard` and read handlers through a stable getter, so a click re-renders one card, not all of them.
+- Selection no longer re-lays-out the grid: every card has a baseline `skewX(0deg)` (going from `none` to a transform changed the containing block, ~60 ms), and the corner marks always exist (they used to be inserted).
+- Per-card `:has()` selectors became classes (`.library-card.is-checked`, `.card-external-actions.is-open`, `.library-grid.is-connecting`); filter animations on image cards were removed.
+- The grid shows 720 px thumbnails (`lib/thumbnails.ts`, made off the main thread, held for the session); the editor shows the original.
+- Arrivals start visible (opacity .6-.7, not 0), and exits take 90 ms instead of 140 ms.
+- Esc is Back when nothing smaller wants it (dialogs, menus, pickers, fields, selection and canvas tools come first).
+- Open: thumbnails are not persisted yet (made again each session); opening a 300-card view is still ~350 ms of layout.
+

@@ -6,7 +6,7 @@
   chrome.runtime.onConnect.addListener(port => {
     if (port.name !== 'duckler-selection-v1') return;
     let timer;
-    const editable = () => document.activeElement?.matches('input,textarea,[contenteditable="true"]');
+    const editable = () => document.activeElement?.closest('input,textarea,[contenteditable]:not([contenteditable="false"])');
     const publish = () => {
       if (editable()) return;
       const text = window.getSelection()?.toString().trim().slice(0, 100000) || '';
@@ -19,9 +19,13 @@
       }
     };
     document.addEventListener('selectionchange', changed);
+    // Read before a site or the side panel clears selection on a later focus change.
+    document.addEventListener('pointerup', publish, true);
+    document.addEventListener('keyup', publish, true);
     document.addEventListener('keydown', key);
     port.onDisconnect.addListener(() => {
       clearTimeout(timer); document.removeEventListener('selectionchange', changed); document.removeEventListener('keydown', key);
+      document.removeEventListener('pointerup', publish, true); document.removeEventListener('keyup', publish, true);
     });
     publish();
   });

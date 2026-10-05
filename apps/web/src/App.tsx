@@ -46,10 +46,7 @@ import { startExtensionBridge, getExtensionConnection } from './lib/extensionBri
 import { ExtensionSetup } from './components/ExtensionSetup';
 import { Dialog } from './components/Dialog';
 import { CardEditor } from './components/CardEditor';
-import { ScreenshotNote } from './components/ScreenshotNote';
 import { SoundButton, UI_SOUND_EVENT, useUiSounds } from './components/UiSounds';
-import { CardActions, CONNECT_MIME } from './components/CardActions';
-import { CardCollectionControls } from './components/CollectionPicker';
 import { AppearanceSettings, appearancePresetNames } from './components/AppearanceSettings';
 import { CardStyleSettings } from './components/CardStyleSettings';
 import { useCardStyle } from './lib/cardStyle';
@@ -65,6 +62,9 @@ import { BButton } from './components/BButton';
 import { ColorPopover } from './components/ColorPicker';
 import { TileMenu } from './components/TileMenu';
 import { inferImageTitle } from './lib/imageName';
+import { AvatarCropper } from './components/AvatarCropper';
+import { EditableName } from './components/EditableName';
+import { LibraryCard, type CardApi } from './components/LibraryCard';
 
 const emptyForm = {
   type: 'bookmark' as CardRecord['type'],
@@ -153,6 +153,7 @@ function App() {
   useEffect(() => { colorPickerOpenRef.current = !!profileColorAnchor; }, [profileColorAnchor]);
   const pickCardColor = (event: React.MouseEvent<HTMLElement>) => { if (!(event.target as HTMLElement).closest('.avatar-upload')) setProfileColorAnchor(event.currentTarget); };
   const [profilePhoto, setProfilePhoto] = useState(() => localStorage.getItem('visual-library-profile-photo') ?? '');
+  const [profileCropFile, setProfileCropFile] = useState<File | null>(null);
   const [profileCardColor, setProfileCardColor] = useState(() => {
     const saved = localStorage.getItem('duckler-profile-card-color');
     return saved && /^#[\da-f]{6}$/i.test(saved) ? saved : '#779b91';
@@ -550,6 +551,7 @@ function App() {
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !composerSavingRef.current) {
+        event.preventDefault(); // used: Esc does not also go back
         setCardComposerOpen(false);
       }
     };
@@ -588,6 +590,7 @@ function App() {
       if (event.key !== 'Escape') {
         return;
       }
+      event.preventDefault(); // a menu was open: Esc closes it and does not also go back
       if (addMenuOpen) {
         setAddMenuOpen(false);
         // Focus returns to +, which must not reopen the menu it just closed.
@@ -731,7 +734,7 @@ function App() {
   const [textMenu, setTextMenu] = useState<{ left: number; top: number; text: string; cardId: string } | null>(null);
   useEffect(() => {
     if (!connectFrom) return;
-    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') setConnectFrom(null); };
+    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); setConnectFrom(null); } };
     document.addEventListener('keydown', cancel);
     return () => document.removeEventListener('keydown', cancel);
   }, [connectFrom]);
@@ -770,6 +773,44 @@ function App() {
   const selectCard = (cardId: string, additive: boolean) => setSelectedCardIds(current => additive
     ? (current.includes(cardId) ? current.filter(id => id !== cardId) : [...current, cardId])
     : (current.length === 1 && current[0] === cardId ? [] : [cardId]));
+  // Cards read the latest handlers through a stable getter, so they only re-render when their own data changes.
+  const cardApiRef = useRef<CardApi | null>(null);
+  cardApiRef.current = {
+    connectingFrom: connectFrom,
+    select: cardId => selectCard(cardId, true),
+    open: cardId => setSelectedId(cardId),
+    startConnect: cardId => { setSelectedCardIds([]); setConnectFrom(cardId); },
+    connect: (fromId, toId) => { void connectCards(fromId, toId); },
+    remove: cardId => { void handleDelete(cardId); },
+    move: async (card, collectionId) => {
+      const updated = { ...card, updatedAt: new Date().toISOString() };
+      const nextCollections = collections.map(collection => ({ ...collection, cardIds: collection.id === collectionId ? [...new Set([...collection.cardIds, card.id])] : collection.cardIds.filter(id => id !== card.id), updatedAt: updated.updatedAt }));
+      await saveCardWithCollections(updated, nextCollections);
+      setCards(current => current.map(item => item.id === card.id ? updated : item)); setCollections(nextCollections);
+    },
+    textMenu: menu => setTextMenu(menu),
+    changeMembership: (cardId, collectionId, included) => { void changeMembership(cardId, collectionId, included); },
+    createCollection: async (cardId, name) => { await handleCreateCollectionForCard(cardId, name); },
+    openCollection: collectionId => navigateTo('library', collectionId),
+  };
+  const getCardApi = useCallback(() => cardApiRef.current!, []);
+  // Esc is the Back button once nothing smaller (a dialog, menu, picker, selection, rename or search) wants it.
+  const goBackRef = useRef<() => void>(() => {});
+  goBackRef.current = goBack;
+  const escapeBackBlocked = useRef(false);
+  escapeBackBlocked.current = isHome || selectedCardIds.length > 0 || connectFrom !== null;
+  useEffect(() => {
+    const back = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.repeat || escapeBackBlocked.current) return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const open = document.querySelectorAll('[role="dialog"], [role="menu"], .tile-menu, .color-pop, [aria-expanded="true"]');
+      // Copies left by closing animations (.is-leaving) don't count.
+      if ([...open].some(element => !element.closest('.is-leaving'))) return;
+      goBackRef.current();
+    };
+    window.addEventListener('keydown', back);
+    return () => window.removeEventListener('keydown', back);
+  }, []);
   useEffect(() => {
     if (!selectedCardIds.length) return;
     const clear = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('[role="dialog"]')) setSelectedCardIds([]); };
@@ -1319,40 +1360,35 @@ function App() {
     event.target.value = '';
     if (!file) return;
 
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'].includes(file.type)) {
       setProfileError(true);
-      setProfileMessage('Choose a JPEG, PNG, or WebP image.');
+      setProfileMessage('Choose a JPEG, PNG, WebP, GIF or AVIF image.');
       return;
     }
-    if (file.size > 1024 * 1024) {
+    if (file.size > 30 * 1024 * 1024) {
       setProfileError(true);
-      setProfileMessage('Profile photos must be 1 MB or smaller.');
+      setProfileMessage('That image is too large to open (30 MB at most).');
       return;
     }
+    // Any size is fine: the cropper saves a small square.
+    setProfileMessage('');
+    setAccountMenuOpen(false);
+    setProfileCropFile(file);
+  };
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') {
-        setProfileError(true);
-        setProfileMessage('The selected photo could not be read.');
-        return;
-      }
-      try {
-        localStorage.setItem('visual-library-profile-photo', reader.result);
-      } catch {
-        setProfileError(true);
-        setProfileMessage('The photo could not be saved in this browser. Try a smaller image.');
-        return;
-      }
-      setProfilePhoto(reader.result);
-      setProfileError(false);
-      setProfileMessage('Profile photo saved on this device.');
-    };
-    reader.onerror = () => {
+  const saveCroppedProfilePhoto = (dataUrl: string) => {
+    setProfileCropFile(null);
+    try {
+      localStorage.setItem('visual-library-profile-photo', dataUrl);
+    } catch {
       setProfileError(true);
-      setProfileMessage('The selected photo could not be read.');
-    };
-    reader.readAsDataURL(file);
+      setProfileMessage('The photo could not be saved in this browser.');
+      return;
+    }
+    setProfilePhoto(dataUrl);
+    setProfileError(false);
+    setProfileMessage('Profile photo saved on this device.');
+    notify({ title: 'Photo updated', detail: 'Saved on this device.' });
   };
 
   const handleRemoveProfilePhoto = () => {
@@ -1480,7 +1516,7 @@ function App() {
         {!(activeView === 'canvas' && selectedCanvas) && <div ref={searchBarRef} className={`refs-search ${isHome ? 'home-search' : 'is-compact'} ${searchTerm ? 'has-query' : ''}`}>
           <label className="sidebar-search workspace-search refs-search-field" aria-label="Search refs">
             <InterfaceIcon name="search" />
-            <input value={searchTerm} onChange={event => changeSearch(event.target.value)}
+            <input aria-label="Search" value={searchTerm} onChange={event => changeSearch(event.target.value)}
               onKeyDown={event => { if (event.key === 'Escape' && searchTerm) { event.stopPropagation(); changeSearch(''); } }} placeholder={searchPlaceholder} />
             {searchTerm && <button type="button" className="refs-search-clear" aria-label="Clear search" onClick={() => changeSearch('')}>×</button>}
           </label>{themeToggle}
@@ -1626,7 +1662,7 @@ function App() {
                 <button type="button" className="collection-tile-main" aria-label="Open collection All cards" onClick={() => navigateTo('library')}>
                   <span className="collection-tile-preview" aria-hidden="true">
                     {live.length ? live.slice(0, 4).map(card => <span key={card.id} className={`collection-preview-item ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-image' : ''}`}>
-                      {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt="" /> : <span>{card.title.slice(0, 1).toUpperCase()}</span>}
+                      {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt="" decoding="async" loading="lazy" /> : <span>{card.title.slice(0, 1).toUpperCase()}</span>}
                     </span>) : <span className="collection-preview-empty"><NavigationIcon name="collections" /></span>}
                   </span>
                   <span className="collection-tile-info">
@@ -1663,7 +1699,7 @@ function App() {
                       {memberCards.length > 0 ? memberCards.map((card) => (
                         <span key={card.id} className={`collection-preview-item ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-image' : ''}`}>
                           {(card.type === 'image' || card.type === 'pdf') && card.dataUrl
-                            ? <img src={card.dataUrl} alt="" />
+                            ? <img src={card.dataUrl} alt="" decoding="async" loading="lazy" />
                             : <span>{card.title.slice(0, 1).toUpperCase()}</span>}
                         </span>
                       )) : <span className="collection-preview-empty"><NavigationIcon name="collections" /></span>}
@@ -1766,109 +1802,10 @@ function App() {
           {selectedCardIds.length === 2 && <button type="button" className="selection-connect" onClick={() => { void connectCards(selectedCardIds[0], selectedCardIds[1]); setSelectedCardIds([]); }}><b className="glyph-tri" aria-hidden="true">△</b>Connect these two</button>}
           <button type="button" onClick={() => setSelectedCardIds([])}><b className="glyph-cir" aria-hidden="true">○</b>Esc · Clear</button>
         </div>}
-        {activeView === 'library' && <div onClick={event => { if (event.target === event.currentTarget) setSelectedCardIds([]); }} className={`library-grid card-size-${cardSize} ${selectedCardIds.length ? 'has-selection' : ''}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
-          {visibleCards.map((card) => {
-            const sourceLabel = card.sourceUrl
-              ? (() => {
-                  try {
-                    return new URL(card.sourceUrl).hostname.replace('www.', '');
-                  } catch {
-                    return card.sourceUrl;
-                  }
-                })()
-              : null;
-
-            return (
-              <div className={`library-card ${newlyCreatedCardId === card.id ? 'is-new' : ''} ${capturedCardIds.includes(card.id) ? 'is-captured' : ''} ${removingCardIds.includes(card.id) ? 'is-removing' : ''}`} key={card.id}>
-                <div className="tile-header">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${card.title}`}
-                    checked={selectedCardIds.includes(card.id)}
-                    onChange={() => {
-                      setSelectedCardIds((current) =>
-                        current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id],
-                      );
-                    }}
-                    onClick={(event) => event.stopPropagation()}
-                  />
-                </div>
-              <CardActions cardId={card.id} onConnect={() => { setSelectedCardIds([]); setConnectFrom(card.id); }} title={card.title} collections={collections} onEdit={() => setSelectedId(card.id)} onDelete={() => { void handleDelete(card.id); }} onMove={async collectionId => {
-                const updated = { ...card, updatedAt: new Date().toISOString() };
-                const nextCollections = collections.map(collection => ({ ...collection, cardIds: collection.id === collectionId ? [...new Set([...collection.cardIds, card.id])] : collection.cardIds.filter(id => id !== card.id), updatedAt: updated.updatedAt }));
-                await saveCardWithCollections(updated, nextCollections);
-                setCards(current => current.map(item => item.id === card.id ? updated : item)); setCollections(nextCollections);
-              }} />
-              <article
-                data-card-id={card.id}
-                className={`card-tile card-type-${card.type} ${selectedId === card.id ? 'selected' : ''} ${selectedCardIds.includes(card.id) ? 'is-checked' : ''}`}
-                data-tinted={card.color ? 'true' : undefined}
-                style={card.color ? { '--card-tint': card.color } as CSSProperties : undefined}
-                tabIndex={0}
-                aria-label={`Open ${card.title}`}
-                aria-describedby="card-select-hint"
-                // Each click adds or removes the card from the selection; a double click opens the editor.
-                onClick={(event) => {
-                  if (connectFrom) { if (connectFrom !== card.id) void connectCards(connectFrom, card.id); return; }
-                  // Finishing a text selection inside the card isn't a click on the card.
-                  const picked = window.getSelection();
-                  if (picked?.toString().trim() && picked.anchorNode && event.currentTarget.contains(picked.anchorNode)) return;
-                  if (event.detail < 2) selectCard(card.id, true);
-                }}
-                onDragOver={event => { if (event.dataTransfer.types.includes(CONNECT_MIME)) { event.preventDefault(); event.dataTransfer.dropEffect = 'link'; event.currentTarget.classList.add('is-connect-target'); } }}
-                onDragLeave={event => event.currentTarget.classList.remove('is-connect-target')}
-                onDrop={event => { const from = event.dataTransfer.getData(CONNECT_MIME); event.currentTarget.classList.remove('is-connect-target'); if (from) { event.preventDefault(); void connectCards(from, card.id); } }}
-                onContextMenu={event => {
-                  // Right-click on text selected inside this card: make a new note from it.
-                  const selection = window.getSelection(), text = selection?.toString().trim() ?? '';
-                  if (!text || !selection?.anchorNode || !event.currentTarget.contains(selection.anchorNode)) return;
-                  event.preventDefault(); event.stopPropagation();
-                  setTextMenu({ left: event.clientX, top: event.clientY, text, cardId: card.id });
-                }}
-                onDoubleClick={() => setSelectedId(card.id)}
-                onKeyDown={(event) => {
-                  if (event.target !== event.currentTarget) {
-                    return;
-                  }
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    setSelectedId(card.id);
-                  } else if (event.key === ' ') {
-                    event.preventDefault();
-                    selectCard(card.id, true);
-                  }
-                }}
-              >
-
-
-                {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt={card.title} className="card-image" /> : null}
-                {card.type === 'pdf' && <span className="card-pdf-badge">PDF · {card.pdf?.pageCount ?? '?'} p</span>}
-                {card.source && <span className="card-pdf-badge card-source-badge">Page {card.source.page}</span>}
-                {connectionsOf(card).length > 0 && <span className="card-pdf-badge card-link-badge" title="Connected cards">⇄ {connectionsOf(card).length}</span>}
-                {capturedCardIds.includes(card.id) && <span className="capture-flash" aria-hidden="true"><i /><i /><i /><i /></span>}
-                {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p>{card.caption && <small className="note-caption">{card.caption}</small>}</div> : null}
-                {card.type === 'bookmark' ? <div className="bookmark-card-preview">
-                  <span className="card-kind">LINK <InterfaceIcon name="link" /></span>
-                  <h2>{card.title}</h2>{card.note && <p>{card.note}</p>}
-                  {sourceLabel && <span className="bookmark-domain">{sourceLabel}</span>}
-                </div> : null}
-                <div className="card-body">
-                  {card.type !== 'bookmark' && <h2>{card.title}</h2>}
-                  <div className="card-footer-meta" hidden={card.type === 'image'}>
-                    <span>{card.type === 'image' ? 'Image' : card.type === 'text' ? 'Note' : 'Link'}</span>
-                    <time dateTime={card.createdAt}>{new Date(card.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time>
-                  </div>
-                  {card.tags.length > 0 && <div className="card-tag-list">{card.tags.slice(0, 3).map(tag => <span key={tag}>#{tag}</span>)}</div>}
-                </div>
-              </article>
-              {card.type === 'image' && <ScreenshotNote note={card.note} />}
-              <CardCollectionControls cardId={card.id} collections={collections}
-                onToggle={(collectionId, included) => void changeMembership(card.id, collectionId, included)}
-                onCreate={name => handleCreateCollectionForCard(card.id, name)}
-                onOpenCollection={collectionId => navigateTo('library', collectionId)} />
-              </div>
-            );
-          })}
+        {activeView === 'library' && <div onClick={event => { if (event.target === event.currentTarget) setSelectedCardIds([]); }} className={`library-grid card-size-${cardSize} ${selectedCardIds.length ? 'has-selection' : ''} ${connectFrom ? 'is-connecting' : ''}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
+          {visibleCards.map(card => <LibraryCard key={card.id} card={card} collections={collections} api={getCardApi}
+            isOpen={selectedId === card.id} isChecked={selectedCardIds.includes(card.id)} isNew={newlyCreatedCardId === card.id}
+            isCaptured={capturedCardIds.includes(card.id)} isRemoving={removingCardIds.includes(card.id)} connectionCount={connectionsOf(card).length} />)}
         </div>}
 
         {(activeView === 'library' || activeView === 'canvas') && selectedCard ? (
@@ -2029,9 +1966,9 @@ function App() {
               <label className="profile-avatar profile-avatar-large avatar-upload" title={profilePhoto ? 'Change photo' : 'Add photo'}>
                 {profilePhoto ? <img src={profilePhoto} alt="" /> : <span aria-hidden="true">{displayProfileName.slice(0, 1).toUpperCase()}</span>}
                 <span className="avatar-upload-hint" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /></svg></span>
-                <input className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Change profile photo" onChange={handleProfilePhotoChange} />
+                <input className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" aria-label="Change profile photo" onChange={handleProfilePhotoChange} />
               </label>
-              <strong>{displayProfileName}</strong>
+              <EditableName value={profileName} placeholder="My Library" onChange={setProfileName} />
               {displayProfileTag && <span>@{displayProfileTag}</span>}
               {profileBio && <p className="profile-bio">{profileBio}</p>}
             </div>
@@ -2069,9 +2006,9 @@ function App() {
           <label className="profile-avatar settings-avatar avatar-upload" title={profilePhoto ? 'Change photo' : 'Add photo'}>
             {profilePhoto ? <img src={profilePhoto} alt="" /> : <span aria-hidden="true">{displayProfileName.slice(0, 1).toUpperCase()}</span>}
             <span className="avatar-upload-hint" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /></svg></span>
-            <input className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose profile photo" onChange={handleProfilePhotoChange} />
+            <input className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" aria-label="Choose profile photo" onChange={handleProfilePhotoChange} />
           </label>
-          <strong>{displayProfileName}</strong>{displayProfileTag && <span>@{displayProfileTag}</span>}
+          <EditableName value={profileName} placeholder="My Library" onChange={setProfileName} />{displayProfileTag && <span>@{displayProfileTag}</span>}
           {profileBio && <p className="profile-bio">{profileBio}</p>}
         </div>
         <h3>Profile</h3>
@@ -2145,6 +2082,8 @@ function App() {
         {sounds.settings}
       </Dialog>}
       {extensionSetupOpen && <ExtensionSetup connectionStatus={extensionStatus} onClose={() => setExtensionSetupOpen(false)} onConnected={() => { setExtensionStatus('Connecting extension…'); setExtensionConnectionVersion(current => current + 1); }} />}
+      {/* After Settings, so the cropper is the topmost dialog. */}
+      {profileCropFile && <AvatarCropper file={profileCropFile} onCancel={() => setProfileCropFile(null)} onSave={saveCroppedProfilePhoto} />}
       {undoMembership && <div className="membership-undo" role="status"><span>Removed from {undoMembership.collection.name}</span><button type="button" disabled={membershipSaving} onClick={() => void handleUndoMembership()}>Undo</button></div>}
       {quickAddPosition && <div ref={quickAddRef} className="quick-add-context" role="menu" aria-label="Quick add" tabIndex={-1} style={{ left: quickAddPosition.left, top: quickAddPosition.top }}
         onPointerEnter={() => { quickAddHovered.current = true; scheduleQuickAddClose(null); }}

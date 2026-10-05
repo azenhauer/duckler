@@ -130,10 +130,12 @@ html:not([data-theme='dark']) .content::after { opacity: .06; }
 @media (max-height: 640px) { .bottom-dock .profile-popover { max-height: calc(100dvh - 120px); overflow-y: auto; overscroll-behavior: contain; } }
 .reader-backdrop { overflow: hidden !important; background: color-mix(in srgb, #02030a 66%, transparent) !important; backdrop-filter: none !important; animation: sx-fade var(--sx-fast) linear both; }
 html:not([data-theme='dark']) .reader-backdrop { background: color-mix(in srgb, #8ea3c8 42%, transparent) !important; }
-.reader-backdrop > [role=dialog] { max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; animation: sx-fade 110ms linear both !important; }
+.reader-backdrop > [role=dialog] { max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; animation: sx-settle 100ms ease-out both !important; }
 @keyframes sx-fade { from { opacity: 0; } to { opacity: 1; } }
+/* Arrivals never start invisible: content is readable on the first frame and only settles into place. */
+@keyframes sx-settle { from { opacity: .6; translate: 0 3px; } to { opacity: 1; translate: none; } }
 /* Motion uses the individual translate/scale properties so it never overrides centering transforms. */
-@keyframes sx-rise { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: none; } }
+@keyframes sx-rise { from { opacity: .5; translate: 0 4px; } to { opacity: 1; translate: none; } }
 
 /* ---- Scrollbars: hidden everywhere. Wheel, touch and keyboard scrolling still work. ---- */
 html, body, * { scrollbar-width: none !important; }
@@ -379,10 +381,10 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 .bulk-new-collection input { min-width: 160px; padding: 6px 8px; border: 1px solid var(--ui-accent-primary); border-radius: 0; background: transparent; color: var(--ui-text); }
 
 /* Closing animation for popovers and dialogs (played by an inert copy, see exitAnimation.ts). */
-.is-leaving { animation: sx-leave 140ms cubic-bezier(.4,0,1,1) forwards !important; }
-.reader-backdrop.is-leaving > [role=dialog] { animation: sx-leave-dialog 140ms cubic-bezier(.4,0,1,1) forwards !important; }
+.is-leaving { animation: sx-leave 90ms cubic-bezier(.4,0,1,1) forwards !important; }
+.reader-backdrop.is-leaving > [role=dialog] { animation: sx-leave-dialog 90ms cubic-bezier(.4,0,1,1) forwards !important; }
 @keyframes sx-leave { from { opacity: 1; translate: none; scale: none; } to { opacity: 0; translate: 0 4px; scale: .98; } }
-.reader-backdrop.is-leaving { animation: sx-leave-fade 140ms linear forwards !important; }
+.reader-backdrop.is-leaving { animation: sx-leave-fade 90ms linear forwards !important; }
 @keyframes sx-leave-fade { to { opacity: 0; } }
 @keyframes sx-leave-dialog { to { translate: 0 8px; scale: .985; } }
 @media (prefers-reduced-motion: reduce) {
@@ -461,8 +463,8 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 .settings-gear:active, .sound-toggle:active, .refs-search-clear:active, .sound-preview-row button:active, .canvas-swatch:active, .editor-tint:active, .editor-chip:active { scale: .94; }
 .card-tile:active, .collection-tile-main:active, .notice:active { scale: .985; }
 /* A view's grid arrives once when you open it (not on every search keystroke: the container stays mounted). */
-.library-grid, .collection-grid, .canvas-gallery { animation: sx-arrive 150ms cubic-bezier(.2,.8,.2,1) both !important; }
-@keyframes sx-arrive { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: none; } }
+.library-grid, .collection-grid, .canvas-gallery { animation: sx-arrive 110ms cubic-bezier(.2,.8,.2,1) both !important; }
+@keyframes sx-arrive { from { opacity: .7; translate: 0 4px; } to { opacity: 1; translate: none; } }
 /* Selecting a tool, a chip or a colour gives a short pop. */
 .canvas-icon-button[aria-pressed='true'] .canvas-icon, .editor-chip[data-checked], .editor-tint[aria-pressed='true'], .canvas-swatch[aria-pressed='true'] { animation: sx-pop 170ms cubic-bezier(.3,1.6,.5,1) both; }
 @keyframes sx-pop { from { scale: .8; } to { scale: none; } }
@@ -600,7 +602,7 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 /* ---- Colour picker: replaces the browser's native dialog for UI colours (the canvas keeps its own). ---- */
 .color-pop { position: fixed; z-index: 1000; /* above every dialog layer (the content section rises to 200 while the editor is open) */ display: grid; gap: 10px; width: 236px; padding: 12px; border: 1px solid var(--sx-line-soft); border-radius: 8px;
   background: var(--sx-panel); color: var(--ui-text); box-shadow: 4px 4px 0 color-mix(in srgb, #000 35%, transparent); animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both; }
-.color-pop.is-leaving { animation: sx-leave 120ms ease-in forwards !important; }
+.color-pop.is-leaving { animation: sx-leave 80ms ease-in forwards !important; }
 .color-pop-square { position: relative; height: 132px; border-radius: 5px; cursor: crosshair; touch-action: none; outline: none; box-shadow: inset 0 0 0 1px #ffffff1a; }
 .color-pop-square:focus-visible { box-shadow: inset 0 0 0 1px #ffffff1a, 0 0 0 2px var(--ui-accent-primary); }
 .color-pop-thumb { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #0009, 0 1px 4px #0008; pointer-events: none; }
@@ -681,7 +683,7 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 .dialogue-unlink:active { scale: .92; }
 .connect-hint { border-color: color-mix(in srgb, var(--sx-tri) 55%, transparent); }
 .connect-hint .glyph-tri, .selection-connect .glyph-tri { color: var(--sx-tri); }
-.app-shell:has(.connect-hint) .library-card .card-tile { cursor: crosshair; }
+.library-grid.is-connecting .card-tile { cursor: crosshair; }
 .tile-menu { z-index: 1000 !important; } /* above dialogs: the content section rises to 200 while the editor is open */
 
 /* ---- Settings: each UI sound is a switch; off sounds are struck through and dimmed. ---- */
@@ -690,3 +692,30 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 .sound-preview-row .sound-preview-label[aria-pressed='false'] { text-decoration: line-through; opacity: .5; }
 .sound-preview-row button[aria-pressed='true']:not(.sound-preview-label) { border-color: color-mix(in srgb, var(--ui-accent-primary) 55%, transparent); color: var(--ui-text); }
 .sound-preview-row button[aria-pressed='false']:not(.sound-preview-label) { opacity: .45; text-decoration: line-through; }
+
+/* ---- Profile card: click the name to rename it in place. ---- */
+.profile-name-button { all: unset; cursor: text; border-bottom: 1px dashed transparent; overflow-wrap: anywhere; }
+.profile-name-button:hover, .profile-name-button:focus-visible { border-bottom-color: color-mix(in srgb, var(--ui-accent-primary) 70%, transparent); }
+.profile-name-inline { width: 100%; margin-top: 12px; padding: 0 0 2px; border: 0; border-bottom: 1px solid var(--ui-accent-primary); border-radius: 0; background: transparent; color: var(--ui-text); font: inherit; font-size: 1.2rem; font-weight: 600; letter-spacing: -.035em; outline: none; }
+
+/* ---- Profile photo cropper: a square you drag and zoom; the circle shows the avatar. ---- */
+.app-settings.avatar-cropper { position: relative; display: grid; justify-items: center; gap: 16px; padding: 30px 34px; width: min(100%, 360px); }
+.avatar-cropper > .close-detail { position: absolute; top: 18px; right: 18px; }
+.avatar-cropper h2 { justify-self: start; margin: 0; font-size: 1.3rem; font-weight: 500; letter-spacing: -.03em; }
+.avatar-crop-frame { position: relative; overflow: hidden; max-width: 100%; border: 1px solid var(--sx-line-soft); background: #0006; cursor: grab; touch-action: none; user-select: none; }
+.avatar-crop-frame:active { cursor: grabbing; }
+.avatar-crop-frame:focus-visible { outline: 2px solid var(--ui-accent-primary); outline-offset: 2px; }
+.avatar-crop-frame img { position: absolute; left: 50%; top: 50%; max-width: none; pointer-events: none; }
+.avatar-crop-frame::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px #000a; pointer-events: none; }
+.avatar-crop-zoom { display: flex; align-items: center; gap: 12px; width: 100%; color: var(--ui-text-muted); font: 700 10px/1 var(--sx-label); letter-spacing: .12em; text-transform: uppercase; }
+.avatar-crop-zoom input { flex: 1; accent-color: var(--ui-accent-primary); }
+.avatar-crop-actions { display: flex; justify-content: flex-end; gap: 10px; width: 100%; }
+.avatar-crop-actions button { padding: 8px 14px; border: 1px solid var(--sx-line-soft); background: transparent; color: var(--ui-text); font: inherit; cursor: pointer; }
+.avatar-crop-actions .primary { border-color: var(--ui-accent-primary); color: var(--ui-accent-primary); }
+.avatar-crop-actions button:disabled { opacity: .45; cursor: default; }
+
+/* A card image whose grid-sized copy is still being made (first view of the session only). */
+.card-image-pending { display: block; aspect-ratio: 16 / 10; background: color-mix(in srgb, var(--ui-text) 6%, transparent); }
+/* Every card keeps a (no-op) transform, so the selected lean only changes its value. Switching from
+   `none` made each card a new containing block and re-laid-out the whole grid (~60 ms with 300 cards). */
+.library-card .card-tile { transform: skewX(0deg) !important; }

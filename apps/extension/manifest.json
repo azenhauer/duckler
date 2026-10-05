@@ -48,7 +48,7 @@
       "description": "Open or close the Duckler side panel"
     }
   },
-  "optional_host_permissions": [
+  "host_permissions": [
     "<all_urls>"
   ]
 }

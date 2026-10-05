@@ -21,7 +21,9 @@ function initialize({ unavailableOptions = false, unavailableTabs = false, unava
         return message.type === 'list-captures' ? { ok: true, items: [], budget: 1024 } : { ok: true };
       }),
     },
-    tabs: { query: vi.fn(async () => [{ id: 1, url: selection ? 'https://example.com/article' : 'chrome://extensions/' }]), create, connect: vi.fn(() => port) },
+    tabs: { query: vi.fn(async () => [{ id: 1, url: selection ? 'https://example.com/article' : 'chrome://extensions/' }]), create, connect: vi.fn(() => port),
+      // The region picker answers once the drag ends.
+      sendMessage: vi.fn(async (): Promise<Record<string, unknown>> => ({ ok: true, capture: { kind: 'screenshot', title: 'Review this crop', payload: 'data:image/png;base64,AA==', sourceUrl: 'https://example.com/article' } })) },
     scripting: { executeScript: vi.fn(async () => [{ result: { title: 'Article', url: 'https://example.com/article', selection, pdfLinks: [] } }]) },
   };
   new Function('chrome', script)(chrome);
@@ -32,6 +34,36 @@ beforeEach(() => { document.body.innerHTML = html; });
 afterEach(() => { window.dispatchEvent(new Event('pagehide')); document.body.innerHTML = ''; });
 
 describe('extension Settings access', () => {
+  it('Shot puts the picker on the page and shows the crop here for review', async () => {
+    const chrome = initialize({ selection: 'Highlighted passage' });
+    await waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('#note-text')!.value).toBe('Highlighted passage'));
+    fireEvent.click(document.querySelector('#mode-shot')!);
+    await waitFor(() => expect(document.querySelector('#shot-preview')).not.toHaveAttribute('hidden'));
+    expect(chrome.scripting.executeScript).toHaveBeenCalledWith({ target: { tabId: 1 }, files: ['content.js'] });
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(1, { type: 'start-region-capture' });
+    expect(document.querySelector<HTMLInputElement>('#capture-title')!.value).toBe('Review this crop');
+    expect(document.querySelector('#save-page')).toHaveTextContent('Save screenshot');
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'queue-capture' }));
+  });
+
+  it('saves straight away when instant screenshots are switched on', async () => {
+    const chrome = initialize({ selection: 'Highlighted passage' });
+    await waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('#note-text')!.value).toBe('Highlighted passage'));
+    document.querySelector<HTMLInputElement>('#instant-shot')!.checked = true;
+    fireEvent.click(document.querySelector('#mode-shot')!);
+    await waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'queue-capture', capture: expect.objectContaining({ kind: 'screenshot', title: 'Review this crop' }) })));
+  });
+
+  it('reports a cancelled screenshot without saving anything', async () => {
+    const chrome = initialize({ selection: 'Highlighted passage' });
+    await waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('#note-text')!.value).toBe('Highlighted passage'));
+    chrome.tabs.sendMessage.mockResolvedValueOnce({ ok: false, cancelled: true });
+    fireEvent.click(document.querySelector('#mode-shot')!);
+    await waitFor(() => expect(document.querySelector('#status')).toHaveTextContent('Screenshot cancelled'));
+    expect(document.querySelector('#shot-preview')).toHaveAttribute('hidden');
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'queue-capture' }));
+  });
+
   it('puts selected text in Note and sends a separate caption with Ctrl+Enter', async () => {
     const chrome = initialize({ selection: 'Highlighted passage' });
     const note = document.querySelector<HTMLTextAreaElement>('#note-text')!;
@@ -42,6 +74,7 @@ describe('extension Settings access', () => {
     await waitFor(() => expect(chrome.tabs.connect).toHaveBeenCalled());
     const port = chrome.tabs.connect.mock.results[0].value;
     port.onMessage.addListener.mock.calls[0][0]({ type: 'selection', text: 'Highlighted passage', url: 'https://example.com/article' });
+    port.onMessage.addListener.mock.calls[0][0]({ type: 'selection', text: 'Another highlight', url: 'https://example.com/article' });
     expect(note.value).toBe('Edited highlighted passage');
     fireEvent.keyDown(note, { key: 'Enter', ctrlKey: true });
     fireEvent.keyDown(note, { key: 'Enter', ctrlKey: true });

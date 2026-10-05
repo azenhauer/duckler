@@ -243,7 +243,8 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
   };
   const historyKey = (event: React.KeyboardEvent) => {
     if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
-    if (event.key === 'Escape') { cancelGesture(); setTool('select'); return; }
+    // Esc first drops a tool or an unfinished gesture; on a quiet board it falls through to Back.
+    if (event.key === 'Escape') { if (tool !== 'select' || gesture.current) event.preventDefault(); cancelGesture(); setTool('select'); return; }
     if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) { event.preventDefault(); event.stopPropagation(); if (event.shiftKey || event.key.toLowerCase() === 'y') redoCommand(); else undoCommand(); }
     if (['Delete', 'Backspace'].includes(event.key) && (activeIds.length || selectedEdge)) { event.preventDefault(); removeObjects(); }
   };

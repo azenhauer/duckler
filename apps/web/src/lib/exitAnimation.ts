@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 
-const EXIT_MS = 140;
+const EXIT_MS = 90; // short: a closed thing must not linger
 const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 /** Snapshots the node while it is still in the DOM; the returned function shows the leaving copy. */

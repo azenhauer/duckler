@@ -1,6 +1,6 @@
 const $ = selector => document.querySelector(selector);
-let page, currentTab, mode = 'bookmark', saving = false;
-let selectionPort, contextVersion = 0;
+let page, currentTab, mode = 'bookmark', saving = false, shooting = false;
+let selectionPort, contextVersion = 0, modeVersion = 0, ready = Promise.resolve();
 const drafts = new Map();
 let collectionPage = 0, queuePage = 0;
 let collectionOptions = [], selectedCollectionIds = [], selectedCollectionNames = [];
@@ -24,16 +24,15 @@ function renderColours() {
 renderColours();
 // Optional browser APIs: each feature quietly switches off where the API is missing.
 const store = { get: async key => (await chrome.storage?.local?.get(key)) ?? {}, set: async value => { await chrome.storage?.local?.set(value); } };
-const hasSiteAccess = async () => { try { return !chrome.permissions?.contains || await chrome.permissions.contains({ origins: ['<all_urls>'] }); } catch { return true; } };
-let lastAutoNote = '', screenshot = null, panelPort;
+let lastAutoNote = '', screenshot = null;
 for (const id of ['capture-title', 'note-text', 'caption-text', 'tags', 'pdf-url']) document.getElementById(id)?.addEventListener('input', () => edited.add(id));
-const fill = (id, value) => { if (!edited.has(id) && typeof value === 'string') $('#' + id).value = value; };
+const fill = (id, value) => { if (edited.has(id) || typeof value !== 'string') return false; $('#' + id).value = value; return true; };
 const cleanTags = list => [...new Set(list.flatMap(item => String(item).split(',')).map(tag => tag.trim().toLocaleLowerCase()).filter(tag => tag && tag.length <= 24))].slice(0, 5);
-// A highlight fills the note; if the note was edited, the new highlight is added below instead of replacing it.
+// A highlight fills an untouched note; manual drafts stay intact.
 const applyHighlight = text => {
   const note = $('#note-text');
   if (!edited.has('note-text') || !note.value.trim() || note.value === lastAutoNote) { note.value = text; lastAutoNote = text; edited.delete('note-text'); }
-  else if (!note.value.includes(text)) note.value = `${note.value.trimEnd()}\n\n${text}`;
+  // A manually edited note is a draft, not an autofill destination.
 };
 const showStatus = (text, error = false) => { $('#status').textContent = text; $('#status').classList.toggle('error', error); $('#status').setAttribute('role', error ? 'alert' : 'status'); };
 const request = async message => {
@@ -86,64 +85,70 @@ function setupCollectionPicker() {
 }
 async function initialize() {
   const version = ++contextVersion;
-  if (page && currentTab) drafts.set(`${currentTab.id}:${page.url}`, { mode, title: $('#capture-title').value, note: $('#note-text').value, caption: $('#caption-text').value, tags: $('#tags').value, pdfUrl: $('#pdf-url').value, ids: [...selectedCollectionIds], names: [...selectedCollectionNames] });
+  if (page && currentTab) drafts.set(`${currentTab.id}:${page.url}`, { mode, title: $('#capture-title').value, note: $('#note-text').value, caption: $('#caption-text').value, tags: $('#tags').value, pdfUrl: $('#pdf-url').value, ids: [...selectedCollectionIds], names: [...selectedCollectionNames], edited: [...edited], lastAutoNote, screenshot, cardColour });
   selectionPort?.disconnect(); selectionPort = undefined;
-  void request({ type: 'list-collections' }).then(response => { if (Array.isArray(response.collections)) { collectionOptions = response.collections; $('#collection-search')?.dispatchEvent(new Event('input')); } }).catch(() => {});
+  void request({ type: 'list-collections' }).then(response => { if (version === contextVersion && Array.isArray(response.collections)) { collectionOptions = [...response.collections, ...collectionOptions.filter(item => item.id.startsWith('local-'))]; $('#collection-search')?.dispatchEvent(new Event('input')); } }).catch(() => {});
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (version !== contextVersion) return;
   currentTab = tab;
   page = undefined;
   for (const id of ['capture-title', 'note-text', 'caption-text', 'tags', 'pdf-url']) $('#' + id).value = '';
-  edited.clear(); lastAutoNote = ''; screenshot = null; cardColour = null; renderColours(); $('#shot-preview').hidden = true; $('#site-access').hidden = true;
+  edited.clear(); lastAutoNote = ''; screenshot = null; cardColour = null; renderColours(); $('#shot-preview').hidden = true;
   selectedCollectionIds = []; selectedCollectionNames = []; $('#collection-search')?.dispatchEvent(new Event('input'));
   for (const id of ['mode-page', 'mode-selection', 'mode-pdf', 'mode-shot', 'capture-region']) $('#' + id).disabled = false;
   if (!tab?.id || !/^https?:\/\//i.test(tab.url || '')) throw new Error('Open a website to save a link or screenshot. You can still write a note.');
   page = { title: tab.title || '', url: tab.url, selection: '', pdfLinks: [] };
+  const draft = drafts.get(`${tab.id}:${page.url}`);
+  if (draft) {
+    $('#capture-title').value = draft.title; $('#note-text').value = draft.note; $('#caption-text').value = draft.caption; $('#tags').value = draft.tags; $('#pdf-url').value = draft.pdfUrl;
+    selectedCollectionIds = draft.ids; selectedCollectionNames = draft.names;
+    for (const id of draft.edited || []) edited.add(id);
+    lastAutoNote = draft.lastAutoNote || ''; screenshot = draft.screenshot || null; cardColour = draft.cardColour || null;
+    if (screenshot) $('#shot-preview').src = screenshot.payload;
+    renderColours(); $('#collection-search')?.dispatchEvent(new Event('input'));
+  }
+  setMode(draft?.mode || 'bookmark', false);
+  const initialModeVersion = modeVersion;
   try {
     const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ title: document.title, url: location.href, selection: window.getSelection()?.toString().trim() || '',
       meta: (() => {
-        const read = name => (document.querySelector(`meta[property="${name}"],meta[name="${name}"]`)?.getAttribute('content') || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+        const read = name => [...document.querySelectorAll(`meta[property="${name}"],meta[name="${name}"]`)].map(tag => (tag.getAttribute('content') || '').replace(/\s+/g, ' ').trim()).find(Boolean)?.slice(0, 600) || '';
         return { ogTitle: read('og:title') || read('twitter:title'), siteName: read('og:site_name') || read('application-name'), description: read('og:description') || read('description') || read('twitter:description'),
           keywords: read('keywords'), tags: [...document.querySelectorAll('meta[property="article:tag"]')].map(tag => tag.getAttribute('content') || '').slice(0, 10), h1: (document.querySelector('h1')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200) };
       })(),
       pdfLinks: [...document.querySelectorAll('a[href]')].filter(link => /\.pdf(?:$|[?#])/i.test(link.href) || link.type === 'application/pdf' || /\.pdf$/i.test(link.download)).slice(0, 100).map(link => ({ url: link.href, title: link.textContent.trim() })) }) });
     if (version !== contextVersion) return;
     if (result?.result) page = result.result;
-  } catch {
-    // Without site access (the panel only has it on the tab where it was opened) highlights and
-    // screenshots can't reach this page: offer to allow it on all websites.
-    if (!await hasSiteAccess()) $('#site-access').hidden = false;
-  }
+  } catch { /* Some pages (the web store, PDFs) refuse scripts: keep the tab's own title. */ }
   if (version !== contextVersion) return;
   const pdfOptions = $('#pdf-links');
   pdfOptions.replaceChildren();
   for (const link of page.pdfLinks || []) { const option = document.createElement('option'); option.value = link.url; option.label = link.title; pdfOptions.append(option); }
-  $('#pdf-url').value = /\.pdf(?:$|[?#])/i.test(page.url) ? page.url : page.pdfLinks?.[0]?.url || '';
-  $('#capture-title').value = page.title || tab.title || '';
+  if (!draft) fill('pdf-url', /\.pdf(?:$|[?#])/i.test(page.url) ? page.url : page.pdfLinks?.[0]?.url || '');
+  if (!draft) fill('capture-title', page.title || tab.title || '');
   try {
     const host = new URL(page.url).hostname;
     const { title } = await request({ type: 'suggest-title', hint: { pageTitle: page.title, ogTitle: page.meta?.ogTitle, siteName: page.meta?.siteName, host }, fallback: tab.title || '' });
-    if (version === contextVersion && title) fill('capture-title', title);
+    if (version !== contextVersion) return;
+    if (!draft && title) fill('capture-title', title);
   } catch { /* Keep the page title. */ }
-  if (page.meta?.description) fill('note-text', page.meta.description.slice(0, 280));
-  lastAutoNote = $('#note-text').value;
-  fill('tags', cleanTags([...(page.meta?.tags || []), page.meta?.keywords || '']).join(', '));
+  if (version !== contextVersion) return;
+  if (!draft && page.meta?.description && fill('note-text', page.meta.description.slice(0, 280))) lastAutoNote = $('#note-text').value;
+  if (!draft) fill('tags', cleanTags([...(page.meta?.tags || []), page.meta?.keywords || '']).join(', '));
   try {
     const { ['duckler-last-collections']: last } = await store.get('duckler-last-collections');
-    if (version === contextVersion && last && !selectedCollectionIds.length) { selectedCollectionIds = (last.ids || []).filter(id => !String(id).startsWith('local-')); selectedCollectionNames = last.names || []; $('#collection-search')?.dispatchEvent(new Event('input')); }
+    if (version === contextVersion && !draft && last && !selectedCollectionIds.length) { selectedCollectionIds = (last.ids || []).filter(id => !String(id).startsWith('local-')); selectedCollectionNames = last.names || []; $('#collection-search')?.dispatchEvent(new Event('input')); }
   } catch { /* Start with no collections. */ }
+  if (version !== contextVersion) return;
   $('#page-title').textContent = page.title || tab.title || 'Untitled page';
   $('#page-domain').textContent = new URL(page.url).hostname.replace(/^www\./, '');
-  setMode('bookmark');
-  if (page.selection) { applyHighlight(page.selection); setMode('text'); }
-  else if (/\.pdf(?:$|[?#])/i.test(page.url)) setMode('pdf');
-  const draft = drafts.get(`${tab.id}:${page.url}`);
-  if (draft) {
-    $('#capture-title').value = draft.title; $('#note-text').value = draft.note; $('#caption-text').value = draft.caption; $('#tags').value = draft.tags; $('#pdf-url').value = draft.pdfUrl;
-    selectedCollectionIds = draft.ids; selectedCollectionNames = draft.names; setMode(draft.mode); $('#collection-search')?.dispatchEvent(new Event('input'));
+  if (!draft && modeVersion === initialModeVersion) {
+    if (page.selection) { applyHighlight(page.selection); setMode('text'); }
+    else if (/\.pdf(?:$|[?#])/i.test(page.url)) setMode('pdf');
   }
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['selection.js'] });
+    if (version !== contextVersion) return;
     // Also listen in same-site frames (articles and editors often live in iframes); others are skipped.
     try { await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['selection.js'] }); } catch { /* Main frame is enough. */ }
     if (version !== contextVersion || !chrome.tabs.connect) return;
@@ -160,8 +165,9 @@ async function initialize() {
     selectionPort.onDisconnect.addListener(() => { void chrome.runtime.lastError; });
   } catch { /* Restricted pages can still save a link or a manually written note. */ }
 }
-function setMode(next) {
+function setMode(next, resetNote = true) {
   mode = next;
+  modeVersion++;
   const note = next === 'note';
   $('#pdf-field').hidden = next !== 'pdf';
   $('#shot-preview').hidden = !(next === 'screenshot' && screenshot);
@@ -181,7 +187,7 @@ function setMode(next) {
   for (const [id, selected] of [['mode-page', next === 'bookmark'], ['mode-selection', next === 'text'], ['mode-note', note]]) {
     $('#' + id).classList.toggle('active', selected); $('#' + id).setAttribute('aria-pressed', String(selected));
   }
-  if (note) {
+  if (note && resetNote) {
     if ($('#capture-title').value === page?.title) $('#capture-title').value = '';
     // A written note starts empty rather than with the page description.
     if (!edited.has('note-text') && $('#note-text').value === lastAutoNote) { $('#note-text').value = ''; lastAutoNote = ''; }
@@ -216,45 +222,58 @@ $('#mode-page').addEventListener('click', () => setMode('bookmark'));
 $('#mode-selection').addEventListener('click', () => setMode('text'));
 $('#mode-note').addEventListener('click', () => setMode('note'));
 $('#mode-pdf').addEventListener('click', () => setMode('pdf'));
-// Screenshot: pick the mode, drag over the page, and the shot appears here with the usual fields.
+// Screenshot: the panel puts a picker on the page, waits for the drag, and shows the crop here with the usual fields.
 async function startShot() {
-  // Screenshots need access to the page. Without it, ask now: this click is the user gesture Chrome requires.
-  if (!await hasSiteAccess()) {
-    try { if (await chrome.permissions?.request?.({ origins: ['<all_urls>'] })) $('#site-access').hidden = true; } catch { /* Fall back to this tab's temporary access. */ }
-  }
-  screenshot = null; setMode('screenshot');
+  await ready;
+  if (shooting) return;
+  if (!currentTab?.id || !page) { showStatus('Open a website to take a screenshot.', true); return; }
+  shooting = true;
+  const version = contextVersion, tabId = currentTab.id;
+  setMode('screenshot');
   if (!edited.has('note-text') && $('#note-text').value === lastAutoNote) { $('#note-text').value = ''; lastAutoNote = ''; }
-  try { await request({ type: 'start-region', tabId: currentTab.id }); showStatus('Drag over the page to capture · Esc cancels'); }
-  catch (error) { showStatus(error.message, true); if (!await hasSiteAccess()) $('#site-access').hidden = false; }
+  showStatus('Drag over the page to capture · Esc cancels');
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    const result = await chrome.tabs.sendMessage(tabId, { type: 'start-region-capture' });
+    if (version !== contextVersion) return;
+    if (result?.ok && result.capture?.payload) receiveScreenshot(result.capture);
+    else showStatus(result?.cancelled ? 'Screenshot cancelled.' : result?.error || 'Could not take this screenshot.', !result?.cancelled);
+  } catch {
+    if (version === contextVersion) showStatus('This page does not allow screenshots. Try another tab, or upload an image in the library.', true);
+  } finally { shooting = false; }
 }
 $('#mode-shot').addEventListener('click', () => { void startShot(); });
 function receiveScreenshot(capture) {
   screenshot = capture; $('#shot-preview').src = capture.payload;
+  if (!edited.has('note-text') && $('#note-text').value === lastAutoNote) { $('#note-text').value = ''; lastAutoNote = ''; }
   fill('capture-title', capture.title); setMode('screenshot'); showStatus('Screenshot ready · Ctrl+Enter saves');
   if ($('#instant-shot').checked) void saveCapture(true);
   else $('#save-page').focus();
 }
-$('#grant-access').addEventListener('click', async () => {
-  try {
-    if (await chrome.permissions?.request?.({ origins: ['<all_urls>'] })) { $('#site-access').hidden = true; showStatus('Duckler can now read highlights and take screenshots on any website.'); void initializeSafely(); }
-  } catch (error) { showStatus(error.message, true); }
-});
 void store.get('duckler-instant-shot').then(stored => { $('#instant-shot').checked = !!stored['duckler-instant-shot']; }).catch(() => {});
 $('#instant-shot').addEventListener('change', event => { void store.set({ 'duckler-instant-shot': event.target.checked }).catch(() => {}); });
-// The background reaches this panel through a port: screenshots arrive here and the shortcut closes it.
+// The shortcuts reach this panel through a port: Alt+Shift+S closes it, Alt+Shift+D starts a screenshot.
 function connectPanel() {
   try {
     if (!chrome.runtime.connect || !chrome.windows?.getCurrent) return;
-    panelPort = chrome.runtime.connect({ name: 'duckler-panel' });
-    void chrome.windows.getCurrent().then(win => panelPort?.postMessage({ type: 'hello', windowId: win.id })).catch(() => {});
-    panelPort.onMessage.addListener(message => {
+    const port = chrome.runtime.connect({ name: 'duckler-panel' });
+    void chrome.windows.getCurrent().then(win => {
+      port.postMessage({ type: 'hello', windowId: win.id });
+      // Opened by Alt+Shift+D: the worker left the request for this window.
+      return chrome.storage?.session?.get('duckler-start-shot').then(stored => {
+        const request = stored?.['duckler-start-shot'];
+        if (request?.windowId !== win.id || Date.now() - request.at > 10000) return;
+        void chrome.storage.session.remove('duckler-start-shot');
+        void startShot();
+      });
+    }).catch(() => {});
+    port.onMessage.addListener(message => {
       if (message?.type === 'close') window.close();
-      if (message?.type === 'screenshot' && message.capture?.kind === 'screenshot') receiveScreenshot(message.capture);
+      if (message?.type === 'start-shot') void startShot();
     });
-    panelPort.onDisconnect.addListener(() => { void chrome.runtime.lastError; panelPort = undefined; setTimeout(connectPanel, 500); });
-  } catch { /* The panel still works without the live link. */ }
+    port.onDisconnect.addListener(() => { void chrome.runtime.lastError; setTimeout(connectPanel, 500); });
+  } catch { /* The panel still works without the shortcuts. */ }
 }
-connectPanel();
 async function saveCapture(send = false) {
   if (saving) return;
   const note = $('#note-text').value.trim();
@@ -332,9 +351,10 @@ const initializeSafely = () => initialize().catch(() => {
   $('#page-title').textContent = 'Keep a thought'; $('#page-domain').textContent = 'QUICK NOTE'; $('#mode-page').disabled = true; $('#mode-selection').disabled = true; $('#mode-shot').disabled = true; $('#capture-region').disabled = true; setMode('note'); showStatus('This page only supports notes.');
 });
 setupCollectionPicker();
-void initializeSafely();
-chrome.tabs.onActivated?.addListener(() => { if (!saving) void initializeSafely(); });
-chrome.tabs.onUpdated?.addListener((tabId, change) => { if (tabId === currentTab?.id && change.status === 'complete' && !saving) void initializeSafely(); });
+ready = initializeSafely();
+connectPanel();
+chrome.tabs.onActivated?.addListener(() => { if (!saving) ready = initializeSafely(); });
+chrome.tabs.onUpdated?.addListener((tabId, change) => { if (tabId === currentTab?.id && change.status === 'complete' && !saving && !shooting) ready = initializeSafely(); });
 window.addEventListener('pagehide', () => { selectionPort?.disconnect(); document.removeEventListener('keydown', saveShortcut); });
 void renderQueue().catch(error => showStatus(error.message, true));
 void request({ type: 'pairing-status' }).then(({ pairing }) => { $('#connection-status').textContent = pairing ? 'Library connected' : 'Connect library'; }).catch(error => showStatus(error.message, true));

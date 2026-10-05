@@ -84,12 +84,15 @@
 .library-card { padding-top:40px; transition:opacity 180ms var(--ease-standard),filter 180ms var(--ease-standard),translate 160ms var(--ease-standard); }
 .card-tile { border-radius:7px!important; border-color:color-mix(in srgb,var(--ui-line) 30%,transparent)!important; background:color-mix(in srgb,var(--ui-surface) 92%,transparent)!important; box-shadow:inset 0 1px 0 #ffffff08!important; transition:transform 150ms var(--ease-fast),border-color 150ms var(--ease-fast),background-color 150ms var(--ease-fast),box-shadow 180ms var(--ease-standard)!important; }
 .card-tile:hover { transform:translateY(-2px)!important; border-color:color-mix(in srgb,var(--ui-line) 65%,transparent)!important; background:color-mix(in srgb,var(--ui-surface-alt) 94%,transparent)!important; box-shadow:0 12px 28px #0005,inset 0 1px 0 #ffffff0c!important; }
-.card-tile:hover .card-image { filter:brightness(1.02); }
 .card-tile.is-checked { clip-path:polygon(8px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 8px); border-color:var(--ui-selection)!important; box-shadow:0 0 0 1px color-mix(in srgb,var(--ui-selection) 35%,transparent),0 0 18px color-mix(in srgb,var(--ui-glow) 24%,transparent)!important; animation:ps-select 190ms var(--ease-standard) both; }
-@keyframes ps-select { from { opacity:.72; filter:brightness(.84); } to { opacity:1; filter:brightness(1); } }
-.library-card:has(.card-tile.is-checked)::before,.library-card:has(.card-tile.is-checked)::after { content:''; position:absolute; z-index:8; pointer-events:none; width:17px; height:17px; opacity:.9; }
-.library-card:has(.card-tile.is-checked)::before { left:-5px; top:34px; border-left:1px solid var(--ui-accent-secondary); border-top:1px solid var(--ui-accent-secondary); transform-origin:top left; animation:ps-corner-in 180ms var(--ease-standard) both; }
-.library-card:has(.card-tile.is-checked)::after { right:-5px; bottom:-5px; border-right:1px solid var(--ui-accent-primary); border-bottom:1px solid var(--ui-accent-primary); transform-origin:bottom right; animation:ps-corner-in 180ms 35ms var(--ease-standard) both; }
+@keyframes ps-select { from { opacity:.72; } to { opacity:1; } } /* opacity only: a filter re-rasterises the card's image every frame */
+/* The corner marks always exist (invisible), so selecting a card repaints it instead of re-laying-out the whole grid. */
+.library-card::before,.library-card::after { content:''; position:absolute; z-index:8; pointer-events:none; width:17px; height:17px; opacity:0; }
+.library-card.is-checked::before,.library-card.is-checked::after { opacity:.9; }
+.library-card::before { left:-5px; top:34px; border-left:1px solid var(--ui-accent-secondary); border-top:1px solid var(--ui-accent-secondary); transform-origin:top left; }
+.library-card.is-checked::before { animation:ps-corner-in 180ms var(--ease-standard) both; }
+.library-card::after { right:-5px; bottom:-5px; border-right:1px solid var(--ui-accent-primary); border-bottom:1px solid var(--ui-accent-primary); transform-origin:bottom right; }
+.library-card.is-checked::after { animation:ps-corner-in 180ms 35ms var(--ease-standard) both; }
 @keyframes ps-corner-in { from { opacity:0; transform:scale(.35); } to { opacity:.9; transform:scale(1); } }
 .card-body,.bookmark-card-preview,.note-card-preview { background:transparent!important; }
 .card-tag-list span,.card-collection-pills button { border-radius:3px; background:color-mix(in srgb,var(--ui-surface-alt) 86%,transparent); border:1px solid color-mix(in srgb,var(--ui-line) 24%,transparent); }
@@ -106,8 +109,8 @@
 .quick-add-context .dock-icon,.quick-add-context .ui-icon { width:17px; height:17px; color:var(--ui-accent-primary); }
 
 .card-external-actions { gap:10px; opacity:0; pointer-events:none; transform:translateY(5px); transition:opacity 150ms var(--ease-standard),transform 150ms var(--ease-standard); }
-.library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions:has([aria-expanded=true]) { transform:translateY(0); }
-.library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions:has([aria-expanded=true]) { opacity:1; pointer-events:auto; }
+.library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions.is-open { transform:translateY(0); }
+.library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions.is-open { opacity:1; pointer-events:auto; }
 .card-external-actions::before { content:''; position:absolute; right:0; bottom:1px; width:112px; border-bottom:1px solid color-mix(in srgb,var(--ui-line) 34%,transparent); transform:scaleX(0); transform-origin:right; transition:transform 170ms var(--ease-standard); }
 .library-card:hover .card-external-actions::before,.card-external-actions:focus-within::before { transform:scaleX(1); }
 .card-external-actions > button,.card-move-control > button { color:#92bce3; filter:drop-shadow(0 0 5px color-mix(in srgb,var(--ui-glow) 24%,transparent)); transition:color 120ms var(--ease-fast),filter 120ms var(--ease-fast),transform 120ms var(--ease-fast); }

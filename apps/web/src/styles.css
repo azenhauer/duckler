@@ -2933,12 +2933,10 @@ button, .library-options > summary { transition:background-color 160ms ease,colo
 .card-options-menu input { width:16px; height:16px; }
 .card-options-menu strong,.card-options-menu span { font-size:.75rem; }
 .card-options-menu button { padding:7px 10px; font-size:.8rem; }
-.card-tile:has(.card-options[open]) { overflow:visible; z-index:6; }
 @media (hover:none) { .card-options { opacity:1; pointer-events:auto; } .tile-header input { opacity:1; } }
 .add-menu-popover::after { content:''; position:absolute; top:100%; left:0; right:0; height:14px; }
 .library-card:hover .card-options,.library-card:focus-within .card-options { opacity:1; pointer-events:auto; }
 .card-options > summary { min-width:44px; min-height:36px; display:grid; place-items:center; background:var(--surface-strong); color:var(--ink); border:1px solid var(--border); box-shadow:0 2px 12px #0004; font-weight:700; }
-.library-card:has(.card-options[open]) { position:relative; z-index:10; }
 .card-editor { width:min(1080px,100%); max-height:calc(100dvh - 48px); overflow:auto; border:1px solid var(--border); border-radius:20px; background:var(--app-bg); color:var(--ink); box-shadow:0 24px 80px #0005; }
 .editor-topbar { position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; background:var(--app-bg); }
 .editor-close { border:0; background:transparent; color:var(--ink-muted); font-size:26px; }
@@ -2964,7 +2962,7 @@ button, .library-options > summary { transition:background-color 160ms ease,colo
 @media(hover:none) { .card-hover-edit { opacity:1; pointer-events:auto; } }
 .library-card { position:relative; padding-top:38px; }
 .card-external-actions { position:absolute; top:0; right:0; height:36px; display:flex; align-items:center; gap:6px; opacity:0; pointer-events:none; z-index:10; }
-.library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions:has([aria-expanded=true]) { opacity:1; pointer-events:auto; }
+.library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions.is-open { opacity:1; pointer-events:auto; }
 .card-external-actions > button,.card-move-control > button { display:grid; place-items:center; width:32px; height:32px; padding:5px; border:0; border-radius:0; background:transparent; color:var(--ink-muted); box-shadow:none; }
 .card-external-actions svg { width:19px; height:19px; }
 .card-external-actions button:hover { color:var(--ink); }
@@ -2972,7 +2970,7 @@ button, .library-options > summary { transition:background-color 160ms ease,colo
 .card-move-menu { position:absolute; top:36px; right:0; display:grid; gap:4px; width:200px; max-width:calc(100vw - 48px); padding:8px; border:1px solid var(--border); border-radius:12px; background:var(--surface-strong); box-shadow:0 10px 30px #0003; }
 .card-move-menu button { padding:8px; text-align:left; font-size:.8rem; border:0; background:transparent; color:var(--ink); }
 .card-move-menu span { font-size:.8rem; color:var(--ink-muted); }
-.library-card:has(.card-move-menu) { z-index:15; }
+.library-card:hover, .library-card:focus-within { z-index:15; } /* keeps an open Move menu above neighbours */
 @media(hover:none) { .card-external-actions { opacity:1; pointer-events:auto; } .card-external-actions > button,.card-move-control > button { min-width:40px; } }
 .library-card > .tile-header { top:0; left:0; right:auto; height:36px; }
 .library-card:hover > .tile-header input,.library-card:focus-within > .tile-header input,.library-card > .tile-header input:checked { opacity:1; }
