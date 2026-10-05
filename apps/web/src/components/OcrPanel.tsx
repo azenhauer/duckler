@@ -1,15 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { mediaFingerprint, type OcrText } from '@visual-library/shared';
+import { selectionProps } from '../lib/textSelection';
 
 const LANGUAGES = [{ id: 'eng', label: 'EN' }, { id: 'por', label: 'PT' }];
 
 /** "Text in image": extract, cancel, retry, copy, edit and re-extract. Never blocks saving the card. */
-export function OcrPanel({ dataUrl, value, onChange }: { dataUrl: string; value: OcrText | undefined; onChange: (next: OcrText | undefined) => void }) {
+export function OcrPanel({ dataUrl, value, onChange, onCreateNote, noteTarget }: {
+  dataUrl: string; value: OcrText | undefined; onChange: (next: OcrText | undefined) => void;
+  /** Turns the selected text into a note linked to `noteTarget` (e.g. the PDF page this image came from). */
+  onCreateNote?: (text: string) => Promise<void>; noteTarget?: string;
+}) {
   const [status, setStatus] = useState<'idle' | 'running' | 'error'>('idle');
   const [progress, setProgress] = useState({ label: '', value: 0 });
   const [error, setError] = useState('');
   const [languages, setLanguages] = useState<string[]>(value?.languages?.length ? value.languages : ['eng', 'por']);
   const [copied, setCopied] = useState(false);
+  const [selection, setSelection] = useState('');
+  const [noting, setNoting] = useState(false);
   const job = useRef<AbortController | null>(null);
   useEffect(() => () => job.current?.abort(), []);
   const stale = Boolean(value && value.sourceHash !== mediaFingerprint(dataUrl));
@@ -48,7 +55,8 @@ export function OcrPanel({ dataUrl, value, onChange }: { dataUrl: string; value:
       <span style={{ transform: `scaleX(${Math.max(.03, progress.value)})` }} /><small>{progress.label}</small></div>}
     {error && <p className="editor-error" role="alert">{error}</p>}
     {stale && <p className="ocr-stale" role="status">The image changed after this text was extracted, so it isn&apos;t used in search. Re-extract to update it.</p>}
-    {value && <textarea aria-label="Extracted text" rows={4} value={value.text} onChange={event => onChange({ ...value, text: event.target.value.slice(0, 200000), editedByUser: true })} placeholder="No text found" />}
+    {value && <textarea aria-label="Extracted text" {...selectionProps(setSelection)} rows={4} value={value.text} onChange={event => onChange({ ...value, text: event.target.value.slice(0, 200000), editedByUser: true })} placeholder="No text found" />}
+    {value && onCreateNote && <div className="ocr-note-row"><span className="ocr-meta">{selection.trim() ? `${selection.trim().length} characters selected` : `Select text to make a note${noteTarget ? ` linked to ${noteTarget}` : ''}`}</span><button type="button" className="editor-action" disabled={!selection.trim() || noting} onClick={async () => { setNoting(true); setError(''); try { await onCreateNote(selection.trim()); setSelection(''); } catch { setError("Couldn't create the note. Try again."); } finally { setNoting(false); } }}><b className="glyph-crs" aria-hidden="true">✕</b>{noting ? 'Saving…' : 'Note from selection'}</button></div>}
     {value?.editedByUser && <small className="ocr-meta">Edited by you · re-extracting replaces your edits</small>}
   </fieldset>;
 }

@@ -2,8 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import App from './App';
 import { cardDb, readCards } from './lib/cardDb';
 import { createCardFromInput, createCollectionFromInput } from '@visual-library/shared';
+import { clearNotices } from './components/Notifications';
 
 beforeEach(async () => {
+  clearNotices();
   localStorage.clear();
   window.scrollTo = vi.fn();
   window.history.replaceState({}, '', '/');
@@ -39,7 +41,7 @@ describe('App', () => {
     const failure = vi.spyOn(cardDb.collections, 'put').mockRejectedValueOnce(new Error('Storage full'));
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
-      await screen.findByText("Couldn't update card. Try again.");
+      expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't update cardTry again.");
       expect(badges.queryByRole('button', { name: 'Collection Inbox' })).not.toBeInTheDocument();
       await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
     } finally { failure.mockRestore(); }

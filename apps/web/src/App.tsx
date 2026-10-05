@@ -59,6 +59,8 @@ import { useExitAnimation } from './lib/exitAnimation';
 import { InterfaceIcon } from './components/InterfaceIcon';
 import { CanvasGallery } from './components/CanvasGallery';
 import { CollectionCanvas } from './components/CollectionCanvas';
+import { Notifications, notify } from './components/Notifications';
+import { inferImageTitle } from './lib/imageName';
 
 const emptyForm = {
   type: 'bookmark' as CardRecord['type'],
@@ -120,10 +122,12 @@ function App() {
   const [activeView, setActiveView] = useState<ActiveView>('home');
   const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
   const navigationHistory = useRef<NavigationEntry[]>([]);
+  const searchReturn = useRef(false);
   useEffect(() => {
     const restore = (event: PopStateEvent) => {
       const entry: NavigationEntry = isNavigationEntry(event.state?.duckler) ? event.state.duckler : { view: 'home', collectionId: null, canvasId: null };
       navigationHistory.current.pop();
+      searchReturn.current = false;
       setActiveView(entry.view);
       setSelectedCollectionId(entry.collectionId);
       setSelectedCanvasId(entry.canvasId);
@@ -185,7 +189,6 @@ function App() {
   const [cardSize, setCardSize] = useState(() => localStorage.getItem('duckler-card-size') ?? 'comfortable');
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [quickAddPosition, setQuickAddPosition] = useState<{ left: number; top: number } | null>(null);
-  const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<{ usageMb: number; quotaMb: number; persisted: boolean } | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [collectionForm, setCollectionForm] = useState(emptyCollectionForm);
@@ -384,7 +387,7 @@ function App() {
         setCards(mergedCards);
         setSelectedId(importedCards[0]?.id ?? null);
         setActiveView('library');
-        setShareNotice(`Imported ${importedCards.length} shared item${importedCards.length === 1 ? '' : 's'} from your share sheet.`);
+        notify({ title: 'Imported', detail: `Imported ${importedCards.length} shared item${importedCards.length === 1 ? '' : 's'} from your share sheet.` });
         void clearPendingShareItems();
       } else {
         if (extensionCard) {
@@ -392,16 +395,16 @@ function App() {
           setCards((current) => [card, ...current.filter((existing) => existing.id !== card.id)]);
           setSelectedId(card.id);
           setActiveView('library');
-          setShareNotice(`Added “${card.title}” from Duckler Capture.`);
+          notify({ title: 'Captured', detail: `Added “${card.title}” from Duckler Capture.` });
         } else if (extensionCaptureError || fallbackShareError) {
-          setShareNotice(extensionCaptureError ?? fallbackShareError);
+          notify({ kind: 'error', title: 'Capture failed', detail: extensionCaptureError ?? fallbackShareError ?? undefined });
         } else {
           setCards(storedCards);
         }
       }
 
     }).catch((error: unknown) => {
-      setShareNotice(error instanceof Error ? `Extension capture could not be saved: ${error.message}` : 'Extension capture could not be saved.');
+      notify({ kind: 'error', title: 'Capture not saved', detail: error instanceof Error ? `Extension capture could not be saved: ${error.message}` : 'Extension capture could not be saved.' });
     }).finally(() => setLibraryLoaded(true));
 
     const storedQueue = localStorage.getItem('visual-library-capture-queue');
@@ -619,11 +622,13 @@ function App() {
     : activeView === 'collections' ? 'Search collections'
     : activeView === 'canvas' ? 'Search canvases'
     : selectedCollection ? `Search ${selectedCollection.name}` : 'Search all notes';
+  const showAllCardsTile = !searchTerm.trim() || 'all cards'.includes(searchTerm.trim().toLocaleLowerCase());
   const visibleCollections = searchTerm.trim()
     ? collections.filter(collection => collection.name.toLocaleLowerCase().includes(searchTerm.trim().toLocaleLowerCase()))
     : collections;
 
   const navigateTo = (view: ActiveView, collectionId: string | null = null) => {
+    searchReturn.current = false;
     const changed = view !== activeView || collectionId !== (view === 'canvas' ? selectedCanvasId : view === 'library' ? selectedCollectionId : null);
     if (view === 'home') navigationHistory.current = [];
     else if (changed) {
@@ -645,7 +650,14 @@ function App() {
     setCollectionMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
+  // Typing on Home jumps to All cards; emptying that search goes back to where it started.
+  const changeSearch = (value: string) => {
+    if (isHome && value.trim()) { navigateTo('library'); searchReturn.current = true; }
+    setSearchTerm(value);
+    if (!value.trim() && searchReturn.current) { searchReturn.current = false; goBack(); }
+  };
   const goBack = () => {
+    searchReturn.current = false;
     if (isNavigationEntry(window.history.state?.duckler)) { window.history.back(); return; }
     const previous = navigationHistory.current.pop() ?? { view: 'home' as const, collectionId: null, canvasId: null };
     setActiveView(previous.view);
@@ -723,12 +735,16 @@ function App() {
       setMediaPreview(String(reader.result ?? ''));
     };
     reader.readAsDataURL(file);
+    // Name it from the image's own metadata or a meaningful file name, never "Screenshot 2026-…".
+    void inferImageTitle(file).then(title => { if (title) setForm(current => current.title ? current : { ...current, title }); });
     event.target.value = '';
   };
 
   // A PDF becomes a card straight away: first page as its picture, the file and its text kept with it.
   const handleAddPdf = async (file: File) => {
-    setShareNotice(`Reading ${file.name}…`);
+    // Each upload's "Reading…" notice is replaced by that upload's own result.
+    const noticeKey = `pdf:${crypto.randomUUID()}`;
+    notify({ kind: 'progress', key: noticeKey, title: 'Reading PDF', detail: file.name });
     try {
       const { readPdfFile } = await import('./lib/pdf');
       const { title, thumbnail, pdf } = await readPdfFile(file);
@@ -739,9 +755,9 @@ function App() {
       if (changed.length) setCollections(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
       setCards(current => [card, ...current]);
       setNewlyCreatedCardId(card.id);
-      setShareNotice(`Added “${title}” (${pdf.pageCount} page${pdf.pageCount === 1 ? '' : 's'}).`);
+      notify({ key: noticeKey, title: 'PDF added', detail: `“${title}” · ${pdf.pageCount} page${pdf.pageCount === 1 ? '' : 's'}` });
     } catch (error) {
-      setShareNotice(error instanceof Error ? error.message : 'This PDF could not be added.');
+      notify({ kind: 'error', key: noticeKey, title: "Couldn't add PDF", detail: error instanceof Error ? error.message : 'This PDF could not be added.' });
     }
   };
 
@@ -788,6 +804,7 @@ function App() {
       setCards((current) => [card, ...current]);
       setNewlyCreatedCardId(card.id);
       setSelectedId(card.id);
+      notify({ title: 'Card added', detail: `“${card.title}”` });
       setActiveView('library');
       setForm(emptyForm);
       setMediaPreview(null);
@@ -878,18 +895,20 @@ function App() {
   // One level of nesting: moving a collection never changes its cards or memberships.
   const handleSetCollectionParent = async (collectionId: string, parentId: string | null) => {
     const problem = collectionParentError(collectionsRef.current, collectionId, parentId);
-    if (problem) { setShareNotice(problem); return; }
+    if (problem) { notify({ kind: 'error', title: "Can't move collection", detail: problem }); return; }
     const target = collectionsRef.current.find(item => item.id === collectionId);
     if (!target || (target.parentId ?? null) === parentId) return;
     const { parentId: _old, ...rest } = target;
     const next = { ...rest, ...(parentId ? { parentId } : {}), updatedAt: new Date().toISOString() };
     setCollections(current => current.map(item => item.id === collectionId ? next : item));
     try { await saveCollection(next); }
-    catch { setCollections(current => current.map(item => item.id === collectionId ? target : item)); setShareNotice("Couldn't move collection"); }
+    catch { setCollections(current => current.map(item => item.id === collectionId ? target : item)); notify({ kind: 'error', title: "Couldn't move collection" }); }
   };
 
   const handleDeleteCollection = async (collectionId: string) => {
+    const removed = collections.find(collection => collection.id === collectionId);
     await deleteCollection(collectionId);
+    notify({ kind: 'info', title: 'Collection deleted', detail: removed ? `“${removed.name}” · its cards are kept` : undefined });
     setCollections((current) => current.filter((collection) => collection.id !== collectionId)
       .map(collection => collection.parentId === collectionId ? (({ parentId: _parent, ...rest }) => rest)(collection) : collection));
     if (selectedCollectionId === collectionId) {
@@ -907,6 +926,7 @@ function App() {
     const nextCard = { ...target, trashed: !target.trashed, updatedAt: new Date().toISOString() };
     setCards((current) => current.map((card) => (card.id === cardId ? nextCard : card)));
     await saveCard(nextCard);
+    notify(nextCard.trashed ? { kind: 'info', title: 'Moved to trash', detail: `“${nextCard.title}”` } : { title: 'Restored', detail: `“${nextCard.title}”` });
   };
 
   const handleDelete = async (cardId: string) => {
@@ -926,6 +946,7 @@ function App() {
       setSelectedCardIds((current) => current.filter((id) => id !== cardId));
       await removeCard(cardId);
       setCards((current) => current.filter((card) => card.id !== cardId));
+      notify({ kind: 'info', title: 'Deleted', detail: `“${card.title}”` });
     } finally {
       setRemovingCardIds(current => current.filter(id => id !== cardId));
     }
@@ -951,7 +972,6 @@ function App() {
     membershipInFlight.current.add(key);
     membershipSavingRef.current = true;
     setMembershipSaving(true);
-    setShareNotice(null);
     setCollections(current => current.map(item => item.id === collectionId ? applyRelationship(item, included) : item));
     let target = included;
     try {
@@ -973,8 +993,8 @@ function App() {
       const stored = await readCollections().catch(() => null);
       setCollections(current => stored ?? current.map(item => item.id === collectionId ? applyRelationship(item, !target) : item));
       setUndoMembership(previousUndo);
-      setShareNotice(error instanceof Error && ['Card no longer exists', 'Collection no longer exists'].includes(error.message)
-        ? error.message : "Couldn't update card. Try again.");
+      notify({ kind: 'error', title: "Couldn't update card", detail: error instanceof Error && ['Card no longer exists', 'Collection no longer exists'].includes(error.message)
+        ? error.message : 'Try again.' });
     } finally {
       membershipInFlight.current.delete(key);
       membershipSavingRef.current = membershipInFlight.current.size > 0;
@@ -1026,9 +1046,9 @@ function App() {
       setBulkDestinationId(collection.id);
       setSelectedCardIds([]);
       setBulkNewName(null);
-      setShareNotice(`Created “${name}” with ${collection.cardIds.length} cards.`);
+      notify({ title: 'Collection created', detail: `“${name}” · ${collection.cardIds.length} cards` });
     } catch {
-      setShareNotice("Couldn't create collection");
+      notify({ kind: 'error', title: "Couldn't create collection" });
     }
   };
 
@@ -1092,8 +1112,9 @@ function App() {
       const [storedCards, storedCollections, canvases] = await Promise.all([readCards(), readCollections(), readCanvasBackups()]);
       const backup = createLibraryBackup(storedCards, storedCollections, canvases);
       triggerDownload(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), 'visual-library-export.json');
+      notify({ title: 'Backup exported', detail: `${storedCards.length} cards · ${storedCollections.length} collections` });
     } catch (error) {
-      setShareNotice(error instanceof Error ? `Export failed: ${error.message}` : 'Export failed.');
+      notify({ kind: 'error', title: 'Export failed', detail: error instanceof Error ? error.message : undefined });
     }
   };
 
@@ -1107,9 +1128,9 @@ function App() {
       setCards(nextCards);
       setCollections(nextCollections);
       const added = `${report.cardsAdded} card${report.cardsAdded === 1 ? '' : 's'}, ${report.collectionsAdded} collection${report.collectionsAdded === 1 ? '' : 's'} and ${report.canvasesAdded} canvas${report.canvasesAdded === 1 ? '' : 'es'}`;
-      setShareNotice(`Restored ${added}.${report.skipped ? ` Kept ${report.skipped} existing item${report.skipped === 1 ? '' : 's'} unchanged.` : ''}`);
+      notify({ title: 'Backup restored', detail: `Restored ${added}.${report.skipped ? ` Kept ${report.skipped} existing item${report.skipped === 1 ? '' : 's'} unchanged.` : ''}` });
     } catch (error) {
-      setShareNotice(error instanceof Error ? `Backup could not be restored: ${error.message}` : 'Backup could not be restored.');
+      notify({ kind: 'error', title: 'Restore failed', detail: error instanceof Error ? error.message : 'Backup could not be restored.' });
     }
   };
 
@@ -1124,6 +1145,7 @@ function App() {
 
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
     triggerDownload(blob, 'visual-library-obsidian-export.zip');
+    notify({ title: 'Obsidian export ready', detail: 'visual-library-obsidian-export.zip' });
   };
 
   const handleClearLocalCache = async () => {
@@ -1133,12 +1155,12 @@ function App() {
     await clearPendingShareItems();
     setCaptureQueue([]);
     setCaptureReceipts({});
-    setShareNotice('Cleared the local capture and share cache. Your library content remains in IndexedDB.');
+    notify({ kind: 'info', title: 'Cache cleared', detail: 'Your library content is untouched.' });
   };
 
   const handlePersistLocalStorage = async () => {
     if (!('storage' in navigator) || typeof navigator.storage?.persist !== 'function') {
-      setShareNotice('This browser does not support persistent storage requests.');
+      notify({ kind: 'info', title: 'Not supported', detail: 'This browser does not support persistent storage requests.' });
       return;
     }
 
@@ -1148,7 +1170,7 @@ function App() {
       quotaMb: current?.quotaMb ?? 0,
       persisted,
     }));
-    setShareNotice(persisted ? 'Local storage persistence enabled for this device.' : 'Storage persistence was not granted by the browser.');
+    notify(persisted ? { title: 'Storage persisted', detail: 'Local storage persistence enabled for this device.' } : { kind: 'info', title: 'Not granted', detail: 'Storage persistence was not granted by the browser.' });
   };
 
   const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1315,11 +1337,9 @@ function App() {
         {!(activeView === 'canvas' && selectedCanvas) && <div ref={searchBarRef} className={`refs-search ${isHome ? 'home-search' : 'is-compact'} ${searchTerm ? 'has-query' : ''}`}>
           <label className="sidebar-search workspace-search refs-search-field" aria-label="Search refs">
             <InterfaceIcon name="search" />
-            <input value={searchTerm} onChange={event => {
-              if (isHome && event.target.value.trim()) navigateTo('library');
-              setSearchTerm(event.target.value);
-            }} onKeyDown={event => { if (event.key === 'Escape' && searchTerm) { event.stopPropagation(); setSearchTerm(''); } }} placeholder={searchPlaceholder} />
-            {searchTerm && <button type="button" className="refs-search-clear" aria-label="Clear search" onClick={() => setSearchTerm('')}>×</button>}
+            <input value={searchTerm} onChange={event => changeSearch(event.target.value)}
+              onKeyDown={event => { if (event.key === 'Escape' && searchTerm) { event.stopPropagation(); changeSearch(''); } }} placeholder={searchPlaceholder} />
+            {searchTerm && <button type="button" className="refs-search-clear" aria-label="Clear search" onClick={() => changeSearch('')}>×</button>}
           </label>{themeToggle}
         </div>}
         {isHome && <div className="home-launcher" aria-label="Explore library">
@@ -1452,15 +1472,31 @@ function App() {
           </div>
         )}
 
-        {shareNotice && (
-          <div className="status-banner success-banner" role="status">
-            {shareNotice}
-          </div>
-        )}
 
         {activeView === 'collections' && (
           <div className="collection-grid" aria-label="Your collections">
-            {searchTerm.trim() && !visibleCollections.length && <p className="search-empty">No collections match “{searchTerm.trim()}”.</p>}
+            {searchTerm.trim() && !visibleCollections.length && !showAllCardsTile && <p className="search-empty">No collections match “{searchTerm.trim()}”.</p>}
+            {showAllCardsTile && (() => {
+              // Every card belongs to "All cards": it sits with the collections but can't be renamed, nested or deleted.
+              const live = cards.filter(card => !card.trashed);
+              return <article className="collection-tile collection-tile-all">
+                <button type="button" className="collection-tile-main" aria-label="Open collection All cards" onClick={() => navigateTo('library')}>
+                  <span className="collection-tile-preview" aria-hidden="true">
+                    {live.length ? live.slice(0, 4).map(card => <span key={card.id} className={`collection-preview-item ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-image' : ''}`}>
+                      {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.dataUrl} alt="" /> : <span>{card.title.slice(0, 1).toUpperCase()}</span>}
+                    </span>) : <span className="collection-preview-empty"><NavigationIcon name="collections" /></span>}
+                  </span>
+                  <span className="collection-tile-info">
+                    <span className="collection-tile-heading">
+                      <span className="collection-folder-icon" aria-hidden="true"><NavigationIcon name="collections" /></span>
+                      <strong>All cards</strong>
+                      <span className="collection-tile-count">{live.length}</span>
+                    </span>
+                    <span className="collection-tile-description">Everything in your library</span>
+                  </span>
+                </button>
+              </article>;
+            })()}
             {orderCollectionTree(visibleCollections).map(({ collection, depth }) => {
               const memberCards = collection.cardIds
                 .map((cardId) => cards.find((card) => card.id === cardId && !card.trashed))
@@ -1525,7 +1561,7 @@ function App() {
             {collections.length === 0 && (
               <div className="empty-view">
                 <NavigationIcon name="collections" />
-                <p>No collections yet</p>
+                <p>No collections of your own yet</p>
                 <button type="button" className="secondary-button" onClick={() => {
                   navigateTo('library');
                   setCollectionMenuOpen(true);
@@ -1567,7 +1603,7 @@ function App() {
         {activeView === 'library' && visibleCards.length === 0 && <div className="library-empty">
           <span aria-hidden="true">✧</span><h2>{searchTerm ? 'No matches' : 'No cards yet'}</h2>
           <p>{searchTerm ? 'Try a different search or clear your filters.' : ''}</p>
-          <button type="button" onClick={() => searchTerm ? setSearchTerm('') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : 'Connect your browser'}</button>
+          <button type="button" onClick={() => searchTerm ? changeSearch('') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : 'Connect your browser'}</button>
         </div>}
         {activeView === 'library' && <div className={`library-grid card-size-${cardSize}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
           {visibleCards.map((card) => {
@@ -1663,7 +1699,26 @@ function App() {
               await saveCardWithCollections(card, changed);
               if (changed.length) setCollections(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
               setCards(current => [card, ...current]);
-              setShareNotice(`Captured page ${page} as an image card.`);
+              notify({ title: 'Page captured', detail: `Page ${page} is now an image card.` });
+            } : undefined}
+            pdfNotes={selectedCard.type === 'pdf' ? cards.filter(item => item.type === 'text' && !item.trashed && item.source?.pdfCardId === selectedCard.id)
+              .map(item => ({ id: item.id, page: item.source!.page, title: item.title, note: item.note })) : undefined}
+            onOpenCard={id => setSelectedId(id)}
+            onCreateLinkedNote={selectedCard.type === 'pdf' || selectedCard.source ? async (text, page) => {
+              // The note links to the PDF (and page) this card is, or was captured from, and joins its collections.
+              const pdfCard = selectedCard.type === 'pdf' ? selectedCard : cards.find(item => item.id === selectedCard.source!.pdfCardId);
+              const pageNumber = page ?? selectedCard.source!.page;
+              const words = text.replace(/\s+/g, ' ').trim();
+              const title = words.length > 60 ? `${words.slice(0, 57).replace(/\s\S*$/, '')}…` : words;
+              const base = createCardFromInput({ type: 'text', title: title || `Note on page ${pageNumber}`, note: text.slice(0, 20000) });
+              const card = { ...base, source: { pdfCardId: pdfCard?.id ?? selectedCard.source!.pdfCardId, page: pageNumber, fileName: pdfCard?.pdf?.fileName ?? selectedCard.source?.fileName } };
+              const linked = { ...card, searchText: buildSearchText(card) };
+              const memberOf = collections.filter(item => item.cardIds.includes(pdfCard?.id ?? selectedCard.id));
+              const changed = memberOf.map(item => ({ ...item, cardIds: [...new Set([...item.cardIds, linked.id])], updatedAt: linked.createdAt }));
+              await saveCardWithCollections(linked, changed);
+              if (changed.length) setCollections(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
+              setCards(current => [linked, ...current]);
+              notify({ title: 'Note created', detail: `Linked to page ${pageNumber}${pdfCard ? ` of “${pdfCard.title}”` : ''}` });
             } : undefined}
             pdfSource={selectedCard.source ? (() => { const pdf = cards.find(item => item.id === selectedCard.source!.pdfCardId && !item.trashed); return pdf ? { title: pdf.title, open: () => setSelectedId(pdf.id) } : undefined; })() : undefined}
             onSave={async (draft, collectionIds) => {
@@ -1671,6 +1726,7 @@ function App() {
               const nextCollections = collections.map(collection => ({ ...collection, cardIds: collectionIds.includes(collection.id) ? [...new Set([...collection.cardIds, draft.id])] : collection.cardIds.filter(id => id !== draft.id), updatedAt: updated.updatedAt }));
               await saveCardWithCollections(updated, nextCollections);
               setCards(current => current.map(card => card.id === draft.id ? updated : card)); setCollections(nextCollections);
+              notify({ title: 'Saved', detail: `“${updated.title}”` });
             }} />
         ) : null}
 
@@ -1747,6 +1803,7 @@ function App() {
       <ul className="ps-hints" aria-hidden="true">
         <li><b className="crs">✕</b>Enter</li><li><b className="cir">○</b>Back</li><li><b className="tri">△</b>Options</li><li><b className="sqr">□</b>Select</li>
       </ul>
+      <Notifications />
       <nav className={`bottom-dock ${isHome ? 'home-dock' : ''}`} aria-label="Main navigation">
         <button type="button" className={`dock-item dock-home ${isHome ? 'active' : ''}`} aria-label="Duckler home" aria-current={isHome ? 'page' : undefined} onClick={() => { navigateTo('home'); setSortMode('newest'); }}>
           <span className="brand-mark duckler-mark" aria-hidden="true" />

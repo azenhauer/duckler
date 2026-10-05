@@ -38,6 +38,8 @@ try {
       elements: await cardDb.canvasElements.where('canvasId').equals('tools').toArray(), connectors: await cardDb.canvasConnectors.where('canvasId').equals('tools').toArray(), cards: await cardDb.cards.toArray() };
   });
   const original = await read();
+  // Record the canvas tool sound cues the board emits while the tools are used.
+  await page.evaluate(() => { window.__cues = []; window.addEventListener('duckler:ui-sound', event => window.__cues.push(event.detail)); });
   const imageId = original.placements.find(item => item.cardId === 'image').id;
   const noteId = original.placements.find(item => item.cardId === 'note').id;
   const imageNode = page.locator(`.react-flow__node[data-id="${imageId}"]`);
@@ -177,6 +179,8 @@ try {
   const dropped = (await read()).placements.find(item => item.cardId === 'note' && item.id !== noteId);
   assert.ok(Math.abs(dropped.x - dropPoint.worldX) < 2 && Math.abs(dropped.y - dropPoint.worldY) < 2, 'Library drop accounts for pan and zoom');
   const beforeReload = await read();
+  const cues = await page.evaluate(() => window.__cues);
+  for (const cue of ['canvas-draw', 'canvas-highlight', 'canvas-shape', 'canvas-text', 'canvas-connect', 'canvas-undo', 'canvas-redo', 'canvas-rotate', 'canvas-place']) assert.ok(cues.includes(cue), `Canvas cue ${cue} fired (got ${[...new Set(cues)].join(', ')})`);
   await page.screenshot({ path: fileURLToPath(new URL('../.tmp/ui-checks/canvas-tools-desktop.png', import.meta.url)), fullPage: true });
   await page.reload();
   await page.getByRole('button', { name: 'Open canvas', exact: true }).click();

@@ -9,6 +9,10 @@ import { readCanvasState, commitCanvasContent, saveCanvasViewport, saveCanvasBac
 import { CanvasIcon, type CanvasIconName } from './CanvasIcon';
 import { Dialog } from './Dialog';
 import { CanvasArtwork } from './CanvasArtwork';
+import { UI_SOUND_EVENT, type Cue } from './UiSounds';
+
+/** Tool sounds play when a change lands, never per pointer move, so drawing stays cheap. */
+const cue = (name: Cue) => window.dispatchEvent(new CustomEvent(UI_SOUND_EVENT, { detail: name }));
 
 type Tool = 'select' | 'hand' | 'pen' | 'highlighter' | 'rectangle' | 'ellipse' | 'text' | 'connector' | 'eraser';
 type CanvasNode = Node<{ objectId: string; cardId?: string }, 'card' | 'element'>;
@@ -156,8 +160,8 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
       return false;
     } finally { busy.current = false; setSaving(false); }
   };
-  const undoCommand = () => { const snapshot = undo.current.at(-1); if (snapshot) void commit(snapshot, 'undo'); };
-  const redoCommand = () => { const snapshot = redo.current.at(-1); if (snapshot) void commit(snapshot, 'redo'); };
+  const undoCommand = () => { const snapshot = undo.current.at(-1); if (snapshot) { cue('canvas-undo'); void commit(snapshot, 'undo'); } };
+  const redoCommand = () => { const snapshot = redo.current.at(-1); if (snapshot) { cue('canvas-redo'); void commit(snapshot, 'redo'); } };
   const updateGeometry = (id: string, geometry: { x: number; y: number; width: number; height: number }) => {
     const state = current.current; if (!state) return;
     void commit({ ...contentOf(state), placements: state.placements.map(item => item.id === id ? { ...item, ...geometry } : item),
@@ -166,12 +170,14 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
   const moveNodes = (moved: CanvasNode[]) => {
     const state = current.current; if (!state) return;
     const positions = new Map(moved.map(node => [node.id, node.position]));
+    cue('canvas-drop');
     void commit({ ...contentOf(state), placements: state.placements.map(item => positions.has(item.id) ? { ...item, ...positions.get(item.id)! } : item),
       elements: state.elements.map(item => positions.has(item.id) ? { ...item, ...positions.get(item.id)! } : item) });
   };
   const removeObjects = (ids = activeIds, edge = selectedEdge) => {
     const state = current.current; if (!state) return;
     const removedElements = new Set(state.elements.filter(item => ids.includes(item.id)).map(item => item.id));
+    if (ids.length || edge) cue(tool === 'eraser' ? 'canvas-erase' : 'delete');
     void commit({ placements: state.placements.map(item => ids.includes(item.id) ? { ...item, removed: true } : item),
       elements: state.elements.filter(item => !removedElements.has(item.id)),
       connectors: state.connectors.filter(item => item.id !== edge && !removedElements.has(item.sourceId) && !removedElements.has(item.targetId)) });
@@ -184,6 +190,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
   const addCard = (cardId: string, point = centerPoint()) => {
     const state = current.current; if (!state || !cardMap.has(cardId) || cardMap.get(cardId)?.trashed) return;
     const placement = createCanvasPlacement(collection.id, cardId, point);
+    cue('canvas-place');
     void commit({ ...contentOf(state), placements: [...state.placements, placement] });
   };
   const openText = (element: CanvasElement) => { setTextDraft(element); setTextValue(element.text ?? ''); };
@@ -218,11 +225,15 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
     gesture.current = null; setPreview(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const element = canvasGestureElement(collection.id, active.kind, active.points, active.style, active.anchor, active.anchor ? cardMap.get(active.anchor.cardId)?.updatedAt : undefined);
-    if (element && current.current) void commit({ ...contentOf(current.current), elements: [...current.current.elements, element] });
+    if (element && current.current) {
+      cue(active.kind !== 'stroke' ? 'canvas-shape' : active.style.opacity < 1 ? 'canvas-highlight' : 'canvas-draw');
+      void commit({ ...contentOf(current.current), elements: [...current.current.elements, element] });
+    }
   };
   const cancelGesture = () => { gesture.current = null; setPreview(null); };
   const rotateSelected = (degrees: number, reset = false) => {
     const state = current.current; if (!state) return;
+    cue('canvas-rotate');
     void commit({ ...contentOf(state), placements: state.placements.map(item => activeIds.includes(item.id) ? { ...item, rotation: reset ? 0 : normalizeRotation(item.rotation + degrees) } : item),
       elements: state.elements.map(item => activeIds.includes(item.id) ? { ...item, rotation: reset ? 0 : normalizeRotation(item.rotation + degrees) } : item) });
   };
@@ -283,6 +294,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
           onNodeClick={(_, node) => { setSelectedAnnotation(null); if (tool === 'eraser') removeObjects([node.id], null); }}
           onPaneClick={() => { setSelectedAnnotation(null); setSelectedEdge(null); }} onEdgeClick={(_, edge) => { if (tool === 'eraser') removeObjects([], edge.id); else { setSelectedEdge(edge.id); setEdgeLabel(content.connectors.find(item => item.id === edge.id)?.label ?? ''); } }}
           onConnect={connection => { const state = current.current; if (!state || !connection.source || !connection.target || connection.source === connection.target) return;
+            cue('canvas-connect');
             void commit({ ...contentOf(state), connectors: [...state.connectors, { id: crypto.randomUUID(), canvasId: collection.id, sourceId: connection.source, targetId: connection.target, label: '', color: style.color, arrow: 'end' }] }); }}
           onMove={(_, next) => setViewport(next)} onMoveEnd={(_, next) => { setViewport(next);
             viewportWrites.current = viewportWrites.current.then(() => saveCanvasViewport(collection.id, next)).catch(() => setError('Canvas view could not be saved.'));
@@ -404,7 +416,7 @@ export function CollectionCanvas({ collection, cards, onEditCard, onRestoreCard,
       <form onSubmit={async event => { event.preventDefault(); const state = current.current; if (!state || !textValue.trim()) return;
         const next = { ...textDraft, text: textValue };
         const exists = state.elements.some(item => item.id === next.id);
-        if (await commit({ ...contentOf(state), elements: exists ? state.elements.map(item => item.id === next.id ? next : item) : [...state.elements, next] })) setTextDraft(null);
+        if (await commit({ ...contentOf(state), elements: exists ? state.elements.map(item => item.id === next.id ? next : item) : [...state.elements, next] })) { cue('canvas-text'); setTextDraft(null); }
       }}><h2>Canvas text</h2>{error && <p role="alert">{error}</p>}<textarea aria-label="Annotation text" maxLength={CANVAS_LIMITS.text} value={textValue} onChange={event => setTextValue(event.target.value)} autoFocus />
         <button type="button" disabled={saving} onClick={() => setTextDraft(null)}>Cancel</button><button type="submit" disabled={saving || !textValue.trim()}>Save text</button></form>
     </Dialog>}

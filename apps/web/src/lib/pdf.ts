@@ -47,6 +47,16 @@ export async function renderPdfPage(pdf: LoadedPdf, pageNumber: number, maxWidth
   return canvas.toDataURL(type, .88);
 }
 
+/** Embedded text of one page, with line breaks where pdf.js reports the end of a line. */
+export async function extractPageText(pdf: LoadedPdf, pageNumber: number): Promise<string> {
+  const page = await pdf.getPage(pageNumber);
+  try {
+    const content = await page.getTextContent();
+    return content.items.map(item => ('str' in item ? item.str + (item.hasEOL ? '\n' : '') : '')).join('')
+      .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  } finally { page.cleanup(); }
+}
+
 /** Embedded text from text-based PDFs (scanned PDFs return little or nothing). */
 async function extractPdfText(pdf: LoadedPdf, maxChars = 500000): Promise<string> {
   const parts: string[] = [];

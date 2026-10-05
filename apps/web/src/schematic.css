@@ -233,7 +233,8 @@ html:not([data-theme='dark']) .dock-item.active::before { opacity: .45; }
 .sound-popover-label, .sound-popover-value { font: 700 .62rem/1 var(--sx-label); letter-spacing: .12em; text-transform: uppercase; color: var(--ui-text-muted); }
 .sound-popover-value { min-width: 22px; text-align: right; color: var(--ui-accent-secondary); }
 .sound-popover input[type=range] { width: 110px; accent-color: var(--ui-accent-primary); }
-.sound-preview-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sound-settings { flex-wrap: wrap; }
+.sound-preview-row { display: flex; flex-wrap: wrap; flex-basis: 100%; min-width: 0; gap: 6px; margin-top: 8px; }
 .sound-preview-row button { padding: 5px 9px; border: 1px solid var(--sx-line-soft); background: transparent; color: var(--ui-text-muted); font: 700 .62rem/1 var(--sx-label); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
 .sound-preview-row button:hover { color: var(--ui-text); border-color: var(--ui-accent-primary); }
 
@@ -261,9 +262,9 @@ html:not([data-theme='dark']) .dock-item.active::before { opacity: .45; }
 .card-editor .editor-fields { display: flex; flex-direction: column; gap: 12px; min-height: 0; padding: 16px 18px; overflow-y: auto; overscroll-behavior: contain; }
 .card-editor .editor-field { display: grid; gap: 5px; margin: 0; padding: 0; border: 0; min-width: 0; flex-shrink: 0; }
 .card-editor .editor-field > span, .card-editor .editor-field > legend { padding: 0; font: 700 .6rem/1 var(--sx-label); letter-spacing: .16em; text-transform: uppercase; color: var(--ui-text-muted); }
-.card-editor .editor-field input:not([type=checkbox]):not([type=color]), .card-editor .editor-field textarea {
+.card-editor .editor-field input:not([type=checkbox]):not([type=color]), .card-editor .editor-field textarea, .card-editor .pdf-text textarea {
   width: 100%; padding: 8px 10px; border: 1px solid var(--sx-line-soft) !important; border-radius: 0 !important; background: color-mix(in srgb, var(--ui-bg) 55%, transparent) !important; color: var(--ui-text); font: inherit; font-size: .9rem; box-shadow: none !important; transition: border-color 100ms linear; }
-.card-editor .editor-field input:focus, .card-editor .editor-field textarea:focus { outline: none; border-color: var(--ui-accent-primary) !important; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ui-accent-primary) 25%, transparent) !important; }
+.card-editor .editor-field input:focus, .card-editor .editor-field textarea:focus, .card-editor .pdf-text textarea:focus { outline: none; border-color: var(--ui-accent-primary) !important; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ui-accent-primary) 25%, transparent) !important; }
 .card-editor .editor-title { font-size: 1.05rem !important; font-weight: 600; }
 .card-editor textarea { resize: none; min-height: 72px; max-height: 30dvh; line-height: 1.5; }
 .card-editor .editor-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -426,3 +427,66 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 .card-type-pdf .card-body h2 { margin: 4px 0 0; font-size: .88rem; }
 .card-type-pdf .card-footer-meta { display: none; }
 .card-type-pdf .card-image { width: 100%; display: block; }
+
+/* ---- Notifications: console "achievement" panels. Transform/opacity only, no blur. ---- */
+.notice-stack { position: fixed; top: max(78px, calc(env(safe-area-inset-top) + 56px)); right: 28px; z-index: 95; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+.notice { position: relative; display: flex; align-items: center; gap: 12px; width: min(340px, calc(100vw - 32px)); padding: 10px 14px 12px 10px; overflow: hidden; pointer-events: auto; cursor: pointer;
+  background: var(--sx-panel); border: 1px solid var(--sx-line-soft); border-left: 3px solid var(--notice-tone); color: var(--ui-text); box-shadow: 4px 4px 0 color-mix(in srgb, #000 35%, transparent);
+  animation: notice-in 180ms cubic-bezier(.2,.9,.3,1.15) both; }
+.notice-success { --notice-tone: var(--sx-crs); } .notice-error { --notice-tone: var(--sx-cir); } .notice-info { --notice-tone: var(--sx-tri); } .notice-progress { --notice-tone: var(--sx-sqr); }
+.notice-glyph { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border: 1px solid var(--notice-tone); color: var(--notice-tone); font: 700 1.05rem/1 var(--sx-label); animation: notice-glyph 320ms 60ms cubic-bezier(.3,1.5,.5,1) both; }
+.notice-progress .notice-glyph { animation: notice-pulse 900ms steps(2, jump-none) infinite alternate; }
+.notice-text { display: grid; gap: 3px; min-width: 0; }
+.notice-text b { font: 700 .72rem/1.1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; color: var(--notice-tone); }
+.notice-text span { font-size: .82rem; line-height: 1.3; color: var(--ui-text); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.notice-timer { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--notice-tone); opacity: .55; transform-origin: left; animation: notice-timer linear forwards; }
+.notice.is-leaving { animation: notice-out 140ms cubic-bezier(.4,0,1,1) forwards !important; }
+@keyframes notice-in { from { opacity: 0; translate: 18px 0; } to { opacity: 1; translate: none; } }
+@keyframes notice-out { to { opacity: 0; translate: 18px 0; } }
+@keyframes notice-glyph { from { scale: .4; rotate: -90deg; } to { scale: none; rotate: none; } }
+@keyframes notice-pulse { from { opacity: 1; } to { opacity: .45; } }
+@keyframes notice-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 640px) {
+  .notice-stack { top: auto; bottom: calc(env(safe-area-inset-bottom) + 112px); right: 16px; left: 16px; align-items: stretch; }
+  .notice { width: auto; }
+  @keyframes notice-in { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: none; } }
+}
+@media (prefers-reduced-motion: reduce) { .notice, .notice-glyph, .notice-progress .notice-glyph { animation: none !important; } .notice-timer { display: none; } }
+
+/* ---- Action motion: presses, arrivals and selections only. Uses scale/translate (not transform) so it
+   composes with locked or centring transforms; nothing loops and nothing moves on plain hover. ---- */
+.editor-action, .dock-item, .canvas-icon-button, .editor-icon-button, .settings-gear, .sound-toggle, .collection-tile-main, .home-entry, .notice,
+.card-tile, .refs-search-clear, .editor-chip, .sound-preview-row button, .canvas-swatch, .editor-tint { transition-property: border-color, color, background-color, scale; transition-duration: var(--sx-fast), var(--sx-fast), var(--sx-fast), 70ms; }
+.editor-action:active:not(:disabled), .dock-item:active, .canvas-icon-button:active:not(:disabled), .editor-icon-button:active:not(:disabled),
+.settings-gear:active, .sound-toggle:active, .refs-search-clear:active, .sound-preview-row button:active, .canvas-swatch:active, .editor-tint:active, .editor-chip:active { scale: .94; }
+.card-tile:active, .collection-tile-main:active, .notice:active { scale: .985; }
+/* A view's grid arrives once when you open it (not on every search keystroke: the container stays mounted). */
+.library-grid, .collection-grid, .canvas-gallery { animation: sx-arrive 150ms cubic-bezier(.2,.8,.2,1) both; }
+@keyframes sx-arrive { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: none; } }
+/* Selecting a tool, a chip or a colour gives a short pop. */
+.canvas-icon-button[aria-pressed='true'] .canvas-icon, .editor-chip[data-checked], .editor-tint[aria-pressed='true'], .canvas-swatch[aria-pressed='true'] { animation: sx-pop 170ms cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes sx-pop { from { scale: .8; } to { scale: none; } }
+.sound-preview-label { flex-basis: 100%; font: 700 .6rem/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ui-text-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .library-grid, .collection-grid, .canvas-gallery, .canvas-icon-button[aria-pressed='true'] .canvas-icon, .editor-chip[data-checked], .editor-tint[aria-pressed='true'], .canvas-swatch[aria-pressed='true'] { animation: none !important; }
+  .editor-action, .dock-item, .canvas-icon-button, .editor-icon-button, .settings-gear, .sound-toggle, .collection-tile-main, .home-entry, .notice, .card-tile, .refs-search-clear, .editor-chip, .sound-preview-row button, .canvas-swatch, .editor-tint { scale: none !important; }
+}
+
+/* ---- PDF page text and linked notes: notes show as PS2-style message boxes over the page. ---- */
+.pdf-stage { position: relative; min-height: 0; }
+.pdf-controls { flex-wrap: wrap; }
+.pdf-messages { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2; display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+.pdf-message { display: grid; gap: 3px; width: 100%; max-width: 360px; padding: 8px 12px 9px; text-align: left; cursor: pointer; pointer-events: auto;
+  background: color-mix(in srgb, #050912 90%, transparent); color: #e6f6ff; border: 1px solid var(--ui-accent-primary); box-shadow: 4px 4px 0 #0008;
+  animation: sx-rise 150ms cubic-bezier(.2,.8,.2,1) both; }
+.pdf-messages li:nth-child(2) .pdf-message { animation-delay: 40ms; } .pdf-messages li:nth-child(3) .pdf-message { animation-delay: 80ms; } .pdf-messages li:nth-child(4) .pdf-message { animation-delay: 120ms; }
+.pdf-message b { font: 700 .58rem/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ui-accent-primary); }
+.pdf-message span { font-size: .8rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pdf-message:hover { border-color: var(--ui-accent-secondary); } .pdf-message:hover b { color: var(--ui-accent-secondary); }
+.pdf-message-more { justify-self: start; padding: 3px 8px; background: #050912e6; color: #e6f6ff; font: 700 .58rem/1.4 var(--sx-label); letter-spacing: .12em; }
+.pdf-text { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--sx-line-soft); animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both; }
+.pdf-text textarea { width: 100%; resize: vertical; font-size: .8rem; line-height: 1.45; }
+.pdf-text-actions, .ocr-note-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.pdf-text-hint { color: var(--ui-text-muted); font-size: .74rem; margin: 0; }
+.pdf-text .editor-action, .ocr-note-row .editor-action { padding: 6px 10px !important; font-size: .64rem !important; }
+@media (prefers-reduced-motion: reduce) { .pdf-message, .pdf-text { animation: none !important; } }

@@ -3,18 +3,23 @@ import type { CardRecord, CollectionRecord } from '@visual-library/shared';
 import { Dialog } from './Dialog';
 import { InterfaceIcon } from './InterfaceIcon';
 import { OcrPanel } from './OcrPanel';
-import { PdfViewer } from './PdfViewer';
+import { PdfViewer, type PdfPageNote } from './PdfViewer';
 
 /** PS2-palette tints for a single card; "none" falls back to the global card style. */
 export const CARD_TINTS = ['#3cc8ff', '#2a2ca6', '#f2d33d', '#3ddc84', '#ff4b4b', '#ff7ad9', '#9aa6ff', '#e6f6ff'];
 
-export function CardEditor({ card, collections, onClose, onSave, onTrash, onDelete, onCapturePdfPage, pdfSource }: {
+export function CardEditor({ card, collections, onClose, onSave, onTrash, onDelete, onCapturePdfPage, pdfSource, pdfNotes, onCreateLinkedNote, onOpenCard }: {
   card: CardRecord; collections: CollectionRecord[]; onClose: () => void;
   onSave: (card: CardRecord, collectionIds: string[]) => Promise<void>;
   onTrash: () => void; onDelete: () => void;
   onCapturePdfPage?: (page: number, image: string) => Promise<void>;
   /** Title of the PDF this image was captured from, when it is still in the library. */
   pdfSource?: { title: string; open: () => void };
+  /** Notes linked to pages of this PDF. */
+  pdfNotes?: PdfPageNote[];
+  /** Creates a note linked to a PDF page: this PDF's, or the page this image was captured from. */
+  onCreateLinkedNote?: (text: string, page?: number) => Promise<void>;
+  onOpenCard?: (id: string) => void;
 }) {
   const [draft, setDraft] = useState(card);
   const [memberships, setMemberships] = useState(collections.filter(item => item.cardIds.includes(card.id)).map(item => item.id));
@@ -43,7 +48,8 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
       </header>
 
       <div className={`editor-body ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-preview' : ''}`}>
-        {card.type === 'pdf' && card.pdf ? <figure className="editor-preview"><PdfViewer pdf={card.pdf} onCapture={onCapturePdfPage} /></figure>
+        {card.type === 'pdf' && card.pdf ? <figure className="editor-preview"><PdfViewer pdf={card.pdf} onCapture={onCapturePdfPage} notes={pdfNotes} onOpenNote={onOpenCard}
+          onCreateNote={onCreateLinkedNote ? (page, text) => onCreateLinkedNote(text, page) : undefined} /></figure>
           : card.type === 'image' && card.dataUrl && <figure className="editor-preview"><img className="editor-image" src={card.dataUrl} alt={card.title} /></figure>}
         <div className="editor-fields">
           {error && <p role="alert" className="editor-error">{error}</p>}
@@ -51,7 +57,8 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
             <input aria-label="Title" className="editor-title" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Untitled" maxLength={1000} /></label>
           <label className="editor-field editor-field-note"><span>Note</span>
             <textarea aria-label="Note" placeholder="Type here…" value={draft.note} rows={card.type === 'text' ? 6 : 3} onChange={event => setDraft({ ...draft, note: event.target.value })} /></label>
-          {card.type === 'image' && card.dataUrl && <OcrPanel dataUrl={card.dataUrl} value={draft.ocr} onChange={ocr => setDraft({ ...draft, ocr })} />}
+          {card.type === 'image' && card.dataUrl && <OcrPanel dataUrl={card.dataUrl} value={draft.ocr} onChange={ocr => setDraft({ ...draft, ocr })}
+            onCreateNote={card.source && onCreateLinkedNote ? text => onCreateLinkedNote(text) : undefined} noteTarget={card.source ? `page ${card.source.page} of ${pdfSource?.title ?? card.source.fileName ?? 'its PDF'}` : undefined} />}
           {card.source && <p className="editor-provenance">From page {card.source.page} of {pdfSource ? <button type="button" className="editor-link" onClick={pdfSource.open}>{pdfSource.title}</button> : <span>{card.source.fileName ?? 'a PDF no longer in your library'}</span>}</p>}
           {card.type === 'pdf' && card.pdf && <p className="editor-provenance">{card.pdf.fileName} · {card.pdf.pageCount} page{card.pdf.pageCount === 1 ? '' : 's'}{card.pdf.text ? ' · text searchable' : ' · no embedded text (scanned)'}</p>}
           {card.type !== 'text' && card.type !== 'pdf' && <label className="editor-field"><span>Source</span>
