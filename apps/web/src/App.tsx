@@ -149,6 +149,7 @@ function App() {
   const profileColorInputRef = useRef<HTMLInputElement | null>(null);
   // Clicking the identity card itself (not the photo) opens its colour picker.
   const [profileColorAnchor, setProfileColorAnchor] = useState<HTMLElement | null>(null);
+  useEffect(() => { colorPickerOpenRef.current = !!profileColorAnchor; }, [profileColorAnchor]);
   const pickCardColor = (event: React.MouseEvent<HTMLElement>) => { if (!(event.target as HTMLElement).closest('.avatar-upload')) setProfileColorAnchor(event.currentTarget); };
   const [profilePhoto, setProfilePhoto] = useState(() => localStorage.getItem('visual-library-profile-photo') ?? '');
   const [profileCardColor, setProfileCardColor] = useState(() => {
@@ -231,7 +232,9 @@ function App() {
   const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuExitRef = useExitAnimation<HTMLDivElement>();
   const addMenuExitRef = useExitAnimation<HTMLDivElement>();
-  const accountHover = useHoverIntent(useCallback((open: boolean) => { if (!open || !settingsOpenRef.current) setAccountMenuOpen(open); }, []));
+  // While the profile colour picker is open it counts as part of the account menu, so the menu stays.
+  const colorPickerOpenRef = useRef(false);
+  const accountHover = useHoverIntent(useCallback((open: boolean) => { if (!open && colorPickerOpenRef.current) return; if (!open || !settingsOpenRef.current) setAccountMenuOpen(open); }, []));
   const addHover = useHoverIntent(setAddMenuOpen);
   const collectionHover = useHoverIntent(setCollectionMenuOpen);
   const cardComposerWasOpenRef = useRef(false);
@@ -575,7 +578,7 @@ function App() {
       if (profileOpen && !profileMenuRef.current?.contains(event.target)) {
         setProfileOpen(false);
       }
-      if (accountMenuOpen && !profileMenuRef.current?.contains(event.target)) {
+      if (accountMenuOpen && !profileMenuRef.current?.contains(event.target) && !(event.target instanceof Element && event.target.closest('.color-pop'))) {
         setAccountMenuOpen(false);
       }
       if (quickAddPosition) setQuickAddPosition(null);

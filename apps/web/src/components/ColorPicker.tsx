@@ -31,10 +31,13 @@ export function ColorPopover({ anchor, value, label, swatches = [], onChange, on
   const panel = useRef<HTMLDivElement | null>(null);
   const exitRef = useExitAnimation<HTMLDivElement>();
   const square = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   const current = hsvToHex(hsv);
 
   useLayoutEffect(() => {
     const place = () => {
+      if (!anchor.isConnected) { closeRef.current(); return; }
       const a = anchor.getBoundingClientRect(), p = panel.current?.getBoundingClientRect();
       const width = p?.width ?? 236, height = p?.height ?? 260;
       const below = a.bottom + 8 + height <= innerHeight - 8;
