@@ -281,6 +281,40 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Account menu' })).not.toBeInTheDocument();
   });
 
+  it('renames a collection from its right-click menu', async () => {
+    render(<App />);
+    await screen.findByRole('button', { name: 'All notes' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open collections' }));
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Open collection Research' }));
+    const menu = screen.getByRole('menu', { name: 'Research options' });
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
+    const field = screen.getByRole('textbox', { name: 'New name for Research' });
+    fireEvent.change(field, { target: { value: 'Field notes' } });
+    fireEvent.submit(field.closest('form')!);
+    await waitFor(async () => expect((await cardDb.collections.toArray()).map(item => item.name)).toContain('Field notes'));
+    expect(screen.getByRole('button', { name: 'Open collection Field notes' })).toBeInTheDocument();
+  });
+
+  it('renames a canvas from its right-click menu and cancels a subsequent edit with Escape', async () => {
+    render(<App />);
+    await screen.findByRole('button', { name: 'All notes' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open canvas' }));
+    fireEvent.contextMenu(await screen.findByRole('button', { name: 'Open canvas Research' }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Research options' })).getByRole('menuitem', { name: 'Rename' }));
+    const field = screen.getByRole('textbox', { name: 'New name for Research' });
+    fireEvent.change(field, { target: { value: 'Reference board' } });
+    fireEvent.submit(field.closest('form')!);
+    await waitFor(async () => expect((await cardDb.collections.toArray()).map(item => item.name)).toContain('Reference board'));
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Open canvas Reference board' }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Reference board options' })).getByRole('menuitem', { name: 'Rename' }));
+    const cancelled = screen.getByRole('textbox', { name: 'New name for Reference board' });
+    fireEvent.change(cancelled, { target: { value: 'Discard this name' } });
+    fireEvent.keyDown(cancelled, { key: 'Escape' });
+    expect(screen.queryByRole('textbox', { name: 'New name for Reference board' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect((await cardDb.collections.toArray()).map(item => item.name)).toContain('Reference board');
+  });
+
   it('goes back from a collection to Collections and then Home', async () => {
     render(<App />);
     await screen.findByRole('button', { name: 'All notes' });

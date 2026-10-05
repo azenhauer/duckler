@@ -62,6 +62,7 @@ import { CollectionCanvas } from './components/CollectionCanvas';
 import { Notifications, notify } from './components/Notifications';
 import { BButton } from './components/BButton';
 import { ColorPopover } from './components/ColorPicker';
+import { TileMenu } from './components/TileMenu';
 import { inferImageTitle } from './lib/imageName';
 
 const emptyForm = {
@@ -888,6 +889,13 @@ function App() {
   };
 
   const [renamingCollectionId, setRenamingCollectionId] = useState<string | null>(null);
+  // Right-click on a collection or canvas tile: Open / Rename (/ Delete for collections).
+  const [tileMenu, setTileMenu] = useState<{ id: string; kind: 'collection' | 'canvas'; left: number; top: number } | null>(null);
+  const openTileMenu = (event: React.MouseEvent, id: string, kind: 'collection' | 'canvas') => {
+    event.preventDefault(); event.stopPropagation();
+    setQuickAddPosition(null);
+    setTileMenu({ id, kind, left: event.clientX, top: event.clientY });
+  };
   const handleRenameCollection = async (collectionId: string, value: FormDataEntryValue | null) => {
     setRenamingCollectionId(current => current === collectionId ? null : current);
     const target = collectionsRef.current.find(item => item.id === collectionId);
@@ -1575,7 +1583,7 @@ function App() {
               ).length;
 
               return (
-                <article key={collection.id} className={`collection-tile ${depth ? 'is-child' : ''}`} data-depth={depth}>
+                <article key={collection.id} className={`collection-tile ${depth ? 'is-child' : ''}`} data-depth={depth} onContextMenu={event => openTileMenu(event, collection.id, 'collection')}>
                   <button
                     type="button"
                     className="collection-tile-main"
@@ -1846,7 +1854,9 @@ function App() {
         {activeView === 'canvas' && (selectedCanvas
           ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack}
             onNavigate={target => target === 'settings' ? setSettingsOpen(true) : navigateTo(target === 'home' ? 'home' : target === 'collections' ? 'collections' : 'canvas')} />
-          : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} onCreateCanvas={() => void handleCreateEmptyCanvas()} />)}
+          : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} onCreateCanvas={() => void handleCreateEmptyCanvas()}
+            onTileContextMenu={(event, id) => openTileMenu(event, id, 'canvas')} renamingId={renamingCollectionId}
+            onRename={(id, name) => void handleRenameCollection(id, name)} onCancelRename={() => setRenamingCollectionId(null)} />)}
 
         <div className="sync-panel panel">
           <h2>Sync status</h2>
@@ -1894,6 +1904,16 @@ function App() {
       <ul className="ps-hints" aria-hidden="true">
         <li><b className="crs">✕</b>Enter</li><li><b className="cir">○</b>Back</li><li><b className="tri">△</b>Options</li><li><b className="sqr">□</b>Select</li>
       </ul>
+      {tileMenu && (() => {
+        const target = collections.find(item => item.id === tileMenu.id);
+        if (!target) return null;
+        return <TileMenu title={target.name} position={tileMenu} onClose={() => setTileMenu(null)} items={[
+          { label: tileMenu.kind === 'canvas' ? 'Open canvas' : 'Open collection', onSelect: () => navigateTo(tileMenu.kind === 'canvas' ? 'canvas' : 'library', target.id) },
+          { label: 'Rename', onSelect: () => setRenamingCollectionId(target.id) },
+          ...(tileMenu.kind === 'canvas' ? [{ label: 'Open as collection', onSelect: () => navigateTo('library', target.id) }] : [{ label: 'Open its canvas', onSelect: () => navigateTo('canvas', target.id) }]),
+          ...(tileMenu.kind === 'collection' ? [{ label: 'Delete', danger: true, onSelect: () => { if (window.confirm(`Delete “${target.name}”? Its cards are kept.`)) void handleDeleteCollection(target.id); } }] : []),
+        ]} />;
+      })()}
       <Notifications />
       <div className="bottom-scrim" aria-hidden="true" />
       <nav className={`bottom-dock ${isHome ? 'home-dock' : ''}`} aria-label="Main navigation">

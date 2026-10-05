@@ -36,9 +36,11 @@ function CanvasPreview({ cards, layout, placements, elements = [] }: { cards: Ca
   </svg></div>;
 }
 
-export function CanvasGallery({ collections, cards, search, onOpen, onCreateCollection, onCreateCanvas }: {
+export function CanvasGallery({ collections, cards, search, onOpen, onCreateCollection, onCreateCanvas, onTileContextMenu, renamingId, onRename, onCancelRename }: {
   collections: CollectionRecord[]; cards: CardRecord[]; search: string;
   onOpen: (collectionId: string) => void; onCreateCollection: () => void; onCreateCanvas?: () => void;
+  onTileContextMenu?: (event: React.MouseEvent, collectionId: string) => void;
+  renamingId?: string | null; onRename?: (collectionId: string, name: string) => void; onCancelRename?: () => void;
 }) {
   const [layouts, setLayouts] = useState<CanvasLayout[]>([]);
   const [error, setError] = useState('');
@@ -61,10 +63,16 @@ export function CanvasGallery({ collections, cards, search, onOpen, onCreateColl
       <div className="canvas-thumbnail is-empty"><span className="canvas-new-plus" aria-hidden="true">+</span></div>
       <span className="canvas-gallery-caption">New canvas</span>
     </button>}
-    {visible.map(collection => <button className="canvas-gallery-tile" type="button" key={collection.id} aria-label={`Open canvas ${collection.name}`} onClick={() => onOpen(collection.id)}>
+    {visible.map(collection => <div className="canvas-gallery-item" key={collection.id}><button className="canvas-gallery-tile" type="button" aria-label={`Open canvas ${collection.name}`} onClick={() => onOpen(collection.id)}
+      onContextMenu={onTileContextMenu ? event => onTileContextMenu(event, collection.id) : undefined}>
       <CanvasPreview cards={canvasIds.includes(collection.id) ? cards : collectionCanvasCards(collection, cards)} layout={layouts.find(layout => layout.collectionId === collection.id)} placements={canvasIds.includes(collection.id) ? placements.filter(item => item.canvasId === collection.id) : undefined} elements={elements.filter(item => item.canvasId === collection.id)} />
       <span className="canvas-gallery-caption">{collection.name}</span>
-    </button>)}
+    </button>
+      {renamingId === collection.id && onRename && <form className="canvas-gallery-rename" onSubmit={event => { event.preventDefault(); onRename(collection.id, String(new FormData(event.currentTarget).get('name') ?? '')); }}>
+        <input name="name" aria-label={`New name for ${collection.name}`} defaultValue={collection.name} maxLength={120} autoFocus onFocus={event => event.currentTarget.select()}
+          onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onCancelRename?.(); } }} onBlur={event => onRename(collection.id, event.currentTarget.value)} />
+      </form>}
+    </div>)}
     {!visible.length && (query || !onCreateCanvas) && <div className="empty-view"><NavigationIcon name="canvas" />
       <p>{collections.length ? 'No matches' : 'No canvases yet'}</p>
       {!collections.length && !onCreateCanvas && <button type="button" className="secondary-button" onClick={onCreateCollection}>Create a collection</button>}

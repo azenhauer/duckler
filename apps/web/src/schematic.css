@@ -652,3 +652,12 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 .appearance-hex { height: 26px; padding: 0 8px !important; border: 1px solid var(--sx-line-soft) !important; border-radius: 4px !important; background: color-mix(in srgb, var(--ui-bg) 55%, transparent) !important;
   color: var(--ui-text) !important; font: 700 .72rem/1 ui-monospace, SFMono-Regular, Consolas, monospace !important; letter-spacing: .06em; text-transform: uppercase; box-shadow: none !important; }
 .appearance-hex:focus { outline: none; border-color: var(--ui-accent-primary) !important; }
+
+/* ---- Tile right-click menu and canvas-gallery rename. ---- */
+.tile-menu { animation: none !important; }
+.tile-menu strong { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-menu button.is-danger { color: var(--sx-cir) !important; }
+.canvas-gallery-item { position: relative; min-width: 0; display: grid; }
+.canvas-gallery-rename { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 3; }
+.canvas-gallery-rename input { width: 100%; padding: 8px 10px; border: 1px solid var(--ui-accent-primary); border-radius: 4px; background: var(--ui-surface); color: var(--ui-text);
+  font-family: inherit; font-size: .95rem; font-weight: 700; line-height: 1.2; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ui-accent-primary) 25%, transparent); }
