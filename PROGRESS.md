@@ -34,6 +34,11 @@ Last updated: 2026-10-05
 - [x] Visible speaker button with hover volume; more sound variety (open, back, toggle, save, delete…)
 - [ ] **You:** restart `npm run dev` if anything looks stale, then review at full desktop width
 
+## Clip autofill (protocol: docs/ai-coop/PROTOCOL.md)
+Auto-add a clip to the best-matching collection(s) when no collection was chosen. Opt-in, add-only, zero retention on the server.
+- 1.1 ok — optional `pageExcerpt` in the capture protocol + autofill result types; never stored on cards. next=1.2 (pure ranking/decision rules)
+- [ ] **You:** confirm Workers AI `@cf/baai/bge-m3` (or name another provider) before 1.3
+
 ## Small patches (Oct 5, afternoon)
 - [x] Notifications: console "achievement" panels (✕ success · ○ error · △ info · □ progress), auto-dismiss, chime per kind; replace the old status banner
 - [x] Sounds separated by zone (menus, cards, settings, canvas) + canvas tool sounds (draw, highlight, shape, text, erase, connect, place, move, rotate, undo/redo); grouped previews in Settings
