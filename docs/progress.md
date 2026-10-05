@@ -254,3 +254,27 @@ Bugs found and fixed:
 Also: `tesseract.js`, `tesseract.js-core` (imported directly for the `?url` core assets) and `pdfjs-dist` moved from the root `package.json` into `apps/web/package.json`.
 
 Still open: optional self-hosted traineddata (`VITE_OCR_LANG_PATH`); OCR directly on scanned PDF pages; whether status notices should auto-dismiss (they stay until replaced and, on some layouts, can sit over the Back button); checking Google sign-in on the deployed build with the CSP.
+
+## UI rounds, extension side panel, connections and clip autofill — October 5, 2026 (afternoon/evening)
+
+Everything below is on `main` and was deployed by the git-connected Pages project. Each round passed typecheck, lint, the unit suite and the Playwright smokes on Windows.
+
+Web app:
+- Notifications ("achievement" panels) replaced the status banner; zoned UI sounds (menus, cards, settings, canvas) with canvas tool cues, select/deselect and gear cues; Settings → each sound and each group is an on/off switch.
+- Cards: click toggles selection (command strip shows), double-click/Enter edits, 2° italic lean; B ("○ BACK") close buttons; soft corners; earlier + button motion; boxless dock and top controls with soft scrims; phone canvas puts Home/Collections/Canvases/Settings in the board's top bar (Back and Settings in opposite corners at every width).
+- "All cards" collection tile; empty canvases ("New canvas"); right-click rename for collections and canvases (Codex finished 6722a0b); search started on Home returns there when emptied.
+- PDF page text panel with OCR for scanned pages; "Note from selection" → note linked to the PDF page, shown as message boxes over the page.
+- Card connections: connect icon (click then pick, or drag onto a card), "Connect these two" for two selected cards, ⇄ badge, editor "Dialogue" (open/disconnect), connected notes over images. Right-click selected note text → "New note from selection" (connected to its source).
+- Custom PS2 colour picker for UI colours (Settings, card style, card editor, profile card); fixed hidden-behind-editor and account-menu closing bugs.
+- Fixes found by the smokes: popovers mis-centred by animations, overflows at 320/768 px, reduced motion, StrictMode exit ghosts, stale searchText, PDF viewer capture race.
+
+Extension (Codex built the side panel 47f93bd; follow-ups here):
+- Highlights: optional `<all_urls>` access with an in-panel "Allow on all websites" prompt (activeTab only covered the tab the panel opened on); frames; SPA URL changes; append to an edited note.
+- Autofill from page metadata (cleaned title · site, description, tags, last-used collections — see D6), card colour swatches (validated `#rrggbb` in the capture protocol).
+- Screenshots: reviewed in the side panel only (no on-page pop-up); Alt+Shift+D opens the panel first; without a panel the shot is saved directly; Shot asks for site access in the same click; scripts orphaned by an extension reload reinstall themselves.
+
+Clip autofill (docs/ai-coop):
+- 1.1 optional `pageExcerpt` (never persisted, I3b); 1.2 pure profile/rank/decide rules; 1.3 `/api/embed` + `/api/embed/token` (stateless HMAC install tokens, KV daily counters keyed by hashes, size caps, 5 s timeout, same-origin, no-store, no logging; 503 until configured); 1.4 `wrangler.jsonc` bindings `AI` + `EMBED_USAGE` (KV 704af653…), secret `CLASSIFY_TOKEN_SECRET` set by the owner.
+- Zero retention verified by tests; Workers AI keeps no inputs/outputs unless storage is attached.
+
+Notes for the next agent: Wrangler's OAuth login on this PC expired during 1.4 (re-run `npx wrangler login` for CLI work; pushes still deploy). Untracked `ai-coop/` (owner's PT checklist) and `.claude/` are intentionally not committed.

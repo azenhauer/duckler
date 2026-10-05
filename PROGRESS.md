@@ -4,7 +4,21 @@ A plain checklist across every spec. Detailed requirements: `docs/duckler-master
 
 Legend: `[x]` done · `[~]` partial · `[ ]` not started · `[!]` blocked (outside decision, device or account needed)
 
-Last updated: 2026-10-05
+Last updated: 2026-10-05 (evening)
+
+## ▶ Start here (agents: Claude Code / Codex)
+- **Clip autofill** follows `docs/ai-coop/PROTOCOL.md`; its live state is the last line of `docs/ai-coop/STATE.jsonl`. Boot per the protocol before touching it.
+- **Deploys:** the Cloudflare Pages project `duckler` is git-connected — every push to `main` deploys to production. Push only what passes `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
+- **Checks on Windows:** all of the above plus the Playwright smokes (`scripts/*.mjs`, dev server on :5176; `npm run build:extension:dev` before `extension-smoke.mjs`).
+
+**Built (main):** PS2-schematic web app (cards, collections incl. "All cards", canvases incl. empty ones, OCR + PDF with page notes, card connections/"dialogues", notes from selected text, notifications, zoned UI sounds with per-sound switches, custom colour picker, right-click rename) · Chrome/Edge side-panel extension (highlights, autofill from page metadata, card colour, screenshots reviewed in the panel, Alt+Shift+S / Esc / close-on-send) · clip autofill 1.1–1.3 (+1.4 bindings).
+
+**Next:** autofill 1.4 verify (live `/api/embed/token` must return 200) → 2.1 extension sends `pageExcerpt` + setting + D6 (no last-used preselect when autofill is on) → 2.2 library: classify after save, local profile cache, rejection store → 2.3 setting toggle + disclosure + "Added to X · Undo" → 2.4 tuning (needs 30–50 real clips from the owner) → 2.5 manual test checklist.
+
+**Missing / open:** Google client ID for the deployed build (`VITE_GOOGLE_CLIENT_ID`; Drive sign-in shows a developer note) · Drive content sync (M5b) · conflict UI · self-hosted OCR language data (optional) · "All cards" canvas · Codex-side items from its own log.
+
+**Parked by the owner (do not start; remind occasionally):** account-based extension linking · multi-user libraries, collaboration and sharing by link — see `docs/completion-roadmap.md` "Deferred by the owner".
+
 
 ## Now (this session)
 - [x] Merge seven specs into `docs/duckler-master-spec.md`; source specs saved in `docs/specs/`
