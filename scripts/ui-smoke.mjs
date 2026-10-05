@@ -63,7 +63,11 @@ try {
   await editor.getByRole('button', { name: 'Close details' }).click();
   const badge = card.locator('..').getByRole('button', { name: 'Collection Inbox', exact: true });
   await badge.click();
-  await page.getByRole('menuitem', { name: 'Remove from collection', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: 'Collections for this card' });
+  await picker.getByRole('checkbox', { name: 'Inbox', exact: true }).uncheck();
+  await page.getByRole('button', { name: 'Undo', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
   await expect(badge).toHaveCount(0);
   await expect(card).toBeVisible();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -81,21 +85,21 @@ try {
   await page.evaluate(() => document.fonts.ready);
   const grid = await page.locator('.library-grid').boundingBox();
   assert.ok(Math.abs(grid.x + grid.width / 2 - 720) < 3, 'Library cards should be centered');
-  assert.equal(await page.locator('.card-tile').first().evaluate(el => getComputedStyle(el).borderRadius), '7px');
+  assert.equal(await page.locator('.card-tile').first().evaluate(el => getComputedStyle(el).borderRadius), '2px'); // PS2 schematic: near-square corners by default
   const cards = await page.locator('.library-card').evaluateAll(elements => elements.map(el => ({ x: el.getBoundingClientRect().x, y: el.getBoundingClientRect().y, width: el.getBoundingClientRect().width })));
   assert.equal(cards[0].y, cards[1].y, 'Two starter cards should sit side by side');
   assert.ok(Math.abs((cards[0].x + cards[1].x + cards[1].width) / 2 - 720) < 3);
   assert.equal(await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button').count(), 4);
   await page.waitForTimeout(250);
   await page.screenshot({ path: fileURLToPath(new URL('desktop.png', output)), fullPage: true, animations: 'disabled' });
-  await page.getByRole('button', { name: 'Open settings' }).hover();
-  await page.getByRole('tooltip', { name: 'Profile preview' }).waitFor();
-  assert.ok((await page.locator('.profile-preview .profile-identity-card').evaluate(el => getComputedStyle(el).backdropFilter)).includes('blur'));
-  assert.equal(await page.locator('.profile-preview').evaluate(el => getComputedStyle(el).backdropFilter), 'none', 'Glass belongs to the identity card, not the whole popup');
+  const accountMenu = page.getByRole('dialog', { name: 'Account menu' });
+  await page.getByRole('button', { name: 'Account menu' }).hover();
+  await accountMenu.waitFor();
+  assert.equal(await accountMenu.evaluate(el => getComputedStyle(el).backdropFilter), 'none', 'PS2 schematic: no blur on popovers');
   await page.screenshot({ path: fileURLToPath(new URL('profile.png', output)), animations: 'disabled' });
   assert.equal(await page.getByRole('textbox', { name: 'Profile name' }).count(), 0);
-  await page.mouse.move(1100, 100);
-  await page.getByRole('tooltip', { name: 'Profile preview' }).waitFor({ state: 'hidden' });
+  await page.mouse.move(100, 500);
+  await accountMenu.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Open settings' }).click();
   await page.getByRole('dialog', { name: 'Settings' }).waitFor();
   await page.screenshot({ path: fileURLToPath(new URL('settings.png', output)), fullPage: true, animations: 'disabled' });
@@ -135,13 +139,13 @@ try {
     assert.ok(menu.y >= 0 && menu.y + menu.height <= height + 1, `Options stays vertically on screen at ${width}`);
     await page.locator('.library-options > summary').click();
     await page.getByRole('button', { name: 'Open settings' }).click();
-    assert.equal(await page.locator('.app-settings').evaluate(el => el.scrollWidth > el.clientWidth), false, `Settings fits at ${width}`);
+    assert.equal(await page.getByRole('dialog', { name: 'Settings' }).evaluate(el => el.scrollWidth > el.clientWidth), false, `Settings fits at ${width}`);
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Open settings' }).hover();
-    await page.waitForTimeout(200);
-    const preview = await page.getByRole('tooltip', { name: 'Profile preview' }).boundingBox();
-    assert.ok(preview.x >= 0 && preview.x + preview.width <= width + 1, `Profile preview stays on screen at ${width}: ${JSON.stringify(preview)}`);
-    assert.ok(preview.y >= 0 && preview.y + preview.height <= height + 1, `Profile fits vertically at ${width}`);
+    await page.getByRole('button', { name: 'Account menu' }).hover();
+    await page.getByRole('dialog', { name: 'Account menu' }).waitFor();
+    const preview = await page.getByRole('dialog', { name: 'Account menu' }).boundingBox();
+    assert.ok(preview.x >= 0 && preview.x + preview.width <= width + 1, `Account menu stays on screen at ${width}: ${JSON.stringify(preview)}`);
+    assert.ok(preview.y >= 0 && preview.y + preview.height <= height + 1, `Account menu fits vertically at ${width}`);
     await page.mouse.move(width - 1, 0);
     await page.getByRole('button', { name: 'All items' }).focus();
     await page.screenshot({ path: fileURLToPath(new URL(`viewport-${width}.png`, output)), fullPage: true, animations: 'disabled' });
@@ -201,17 +205,16 @@ try {
   });
   await page.waitForFunction(() => document.querySelector('.refs-search')?.dataset.docked === 'true');
   const searchBounds = await page.locator('.refs-search').boundingBox();
-  assert.ok(searchBounds.y >= 19 && searchBounds.y <= 21, 'Search stays near the top while scrolling');
-  await page.waitForFunction(() => [...document.querySelectorAll('.library-card')].some(card => Math.abs(parseFloat(card.style.getPropertyValue('--search-clearance'))) > .1));
+  assert.ok(searchBounds.y >= 21 && searchBounds.y <= 23, 'Search stays pinned beside the top controls while scrolling');
+  // Cards no longer shift away from the docked search (measuring every card on scroll cost frames).
   const clearance = await page.locator('.library-card').evaluateAll(cards => cards.map(card => Math.abs(parseFloat(card.style.getPropertyValue('--search-clearance'))) || 0));
-  assert.ok(clearance.every(value => value <= 6), 'Card movement remains very slight');
+  assert.ok(clearance.every(value => value === 0), 'Cards stay still while scrolling under the search');
   await page.screenshot({ path: fileURLToPath(new URL('scroll-search.png', output)), animations: 'disabled' });
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.waitForFunction(() => [...document.querySelectorAll('.library-card')].every(card => !parseFloat(card.style.getPropertyValue('--search-clearance'))));
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForFunction(() => document.querySelector('.refs-search')?.dataset.docked === 'false');
   assert.deepEqual(errors, []);
-  console.log('Desktop/mobile layout, dark default, profile hover, avatar settings and keyboard dismissal passed.');
+  console.log('Desktop/mobile layout, dark default, account menu hover, settings and keyboard dismissal passed.');
 } finally { await browser.close(); }
 
 

@@ -48,7 +48,7 @@ try {
   await page.mouse.move(bounds.x + bounds.width * .7, bounds.y + bounds.height * .6); await page.mouse.down();
   await page.mouse.move(bounds.x + bounds.width * .7 - 120, bounds.y + bounds.height * .6 - 80, { steps: 20 }); await page.mouse.up();
   await expect.poll(() => page.locator('.react-flow__viewport').getAttribute('style')).not.toBe(before);
-  await toolbar.getByRole('button', { name: 'Fit board', exact: true }).click();
+  await page.getByRole('toolbar', { name: 'Canvas actions' }).getByRole('button', { name: 'Fit board', exact: true }).click();
   await expect.poll(() => page.locator('.react-flow__node-card').count(), { timeout: 30000 }).toBe(200);
   assert.deepEqual(errors, []);
   console.log(`Canvas capacity passed: 200 placements, 500 mixed annotations, 200 connectors; opened in ${openedMs} ms; pan, culling and fit verified. Headless desktop fixture, not a device performance guarantee.`);

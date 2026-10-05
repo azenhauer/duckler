@@ -29,6 +29,7 @@ try {
   await page.getByRole('button', { name: 'Open canvas Tools board', exact: true }).click();
   const board = page.getByRole('region', { name: 'Canvas Tools board', exact: true });
   const tools = page.getByRole('toolbar', { name: 'Canvas tools' });
+  const actions = page.getByRole('toolbar', { name: 'Canvas actions' });
   const surface = page.locator('.canvas-surface');
   await expect(page.locator('.react-flow__node-card')).toHaveCount(2);
   const read = () => page.evaluate(async () => {
@@ -45,9 +46,9 @@ try {
     await tools.getByRole('button', { name: tool, exact: true }).click();
     await surface.scrollIntoViewIfNeeded();
     const bounds = await surface.boundingBox();
-    await page.mouse.move(bounds.x + 50 + offset, bounds.y + bounds.height * .7);
+    await page.mouse.move(bounds.x + 260 + offset, bounds.y + bounds.height * .7); // clear of the in-board tool dock
     await page.mouse.down();
-    await page.mouse.move(bounds.x + 180 + offset, bounds.y + bounds.height * .85, { steps: 16 });
+    await page.mouse.move(bounds.x + 390 + offset, bounds.y + bounds.height * .85, { steps: 16 });
     await page.mouse.up();
   };
   for (const [index, name] of ['Pen', 'Highlighter', 'Rectangle', 'Ellipse'].entries()) {
@@ -65,10 +66,11 @@ try {
   await expect(textDialog).toHaveCount(0);
   await expect.poll(async () => (await read()).elements.length).toBe(5);
   await tools.getByRole('button', { name: 'Select', exact: true }).click();
-  await tools.getByRole('button', { name: 'Fit board', exact: true }).click();
+  await actions.getByRole('button', { name: 'Fit board', exact: true }).click();
   await imageNode.click({ position: { x: 30, y: 30 } });
-  await board.getByRole('button', { name: 'Draw on selected card', exact: true }).click();
+  // The anchor toggle lives in the stroke-style bar, which opens once a drawing tool is active.
   await tools.getByRole('button', { name: 'Rectangle', exact: true }).click();
+  await board.getByRole('button', { name: 'Draw on selected card', exact: true }).click();
   await surface.scrollIntoViewIfNeeded();
   const imageBounds = await imageNode.boundingBox();
   await page.mouse.move(imageBounds.x + 30, imageBounds.y + 30); await page.mouse.down();
@@ -78,11 +80,11 @@ try {
   await board.getByRole('button', { name: 'Rotate +15°', exact: true }).click();
   await expect.poll(async () => (await read()).placements.find(item => item.id === imageId).rotation).toBe(15);
   assert.deepEqual((await read()).elements.find(item => item.id === annotation.id), annotation, 'Anchored geometry stays local when card rotates');
-  await tools.getByRole('button', { name: 'Undo', exact: true }).click();
+  await actions.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(async () => (await read()).placements.find(item => item.id === imageId).rotation).toBe(0);
-  await tools.getByRole('button', { name: 'Undo', exact: true }).click();
+  await actions.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(async () => (await read()).elements.length).toBe(5);
-  await tools.getByRole('button', { name: 'Redo', exact: true }).click();
+  await actions.getByRole('button', { name: 'Redo', exact: true }).click();
   await expect.poll(async () => (await read()).elements.length).toBe(6);
   await board.getByRole('button', { name: 'Draw on selected card', exact: true }).click();
   await tools.getByRole('button', { name: 'Select', exact: true }).click();
@@ -125,7 +127,7 @@ try {
   await page.mouse.move(moveBounds.x + 70, moveBounds.y + 60, { steps: 10 }); await page.mouse.up();
   await expect.poll(async () => (await read()).placements.find(item => item.id === imageId).x).toBeGreaterThan(beforeMove.placements.find(item => item.id === imageId).x);
   await expect.poll(async () => (await read()).placements.find(item => item.id === noteId).x).toBeGreaterThan(beforeMove.placements.find(item => item.id === noteId).x);
-  await tools.getByRole('button', { name: 'Undo', exact: true }).click();
+  await actions.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(async () => (await read()).placements.find(item => item.id === noteId).x).toBe(beforeMove.placements.find(item => item.id === noteId).x);
   await expect.poll(async () => (await read()).placements.find(item => item.id === imageId).x).toBe(beforeMove.placements.find(item => item.id === imageId).x);
   await board.getByRole('button', { name: 'Clear selection', exact: true }).click();
@@ -141,7 +143,7 @@ try {
   await expect(editor).toHaveCount(0);
   await expect(page.locator('.canvas-card-node[data-card-id="image"]').getByText('Final Sketch', { exact: true })).toHaveCount(2);
   await picker.getByText('Add cards from library', { exact: true }).click();
-  await tools.getByRole('button', { name: 'Fit board', exact: true }).click();
+  await actions.getByRole('button', { name: 'Fit board', exact: true }).click();
   await imageNode.click({ position: { x: 10, y: 10 } });
   await board.getByRole('button', { name: 'Remove selected', exact: true }).click();
   await expect.poll(async () => (await read()).placements.find(item => item.id === imageId).removed).toBe(true);
@@ -158,11 +160,11 @@ try {
   const rectangle = (await read()).elements.find(item => item.kind === 'rectangle' && !item.anchorPlacementId);
   await page.locator(`.react-flow__node[data-id="${rectangle.id}"]`).click({ position: { x: 4, y: 4 } });
   await expect.poll(async () => (await read()).elements.length).toBe(5);
-  await tools.getByRole('button', { name: 'Undo', exact: true }).click();
+  await actions.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(async () => (await read()).elements.length).toBe(6);
   await tools.getByRole('button', { name: 'Select', exact: true }).click();
   await picker.getByText('Add cards from library', { exact: true }).click();
-  await tools.getByRole('button', { name: 'Fit board', exact: true }).click();
+  await actions.getByRole('button', { name: 'Fit board', exact: true }).click();
   await surface.scrollIntoViewIfNeeded();
   const dropPoint = await page.locator('.react-flow').evaluate(element => {
     const rect = element.getBoundingClientRect();
@@ -195,15 +197,15 @@ try {
     await commitCanvasContent('tools', state.document.revision, { placements: state.placements.map(item => ({ ...item, x: item.x + 500 })), elements: state.elements, connectors: state.connectors });
   });
   const externalX = (await read()).placements.find(item => item.id === imageId).x;
-  await tools.getByRole('button', { name: 'Undo', exact: true }).click();
+  await actions.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(board.getByRole('alert')).toContainText('Canvas changed elsewhere');
   assert.equal((await read()).placements.find(item => item.id === imageId).x, externalX, 'Stale Undo preserves another tab edit');
   await board.getByRole('button', { name: 'Reload canvas', exact: true }).click();
   await expect(board.getByRole('alert')).toHaveCount(0);
-  await expect(tools.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
+  await expect(actions.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
   await otherTab.close();
   await page.setViewportSize({ width: 390, height: 844 });
-  await tools.getByRole('button', { name: 'Fit board', exact: true }).click();
+  await actions.getByRole('button', { name: 'Fit board', exact: true }).click();
   await expect(tools.getByRole('button', { name: 'Text', exact: true })).toBeVisible();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Mobile tools fit viewport');
   await page.screenshot({ path: fileURLToPath(new URL('../.tmp/ui-checks/canvas-tools-mobile.png', import.meta.url)), fullPage: true });

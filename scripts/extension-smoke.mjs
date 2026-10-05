@@ -28,6 +28,9 @@ try {
   // Exercise the actual worker and connected web receiver; no browser APIs mocked.
   const response = await options.evaluate(() => chrome.runtime.sendMessage({ type: 'queue-capture', capture: { kind: 'text', title: 'Extension delivery check', note: 'Real Chromium worker, real local receiver.', tags: ['test'] } }));
   assert.equal(response.ok, true, JSON.stringify(response));
+  // Home is a launcher in the redesign; the delivered card shows up under All notes.
+  await library.keyboard.press('Escape');
+  await library.getByRole('button', { name: 'All notes', exact: true }).click({ timeout: 15000 });
   await library.getByRole('article', { name: 'Open Extension delivery check' }).waitFor({ timeout: 15000 });
   await options.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: 'list-captures' })).items.length === 0);
   console.log(`Manifest V3 loads; pairing, live note delivery and post-commit queue acknowledgement passed (${id}).`);

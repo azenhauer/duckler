@@ -34,7 +34,7 @@ try {
   assert.ok((await bubble.boundingBox()).height > before.height);
   await bubble.getByRole('button', { name: 'Show less' }).click();
   await page.getByRole('button', { name: 'Switch to light mode' }).click();
-  assert.equal(await page.locator('.app-shell').evaluate(el => getComputedStyle(el).getPropertyValue('--ui-bg').trim()), '#f2f4f6');
+  assert.equal(await page.locator('.app-shell').evaluate(el => getComputedStyle(el).getPropertyValue('--ui-bg').trim()), '#dde8f4'); // PS2 aqua print-ad light mode
   await page.screenshot({ path: '.tmp/ui-checks/notes-light.png', fullPage: true });
   await page.getByRole('button', { name: 'Switch to dark mode' }).click();
   await page.screenshot({ path: '.tmp/ui-checks/notes-dark.png', fullPage: true });
