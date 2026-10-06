@@ -396,3 +396,9 @@ What changed (no feature or visual change intended):
 - The collection menu under the title hung off the left edge (centred under a left-aligned title); it now aligns to the title.
 - Sounds: hovering a sound in Settings plays it (switched-off ones too) with a lit chip and ping; the gear plays its spin on hover; the + button has a new "tilt" cue.
 - Card hover: border, glow and action bar move together at 90 ms (three stylesheets disagreed; the glow snapped while the border faded and the bar trailed at 150 ms).
+
+## One library per Google account on a device — October 6, 2026
+- Each Google account gets its own IndexedDB library on the device (`visual-library-db~<sha256(email)[:24 hex]>`); signed out uses the original `visual-library-db`. Before, the next person signing in on a shared browser got (and synced to their Drive) the previous person's library.
+- On an account's first sign-in on a device that has a signed-out library, the app asks whether to move those cards into the account (moved, not copied). Sign-out returns to the signed-out library; "Sign out and remove from this device" deletes that account's local copy (Drive keeps it).
+- `cardDb` is a live binding swapped by `switchLibrary` (no page reload, so the in-memory Google token survives); a running sync finishes before a switch. Tests: `lib/libraries.test.ts`.
+- Live site: `/api/config` still returned empty Google values after the deploy of a8a1d70; the owner re-added the Pages secrets (they apply from the next deployment).

@@ -198,13 +198,20 @@ function App() {
   // Google account + Drive sync. When Drive brings changes, the library re-reads them.
   // Bumped when Drive brought changes, so an open canvas reloads what another device saved.
   const [pulledVersion, setPulledVersion] = useState(0);
+  const selectedCollectionIdRef = useRef<string | null>(null);
+  const navigateHomeRef = useRef<() => void>(() => {});
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 1200));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const handle = idle(preloadViews);
     return () => cancel(handle);
   }, []);
-  const drive = useDriveSync((nextCards, nextCollections) => { setCards(nextCards); setCollections(nextCollections); setPulledVersion(version => version + 1); }, () => ({
+  const drive = useDriveSync((nextCards, nextCollections) => {
+    setCards(nextCards); setCollections(nextCollections); setPulledVersion(version => version + 1);
+    // After an account switch the open collection or canvas may not exist in the new library.
+    const openId = selectedCollectionIdRef.current;
+    if (openId && !nextCollections.some(collection => collection.id === openId)) navigateHomeRef.current();
+  }, () => ({
     name: displayProfileName === 'My Library' ? '' : displayProfileName, photo: profilePhoto || undefined,
     tag: displayProfileTag || undefined, bio: profileBio || undefined, color: profileCardColor, cover: profileCover || undefined,
   }));
@@ -609,6 +616,8 @@ function App() {
     setCollectionMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
+  selectedCollectionIdRef.current = activeView === 'canvas' ? selectedCanvasId : selectedCollectionId;
+  navigateHomeRef.current = () => navigateTo('home');
   // Typing on Home jumps to All cards; emptying that search goes back to where it started.
   const changeSearch = (value: string) => {
     if (isHome && value.trim()) { navigateTo('library'); searchReturn.current = true; }

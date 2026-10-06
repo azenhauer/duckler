@@ -17,8 +17,8 @@ class VisualLibraryDatabase extends Dexie {
   /** Deleted cards and collections, so Drive sync can delete them on other devices too. */
   tombstones!: Table<Tombstone, string>;
 
-  constructor() {
-    super('visual-library-db');
+  constructor(name = 'visual-library-db') {
+    super(name);
     this.version(2).stores({
       cards: '&id, type, trashed, createdAt, updatedAt, searchText',
       collections: '&id, name, createdAt, updatedAt',
@@ -30,7 +30,19 @@ class VisualLibraryDatabase extends Dexie {
   }
 }
 
-export const cardDb = new VisualLibraryDatabase();
+/**
+ * One library per Google account on this device, plus the signed-out library. Without this, the
+ * next person to sign in on a shared browser would get (and sync to their Drive) the previous
+ * person's cards. Database names use a hash of the account, never the email itself.
+ */
+const LIBRARY_KEY = 'duckler-active-library';
+const LOCAL_DB = 'visual-library-db';
+const databaseName = (library: string) => (library ? `${LOCAL_DB}~${library}` : LOCAL_DB);
+const storedLibrary = () => { try { return localStorage.getItem(LIBRARY_KEY) ?? ''; } catch { return ''; } };
+let activeLibraryKey = storedLibrary();
+
+/** The library on this device: a live binding, replaced when the account changes (see switchLibrary). */
+export let cardDb = new VisualLibraryDatabase(databaseName(activeLibraryKey));
 
 /** Fired (debounced) after the library changes on this device, so Drive sync can follow. Sync's own writes are silent. */
 export const LIBRARY_CHANGED_EVENT = 'duckler-library-changed';
@@ -41,18 +53,77 @@ const changed = () => {
   clearTimeout(changeTimer);
   changeTimer = setTimeout(() => window.dispatchEvent(new Event(LIBRARY_CHANGED_EVENT)), 50);
 };
-for (const table of [cardDb.cards, cardDb.collections]) {
-  table.hook('creating', () => { changed(); });
-  table.hook('updating', (modifications: object) => {
-    // Saving a grid thumbnail is a local cache, not an edit.
-    if (!(Object.keys(modifications).length === 1 && 'thumb' in modifications)) changed();
-  });
-  table.hook('deleting', () => { changed(); });
+function watchChanges(db: VisualLibraryDatabase) {
+  for (const table of [db.cards, db.collections]) {
+    table.hook('creating', () => { changed(); });
+    table.hook('updating', (modifications: object) => {
+      // Saving a grid thumbnail is a local cache, not an edit.
+      if (!(Object.keys(modifications).length === 1 && 'thumb' in modifications)) changed();
+    });
+    table.hook('deleting', () => { changed(); });
+  }
+  // Every canvas edit rewrites its document (revision, updatedAt), so watching that table is enough.
+  // Opening a canvas re-saves an unchanged document, which is not an edit.
+  db.canvases.hook('creating', () => { changed(); });
+  db.canvases.hook('updating', (modifications: object) => { if (Object.keys(modifications).length) changed(); });
 }
-// Every canvas edit rewrites its document (revision, updatedAt), so watching that table is enough.
-// Opening a canvas re-saves an unchanged document, which is not an edit.
-cardDb.canvases.hook('creating', () => { changed(); });
-cardDb.canvases.hook('updating', (modifications: object) => { if (Object.keys(modifications).length) changed(); });
+watchChanges(cardDb);
+
+/** A short, stable key for an account (SHA-256 of the lower-cased email). */
+export async function libraryKeyFor(email: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email.trim().toLowerCase())));
+  return Array.from(digest.slice(0, 12), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+export const activeLibrary = () => activeLibraryKey;
+
+const LIBRARY_TABLES = ['cards', 'collections', 'tombstones', 'canvases', 'canvasPlacements', 'canvasElements', 'canvasConnectors', 'canvasLayouts', 'extensionReceipts'] as const;
+const hasContent = async (db: VisualLibraryDatabase) => (await db.cards.count()) + (await db.collections.count()) > 0;
+
+/** Cards and collections in the signed-out library of this device (offered to an account on its first sign-in). */
+export async function localLibrarySize(): Promise<number> {
+  const local = activeLibraryKey ? new VisualLibraryDatabase(LOCAL_DB) : cardDb;
+  try { return (await local.cards.count()) + (await local.collections.count()); } finally { if (local !== cardDb) local.close(); }
+}
+export async function libraryIsEmpty(library: string): Promise<boolean> {
+  if (library === activeLibraryKey) return !(await hasContent(cardDb));
+  if (!(await Dexie.exists(databaseName(library)))) return true;
+  const db = new VisualLibraryDatabase(databaseName(library));
+  try { return !(await hasContent(db)); } finally { db.close(); }
+}
+
+/**
+ * Makes `library` ('' = signed out) the one this device shows. `bringLocal` moves the signed-out
+ * library into it (first sign-in on a device that already had cards); otherwise each library keeps
+ * its own data. `forget` deletes the library being left (signing out on a shared computer).
+ */
+export async function switchLibrary(library: string, options: { bringLocal?: boolean; forget?: boolean } = {}): Promise<void> {
+  if (library === activeLibraryKey && !options.bringLocal) return;
+  const leaving = cardDb, leavingKey = activeLibraryKey;
+  const next = library === leavingKey ? leaving : new VisualLibraryDatabase(databaseName(library));
+  if (options.bringLocal && library) {
+    const local = leavingKey === '' ? leaving : new VisualLibraryDatabase(LOCAL_DB);
+    applyingSync = true; // a move, not an edit; the next sync merges it with Drive
+    try {
+      for (const name of LIBRARY_TABLES) {
+        const rows = await local.table(name).toArray();
+        if (rows.length) await next.table(name).bulkPut(rows);
+      }
+      // Moved, not copied: the next person on this browser does not get them.
+      await local.transaction('rw', LIBRARY_TABLES.map(name => local.table(name)), async () => { for (const name of LIBRARY_TABLES) await local.table(name).clear(); });
+    } finally {
+      applyingSync = false;
+      if (local !== leaving) local.close();
+    }
+  }
+  if (next !== leaving) {
+    watchChanges(next);
+    cardDb = next;
+    activeLibraryKey = library;
+    try { if (library) localStorage.setItem(LIBRARY_KEY, library); else localStorage.removeItem(LIBRARY_KEY); } catch { /* private mode: this session only */ }
+    leaving.close();
+    if (options.forget && leavingKey) await Dexie.delete(databaseName(leavingKey));
+  }
+}
 
 export const readTombstones = () => cardDb.tombstones.toArray();
 

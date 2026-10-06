@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CardRecord, CollectionRecord, ShareOwner } from '@visual-library/shared';
-import { readCards, readCollections, LIBRARY_CHANGED_EVENT } from './cardDb';
+import { activeLibrary, libraryIsEmpty, libraryKeyFor, localLibrarySize, readCards, readCollections, switchLibrary, LIBRARY_CHANGED_EVENT } from './cardDb';
 import { DriveAuthError, driveClient, findOrCreateRoot, readLibraryFile, syncLibrary, type DriveClient } from './driveSync';
 import { isGoogleDriveConfigured, loadGoogleIdentityScript, requestGoogleToken, revokeGoogleToken, type GoogleToken } from './googleDrive';
 import { loadGoogleConfig } from './googleConfig';
@@ -29,7 +29,8 @@ export type DriveSync = {
   lastSyncedAt: number | null;
   shares: Map<string, { share: ShareRecord; url: string }>;
   signIn: () => Promise<void>;
-  signOut: () => void;
+  /** `forget` also removes this account's library from the device (shared computers). */
+  signOut: (forget?: boolean) => Promise<void>;
   syncNow: () => Promise<void>;
   share: (collection: CollectionRecord) => Promise<string>;
   unshare: (collectionId: string) => Promise<void>;
@@ -122,19 +123,36 @@ export function useDriveSync(onPulled: (cards: CardRecord[], collections: Collec
       const drive = driveClient(next.accessToken);
       const about = await drive.about();
       const signedIn = { email: about.user?.emailAddress ?? '', name: about.user?.displayName ?? '' };
-      setAccount(signedIn); writeAccount(signedIn);
+      if (!signedIn.email) throw new Error('Google did not say which account this is. Try signing in again.');
       const rootId = await findOrCreateRoot(drive);
       endSession();
+      await running.current?.catch(() => {}); // a sync of the previous library must finish before the switch
+      // Each account has its own library on this device. On an account's first sign-in here, the
+      // signed-out library can move into it (the cards made before signing in).
+      const library = await libraryKeyFor(signedIn.email);
+      if (library !== activeLibrary()) {
+        const waiting = activeLibrary() === '' && await libraryIsEmpty(library) ? await localLibrarySize() : 0;
+        const bringLocal = waiting > 0 && window.confirm(`Add the ${waiting} card${waiting === 1 ? '' : 's'} and collections on this device to ${signedIn.email}? They will sync to this account's Drive. Choose Cancel to keep them on this device only.`);
+        await switchLibrary(library, { bringLocal });
+        const [cards, collections] = await Promise.all([readCards(), readCollections()]);
+        pulled.current(cards, collections);
+      }
+      setAccount(signedIn); writeAccount(signedIn);
       session.current = { drive, rootId };
       setToken(next);
       await runSync();
     } catch (error) { fail(error); throw error; }
   }, [account, endSession, fail, runSync]);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async (forget = false) => {
     if (token) revokeGoogleToken(token.accessToken);
     endSession(); setToken(null); setAccount(null); writeAccount(null);
     setShares(new Map()); setStatus(configured ? 'signed-out' : 'off'); setMessage(''); setLastSyncedAt(null);
+    // Back to this device's signed-out library; the account's library stays (or is removed) here.
+    await running.current?.catch(() => {});
+    await switchLibrary('', { forget });
+    const [cards, collections] = await Promise.all([readCards(), readCollections()]);
+    pulled.current(cards, collections);
   }, [configured, endSession, token]);
 
   const share = useCallback(async (collection: CollectionRecord) => {
