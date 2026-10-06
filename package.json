@@ -36,9 +36,9 @@
     "@types/node": "^20.14.12",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.5.0",
-    "@typescript-eslint/parser": "^7.5.0",
-    "esbuild": "^0.24.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.1",
+    "@typescript-eslint/parser": "^8.71.1",
+    "esbuild": "^0.28.2",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-react": "^7.0.0",
@@ -47,8 +47,8 @@
     "jsdom": "^24.1.0",
     "prettier": "^3.3.3",
     "typescript": "^5.4.7",
-    "vite": "^5.4.1",
-    "vitest": "^2.0.5"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=20"

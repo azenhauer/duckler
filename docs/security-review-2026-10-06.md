@@ -49,9 +49,7 @@ public build output. The fixes listed here were made in this pass.
 - **Production dependencies:** `npm audit --omit=dev` reports 0 vulnerabilities.
 
 ## Open (owner decisions or larger work)
-- **Dev-only advisories (14):** `vite`, `vitest`, `esbuild`, `@typescript-eslint`. They affect only local
-  tooling; the fixes are major-version upgrades (Vite 8, Vitest 5, typescript-eslint 8) and need a
-  dedicated upgrade pass.
+- **Dev-only advisories:** fixed October 7, 2026 (vite 7, vitest 4, esbuild 0.28, typescript-eslint 8, @vitejs/plugin-react 5); `npm audit` reports 0 vulnerabilities.
 - **Google app verification:** until published, only test users can sign in (by design for now).
 - **Google values are Cloudflare secrets** (`GOOGLE_CLIENT_ID`, `GOOGLE_API_KEY`), served at runtime by
   `/api/config` (format-checked, nothing else returned). They are not in `wrangler.jsonc` or the repository.
