@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCardFromInput, createCollectionFromInput, defaultCanvasStyle, parseDriveLibrary, type CardRecord } from '@visual-library/shared';
 import { cardDb, commitCanvasContent, deleteCollection, readCanvasState, removeCard, saveCard, saveCollection } from './cardDb';
-import { driveClient, findOrCreateRoot, syncLibrary } from './driveSync';
+import { driveClient, findOrCreateRoot, importDriveCaptures, syncLibrary } from './driveSync';
 import { refreshShares } from './shareLinks';
 import { listShares, loadSharedCollection, shareCollection, stopSharing } from './shareLinks';
 
@@ -58,7 +58,7 @@ function fakeDrive() {
 
 const image = 'data:image/png;base64,' + Buffer.from('a picture').toString('base64');
 const library = async (files: ReturnType<typeof fakeDrive>['files']) => parseDriveLibrary(await [...files.values()].find(file => file.appProperties.kind === 'library')!.body.text());
-const wipeDevice = async () => { for (const table of [cardDb.cards, cardDb.collections, cardDb.tombstones, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors, cardDb.canvasLayouts]) await table.clear(); };
+const wipeDevice = async () => { for (const table of [cardDb.cards, cardDb.collections, cardDb.tombstones, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors, cardDb.canvasLayouts, cardDb.extensionReceipts]) await table.clear(); };
 
 beforeEach(async () => { await wipeDevice(); });
 
@@ -212,6 +212,26 @@ describe('Drive sync against a fake Drive', () => {
     await syncLibrary(drive, rootId);
     expect(await cardDb.canvases.get(board.id)).toBeUndefined();
     expect(await cardDb.canvasElements.get('label')).toBeUndefined();
+  });
+
+  it('imports captures the extension sent to the account, once, and drops invalid ones', async () => {
+    const { files, fetcher } = fakeDrive();
+    const drive = driveClient('token', fetcher as typeof fetch);
+    const rootId = await findOrCreateRoot(drive);
+    const capture = { id: 'cap-1', kind: 'bookmark', title: 'Read later', sourceUrl: 'https://example.com/post', note: 'From the extension', createdAt: '2026-10-07T10:00:00.000Z' };
+    const put = (body: unknown, id: string) => drive.create({ name: `capture-${id}.json`, parents: [rootId], appProperties: { kind: 'capture', capture: id } }, new Blob([JSON.stringify(body)], { type: 'application/json' }));
+    await put(capture, 'cap-1');
+    await put({ ...capture, id: 'cap-2', sourceUrl: 'javascript:alert(1)' }, 'cap-2'); // fails validation
+    expect(await importDriveCaptures(drive, rootId)).toBe(1);
+    const cards = await cardDb.cards.toArray();
+    expect(cards.map(card => card.title)).toEqual(['Read later']);
+    expect(cards[0].sourceUrl).toBe('https://example.com/post');
+    expect([...files.values()].filter(file => file.appProperties.kind === 'capture')).toHaveLength(0); // both removed
+
+    // The same capture arriving again (e.g. a retry) does not make a second card.
+    await put(capture, 'cap-1');
+    expect(await importDriveCaptures(drive, rootId)).toBe(0);
+    expect(await cardDb.cards.count()).toBe(1);
   });
 
   it('encodes file ids in request paths', async () => {

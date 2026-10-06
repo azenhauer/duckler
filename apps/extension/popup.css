@@ -213,3 +213,7 @@ html.capture-popup,.capture-popup body,.capture-popup main { transition:none!imp
 .card-colour.is-default { background:linear-gradient(135deg,transparent 46%,#ff4b4b 46%,#ff4b4b 54%,transparent 54%),#14181c; }
 .card-colour[aria-pressed='true'] { outline:2px solid #f2d33d; outline-offset:1px; }
 .card-colour-field { display:flex; align-items:center; gap:8px; margin:0 0 6px; } .card-colour-field .note-label { margin:0; flex:none; } .card-colours { gap:4px; } .card-colour { width:18px; height:18px; }
+
+.account-section { display: grid; gap: 10px; margin: 6px 0 22px; padding-bottom: 20px; border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
+.account-section h1 { margin: 0; }
+#account-who { margin: 0; font-weight: 600; }

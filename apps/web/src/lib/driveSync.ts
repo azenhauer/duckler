@@ -1,6 +1,6 @@
 import { emptyDriveLibrary, mediaFingerprint, mergeLibraries, parseDriveLibrary, toDriveLibrary, type CardRecord, type DriveLibrary, type MediaRef } from '@visual-library/shared';
-import { bytesToBase64 } from '../../../../packages/shared/src/captureProtocol';
-import { applySyncedLibrary, cardDb, readCollections, readSyncCanvases, readTombstones } from './cardDb';
+import { bytesToBase64, hashBytes, MAX_CAPTURE_BYTES } from '../../../../packages/shared/src/captureProtocol';
+import { applySyncedLibrary, cardDb, importExtensionBytes, readCollections, readSyncCanvases, readTombstones } from './cardDb';
 
 /**
  * Drive sync for the signed-in owner. Everything lives in a `Duckler` folder in their own Drive
@@ -158,6 +158,31 @@ export async function syncLibrary(drive: DriveClient, rootId: string, options: S
     return { received: writes.size + merged.collectionsToWrite.length + merged.canvasesToWrite.length, sent: merged.uploads.length + (merged.remoteChanged ? 1 : 0), deleted: merged.cardsToDelete.length + merged.collectionsToDelete.length + merged.canvasesToDelete.length, library: stored, version, skipped: false };
   }
   throw new Error('Another device kept changing the library. Sync will try again shortly.');
+}
+
+/**
+ * Captures the browser extension put in this account's Drive (account delivery, see the extension's
+ * account.ts). Each goes through the same checks as a paired capture (size, hash, strict schema), becomes
+ * a card, and is removed from Drive. One that can never be imported is removed too; a storage error
+ * leaves it for the next sync.
+ */
+export async function importDriveCaptures(drive: DriveClient, rootId: string, limit = 50): Promise<number> {
+  let imported = 0;
+  for (const file of (await drive.byProperty(rootId, 'kind', 'capture')).slice(0, limit)) {
+    let bytes: Uint8Array;
+    try { bytes = new Uint8Array(await (await drive.blob(file.id)).arrayBuffer()); }
+    catch (error) { if (error instanceof DriveAuthError) throw error; continue; }
+    if (bytes.length <= MAX_CAPTURE_BYTES) {
+      try {
+        const { duplicate } = await importExtensionBytes(bytes, { id: file.appProperties?.capture ?? '', hash: await hashBytes(bytes), libraryId: 'google-account' });
+        if (!duplicate) imported++;
+      } catch (error) {
+        if (error instanceof Error && /Dexie|Database|Quota|Abort|Transaction/i.test(error.name)) continue; // try again next sync
+      }
+    }
+    await drive.remove(file.id);
+  }
+  return imported;
 }
 
 /** Image files library.json does not point to, old enough not to be another device's upload in progress. */

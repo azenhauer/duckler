@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CardRecord, CollectionRecord, ShareOwner } from '@visual-library/shared';
 import { activeLibrary, libraryIsEmpty, libraryKeyFor, localLibrarySize, readCards, readCollections, switchLibrary, LIBRARY_CHANGED_EVENT } from './cardDb';
-import { DriveAuthError, driveClient, findOrCreateRoot, readLibraryFile, syncLibrary, type DriveClient } from './driveSync';
+import { DriveAuthError, driveClient, findOrCreateRoot, importDriveCaptures, readLibraryFile, syncLibrary, type DriveClient } from './driveSync';
 import { isGoogleDriveConfigured, loadGoogleIdentityScript, requestGoogleToken, revokeGoogleToken, type GoogleToken } from './googleDrive';
 import { loadGoogleConfig } from './googleConfig';
 import { listShares, refreshShares, shareCollection, shareUrl, stopSharing, type ShareRecord } from './shareLinks';
@@ -92,6 +92,14 @@ export function useDriveSync(onPulled: (cards: CardRecord[], collections: Collec
           });
           if (stale()) { again.current = true; continue; } // a new session takes over this loop
           swept.current = true;
+          // Captures sent by the extension to this account arrive without library.json changing, so every run looks.
+          const captured = await importDriveCaptures(current.drive, current.rootId);
+          if (stale()) { again.current = true; continue; }
+          if (captured) {
+            localChanged.current = true; again.current = true; // the new cards sync up on the next pass
+            const [cards, collections] = await Promise.all([readCards(), readCollections()]);
+            pulled.current(cards, collections);
+          }
           if (!summary.skipped) {
             known.current = summary.version;
             const keys = summary.library.shareKeys;

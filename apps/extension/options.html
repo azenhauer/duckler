@@ -1,8 +1,15 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Duckler Capture Settings</title><link rel="stylesheet" href="popup.css"></head>
 <body class="settings-page"><main>
 <header class="brand"><span class="extension-mark" role="img" aria-label="Duckler Capture"></span></header>
-<h1>Connect your library</h1><p class="quiet-hint">In the app, open your profile → Settings → Browser extension and copy the setup code here.</p>
 <p id="status" role="status" aria-live="polite"></p>
+<section id="account-section" class="account-section" aria-labelledby="account-title">
+<h1 id="account-title">Where captures go</h1>
+<p id="account-summary" class="quiet-hint">Sign in with the Google account you use in Duckler, and captures go to that account’s library on every device. Or connect this browser’s library with a setup code below (works without Google).</p>
+<p id="account-who" hidden></p>
+<button id="account-sign-in" type="button" class="save-button">Sign in with Google</button>
+<button id="account-sign-out" type="button" class="subtle-button" hidden>Sign out · use the setup code instead</button>
+</section>
+<h2>Connect this browser’s library</h2><p class="quiet-hint">For use without Google: in the app, open your profile → Settings → Browser extension and copy the setup code here.</p>
 <form id="settings-form" novalidate><label for="pairing-code">Library setup code</label><textarea id="pairing-code" rows="5" required placeholder="Paste the code from your library"></textarea><button id="confirm-connection" type="submit" class="save-button">Confirm library connection</button></form>
 <section id="connection-details" hidden><p id="connected-origin"></p><label for="confirmation-code">Confirmation code — paste this back in your library</label><textarea id="confirmation-code" rows="5" readonly></textarea><button id="copy-confirmation" class="subtle-button">Copy confirmation code</button></section>
 <p id="queue-summary" class="quiet-hint"></p><button id="open-library" class="subtle-button">Open library ↗</button>

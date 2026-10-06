@@ -294,7 +294,7 @@ async function saveCapture(send = false) {
       tags: $('#tags').value.split(',').map(tag => tag.trim()).filter(Boolean) } });
     showStatus('Queued on this device. Ready for your library.');
     if (send) {
-      try { await request({ type: 'deliver-capture' }); showStatus('Saved · sending to your library.'); }
+      try { const sent = await request({ type: 'deliver-capture' }); showStatus(sent.via === 'account' ? 'Saved · sent to your Google account’s library.' : 'Saved · sending to your library.'); }
       catch { showStatus('Saved locally. Open your library to finish sending.', true); }
     }
     $('#save-page').textContent = 'Saved ✓'; await renderQueue();
@@ -357,5 +357,7 @@ chrome.tabs.onActivated?.addListener(() => { if (!saving) ready = initializeSafe
 chrome.tabs.onUpdated?.addListener((tabId, change) => { if (tabId === currentTab?.id && change.status === 'complete' && !saving && !shooting) ready = initializeSafely(); });
 window.addEventListener('pagehide', () => { selectionPort?.disconnect(); document.removeEventListener('keydown', saveShortcut); });
 void renderQueue().catch(error => showStatus(error.message, true));
-void request({ type: 'pairing-status' }).then(({ pairing }) => { $('#connection-status').textContent = pairing ? 'Library connected' : 'Connect library'; }).catch(error => showStatus(error.message, true));
+void Promise.all([request({ type: 'pairing-status' }), request({ type: 'account-status' }).catch(() => ({}))]).then(([{ pairing }, { account }]) => {
+  $('#connection-status').textContent = account?.mode === 'account' ? 'Google account' : pairing ? 'Library connected' : 'Connect library';
+}).catch(error => showStatus(error.message, true));
 

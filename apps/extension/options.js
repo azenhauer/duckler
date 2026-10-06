@@ -53,3 +53,27 @@ void request({ type: 'pairing-status' }).then(({ pairing, extensionId }) => { if
 void request({ type: 'list-captures' }).then(({ items }) => {
   $('#queue-summary').textContent = items.length + ' pending captures on this device. Export pending captures before removing the extension or changing your browser profile.';
 }).catch(error => status(errorText(error), true));
+
+// Account delivery: signed in, captures go to the Google account's Drive; signed out, the paired library.
+const showAccount = (account, pending = 0) => {
+  const signedIn = account?.mode === 'account';
+  $('#account-who').hidden = !signedIn;
+  $('#account-who').textContent = signedIn ? `Captures go to ${account.email || 'your Google account'}’s library.${pending ? ` ${pending} waiting to be sent.` : ''}` : '';
+  $('#account-sign-in').textContent = signedIn ? 'Sign in again' : 'Sign in with Google';
+  $('#account-sign-out').hidden = !signedIn;
+};
+$('#account-sign-in').addEventListener('click', async () => {
+  const button = $('#account-sign-in');
+  button.disabled = true; status('Opening Google…');
+  try {
+    const { account, sent } = await request({ type: 'account-sign-in' });
+    showAccount(account);
+    status(sent ? `Signed in. ${sent} waiting capture${sent === 1 ? '' : 's'} sent to your library.` : 'Signed in. New captures go to your account’s library.');
+  } catch (error) { status(errorText(error), true); }
+  finally { button.disabled = false; }
+});
+$('#account-sign-out').addEventListener('click', async () => {
+  try { const { account } = await request({ type: 'account-sign-out' }); showAccount(account); status('Signed out. Captures go to the library connected with a setup code.'); }
+  catch (error) { status(errorText(error), true); }
+});
+void request({ type: 'account-status' }).then(({ account, pending }) => showAccount(account, pending)).catch(() => {});

@@ -2,14 +2,15 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn8CNI7EbKUCogCk2TxVsfvwkEA3eMiymFwpmLUtY4NTUCrJdnTjBZzOIvNUHQuM+6iEzElHA40qX6oSEfYTc70DNgDKcra1fh/kkhGW+IBVPfCnx+NBgy5G5xspxSpo+9cuBOgADjS6gBK6Z+YbxcUKXjrCYaouI6QWMaDuIvsCv8aA3v98Bg+t0NvLamdd98UC7VLnsezUrOPfS7ejXTENh3USsasr9KriQP/oSDwGhI5/M63K7S43sxD62QMXZQvFV8+x1rp1TH27nwEhLbZUx6aqfxdRTaX4jtoGAoxeUx/gODbMMHmKQzt+xUy9kXXqui/It+oSIQTdZym54owIDAQAB",
   "name": "Duckler Capture",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Save pages, notes, images, and screen regions to your Duckler library.",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
     "contextMenus",
-    "sidePanel"
+    "sidePanel",
+    "identity"
   ],
   "side_panel": {
     "default_path": "popup.html"

@@ -44,6 +44,19 @@ Do these steps yourself in your browser (about 15 minutes). Don't paste the valu
 8. For local development, create `apps/web/.env.local` (ignored by git) with
    `VITE_GOOGLE_CLIENT_ID=…` and `VITE_GOOGLE_API_KEY=…` (local dev has no `/api/config`).
 
+## Browser extension: sending captures to your account
+
+The extension can sign in with the same Google account and put captures straight into its Drive (any
+signed-in library imports them on its next sync). Pairing with a setup code keeps working for use
+without Google.
+
+1. In Google Cloud → **Credentials**, open the OAuth client used by the site (Web application).
+2. Under **Authorized redirect URIs**, add the extension's address and save:
+   `https://ncenkiephpbgfedicfpajeifgbmmadbh.chromiumapp.org/`
+   (the extension's ID is fixed by the `key` in its manifest, so this never changes).
+3. In Chrome, reload Duckler Capture (0.5.0 adds the `identity` permission), open its **Settings** and
+   click **Sign in with Google**.
+
 ## Checking it works
 
 1. On duckler.pages.dev, open **Settings → Account & sync → Sign in with Google**. While the app is in

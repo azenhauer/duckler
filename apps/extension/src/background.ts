@@ -5,6 +5,7 @@ import { isAllowedLibraryOrigin } from './origin';
 import { isSettingsSender } from './settingsSender';
 import { screenshotTitle, selectionTitle, type RegionHint } from './naming';
 import { fetchPdf } from './pdf';
+import { deliverToAccount, readAccount, signIn, signOut } from './account';
 
 const queue = new CaptureQueue();
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -39,10 +40,18 @@ const ready = (async () => {
   await badge();
 })();
 
+// In account mode, queued captures go to the account's Drive whenever a token is available without a click.
+const sendToAccount = async (interactive = false) => {
+  if ((await readAccount()).mode !== 'account') return 0;
+  const sent = await deliverToAccount(queue, interactive);
+  await badge();
+  return sent;
+};
 const save = async (capture: Record<string, unknown>) => {
   await ready;
   const item = await queue.enqueue({ ...capture, id: capture.id ?? crypto.randomUUID(), createdAt: capture.createdAt ?? new Date().toISOString() });
   await notify();
+  void sendToAccount().catch(() => badge()); // stays queued (offline, or Google needs a click)
   return item;
 };
 const openLibrary = async (background = false) => {
@@ -163,7 +172,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { items: rows.map(row => ({ ...JSON.parse(new TextDecoder().decode(row.bytes)), byteLength: row.byteLength })), budget: MAX_QUEUE_BYTES };
       }
       case 'delete-capture': await queue.captures.delete(message.id); await notify(); return {};
-      case 'deliver-capture': await openLibrary(true); return {};
+      case 'deliver-capture': {
+        if ((await readAccount()).mode === 'account') return { sent: await sendToAccount(true), via: 'account' };
+        await openLibrary(true); return {};
+      }
+      case 'account-status': return { account: await readAccount(), pending: await queue.captures.count() };
+      case 'account-sign-in': {
+        if (!isSettingsSender(sender, chrome.runtime.id, chrome.runtime.getURL('options.html'))) throw new Error('Sign in from extension settings.');
+        const account = await signIn();
+        return { account, sent: await sendToAccount(true) };
+      }
+      case 'account-sign-out': {
+        if (!isSettingsSender(sender, chrome.runtime.id, chrome.runtime.getURL('options.html'))) throw new Error('Sign out from extension settings.');
+        return { account: await signOut() };
+      }
       case 'open-library': await openLibrary(); return {};
       case 'crop-region': return { capture: await captureRegion(sender, message) };
       case 'suggest-title': return { title: screenshotTitle(message.hint as RegionHint | undefined, typeof message.fallback === 'string' ? message.fallback : '') };
