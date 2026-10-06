@@ -17,6 +17,16 @@ export function rankCollections(collections: CollectionRecord[], query: string):
     .map(item => item.collection);
 }
 
+// Collections used lately (ticked, created or opened from a picker), newest first, kept on this device.
+const RECENT_KEY = 'duckler-recent-collections';
+const RECENT_MAX = 5;
+const readRecent = (): string[] => {
+  try { const value: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]'); return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string').slice(0, RECENT_MAX) : []; } catch { return []; }
+};
+export const rememberCollection = (id: string) => {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...readRecent().filter(item => item !== id)].slice(0, RECENT_MAX))); } catch { /* private mode */ }
+};
+
 /** Duplicate display names get an item count so IDs, not names, stay visible to the user. */
 export function collectionLabel(collection: CollectionRecord, all: CollectionRecord[]): string {
   const duplicates = all.filter(item => item.name.trim().toLocaleLowerCase() === collection.name.trim().toLocaleLowerCase()).length > 1;
@@ -48,7 +58,12 @@ export function CollectionPickerPopover({ autoFocus = true, collections, selecte
   const setPanel = useCallback((node: HTMLDivElement | null) => { panelRef.current = node; exitRef(node); }, [exitRef]);
   const searchRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
-  const visible = useMemo(() => rankCollections(collections, query), [collections, query]);
+  // Without a search, recently used collections come first. The order is fixed when the picker opens,
+  // so rows do not jump while they are ticked.
+  const [recentIds] = useState(readRecent);
+  const recent = useMemo(() => recentIds.map(id => collections.find(item => item.id === id)).filter((item): item is CollectionRecord => Boolean(item)), [recentIds, collections]);
+  const visible = useMemo(() => query.trim() ? rankCollections(collections, query) : [...recent, ...collections.filter(item => !recent.includes(item))], [collections, query, recent]);
+  const showRecentLabel = !query.trim() && recent.length > 0 && collections.length > recent.length;
 
   useLayoutEffect(() => {
     const place = () => {
@@ -79,6 +94,7 @@ export function CollectionPickerPopover({ autoFocus = true, collections, selecte
     return () => document.removeEventListener('pointerdown', outside, true);
   }, [anchor, onClose]);
 
+  const toggle = (collectionId: string, included: boolean) => { if (included) rememberCollection(collectionId); onToggle(collectionId, included); };
   const close = () => { onClose(); (anchor.matches('button') ? anchor : anchor.querySelector<HTMLElement>('button'))?.focus(); };
   const moveFocus = (event: React.KeyboardEvent) => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
@@ -111,19 +127,20 @@ export function CollectionPickerPopover({ autoFocus = true, collections, selecte
     <div className="collection-picker-list" role="group" aria-label="Collections">
       {collections.length === 0 && <p className="collection-picker-empty">No collections yet</p>}
       {collections.length > 0 && visible.length === 0 && <p className="collection-picker-empty">No collections match “{query.trim()}”</p>}
-      {visible.map(collection => {
+      {visible.map((collection, index) => {
         const checked = selectedIds.includes(collection.id);
+        const heading = showRecentLabel && (index === 0 ? 'Recent' : index === recent.length ? 'All collections' : '');
         const partial = !checked && partialIds.includes(collection.id);
         const name = collectionLabel(collection, collections);
-        return <div key={collection.id} className="collection-picker-row" data-checked={checked || undefined} data-partial={partial || undefined}>
+        return <div key={collection.id} className="collection-picker-row" data-checked={checked || undefined} data-partial={partial || undefined} data-heading={heading || undefined}>
           <label>
-            <input type="checkbox" checked={checked} ref={box => { if (box) box.indeterminate = partial; }} onChange={() => onToggle(collection.id, !checked)}
-              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); onToggle(collection.id, !checked); } }} />
+            <input type="checkbox" checked={checked} ref={box => { if (box) box.indeterminate = partial; }} onChange={() => toggle(collection.id, !checked)}
+              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); toggle(collection.id, !checked); } }} />
             <span className="collection-picker-check" aria-hidden="true" />
             <span className="collection-picker-name">{name}</span>
           </label>
           {onOpenCollection && <button type="button" className="collection-picker-open" aria-label={`Open collection ${collection.name}`} title="Open collection"
-            onClick={() => { onClose(); onOpenCollection(collection.id); }}>Open<span aria-hidden="true"> ›</span></button>}
+            onClick={() => { rememberCollection(collection.id); onClose(); onOpenCollection(collection.id); }}>Open<span aria-hidden="true"> ›</span></button>}
         </div>;
       })}
     </div>

@@ -165,7 +165,12 @@ function App() {
       setSelectedId(null);
       setSelectedCardIds([]);
       setCollectionMenuOpen(false);
+      // Back/Forward return to where the page was scrolled (saved on the entry when leaving it).
+      const scrollY = typeof event.state?.scrollY === 'number' ? event.state.scrollY : 0;
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' })));
     };
+    // The app restores scroll itself, after the view has rendered.
+    try { window.history.scrollRestoration = 'manual'; } catch { /* unsupported */ }
     window.addEventListener('popstate', restore);
     return () => window.removeEventListener('popstate', restore);
   }, []);
@@ -611,7 +616,10 @@ function App() {
     // Mirror in-app navigation into browser history so Back/Forward move between collections.
     if (changed) {
       const entry: NavigationEntry = { view, collectionId: view === 'library' ? collectionId : null, canvasId: view === 'canvas' ? collectionId : null };
-      try { window.history.pushState({ ...(window.history.state ?? {}), duckler: entry }, ''); } catch { /* History is optional. */ }
+      try {
+        window.history.replaceState({ ...(window.history.state ?? {}), scrollY: window.scrollY }, ''); // where this page was
+        window.history.pushState({ ...(window.history.state ?? {}), scrollY: 0, duckler: entry }, '');
+      } catch { /* History is optional. */ }
     }
     setActiveView(view);
     setSelectedCollectionId(view === 'library' ? collectionId : null);

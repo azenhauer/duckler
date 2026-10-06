@@ -402,3 +402,11 @@ What changed (no feature or visual change intended):
 - On an account's first sign-in on a device that has a signed-out library, the app asks whether to move those cards into the account (moved, not copied). Sign-out returns to the signed-out library; "Sign out and remove from this device" deletes that account's local copy (Drive keeps it).
 - `cardDb` is a live binding swapped by `switchLibrary` (no page reload, so the in-memory Google token survives); a running sync finishes before a switch. Tests: `lib/libraries.test.ts`.
 - Live site: `/api/config` still returned empty Google values after the deploy of a8a1d70; the owner re-added the Pages secrets (they apply from the next deployment).
+
+## Quality of life — October 6–7, 2026 (overnight)
+- Card deletes no longer ask for confirmation: cards go at once and an Undo stays 7 s (one Undo for a multi-card Delete). Undo (`restoreCards`) puts them back with a new updatedAt (newer than the deletion, so Drive sync restores them everywhere even if the deletion already spread), removes the local tombstones and returns them to the collections that still exist. Collection deletion keeps its confirmation.
+- Keyboard shortcuts: `/` search, `N` new note, `Ctrl/⌘+A` select every card in view, `?` list (plus the existing Delete, Esc, Enter/Space, Shift+F10). Ignored while typing, with a dialog/menu open, or with Alt.
+- Collection picker: recently used collections (ticked or opened from a picker; up to 5, per device) come first under "Recent"; the order is fixed when the picker opens.
+- Back/Forward restore the scroll position of the page being returned to (saved on its history entry; `history.scrollRestoration = 'manual'`).
+- "Add to collection" under each card shows on the card in use (hover, focus, selected) and always on touch screens; its space is kept.
+- Not done: dragging cards onto collection tiles (cards and tiles never share a screen; external drops onto tiles already work); re-encoding the UI sound WAVs (no audio encoder on this PC).

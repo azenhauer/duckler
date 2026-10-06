@@ -215,6 +215,22 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
   });
 
+  it('lists recently used collections first in the picker', async () => {
+    const research = (await cardDb.collections.toArray()).find(item => item.name === 'Research')!;
+    localStorage.setItem('duckler-recent-collections', JSON.stringify([research.id]));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    const card = await screen.findByRole('article', { name: 'Open Design note' });
+    fireEvent.click(within(card.parentElement!).getByRole('button', { name: 'Collection Inbox' }));
+    const picker = screen.getByRole('dialog', { name: 'Collections for this card' });
+    const rows = picker.querySelectorAll('.collection-picker-row');
+    expect(rows[0]).toHaveTextContent('Research');
+    expect(rows[0]).toHaveAttribute('data-heading', 'Recent');
+    expect(rows[1]).toHaveAttribute('data-heading', 'All collections');
+    fireEvent.click(within(picker).getByRole('checkbox', { name: 'Inbox' })); // unticking is not "using"
+    expect(JSON.parse(localStorage.getItem('duckler-recent-collections')!)).toEqual([research.id]);
+  });
+
   it('has keyboard shortcuts that stay out of the way while typing', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));

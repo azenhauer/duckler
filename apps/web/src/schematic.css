@@ -861,3 +861,15 @@ html:not([data-theme='dark']) .profile-identity-card.has-cover::after { opacity:
 .shortcut-list dt, .shortcut-list dd { margin: 0; }
 .shortcut-list dd { color: var(--ui-text-muted); font-size: .82rem; }
 .shortcut-list kbd { display: inline-block; padding: 3px 7px; border: 1px solid var(--sx-line-soft); border-bottom-width: 2px; border-radius: 3px; color: var(--ui-text); font: 700 .66rem/1.2 var(--sx-label); letter-spacing: .08em; white-space: nowrap; }
+
+/* Picker sections: "Recent" above the collections used lately, "All collections" after them. */
+.collection-picker-row[data-heading] { position: relative; margin-top: 18px; }
+.collection-picker-row[data-heading]:first-child { margin-top: 16px; }
+.collection-picker-row[data-heading]::before { content: attr(data-heading); position: absolute; left: 6px; top: -15px; color: var(--ui-text-muted); font: 700 .56rem/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; }
+
+/* "Add to collection" under every card was the most repeated control in the grid: it shows on the card
+   in use (hover, keyboard focus, selected) and always on touch screens; its space is kept, so nothing moves. */
+@media (hover: hover) {
+  .collection-badge-add { transition: opacity var(--sx-fast) ease-out; }
+  .library-card:not(:hover):not(:focus-within):not(.is-checked) .collection-badge-add:not([aria-expanded='true']) { opacity: 0; }
+}
