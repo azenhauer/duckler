@@ -2646,7 +2646,7 @@ html[data-theme='dark'] .profile-message.error {
 .extension-setup button:not(.close-detail) { border: 1px solid var(--border); color: var(--ink); background: var(--surface-alt); border-radius: 8px; padding: 9px 12px; font-size: .8rem; }
 @media (max-width: 1250px) { .workspace-bar { grid-template-columns: auto minmax(160px, 1fr) auto; gap: 20px; } .workspace-tools .sync-status { display: none; } }
 @media (max-width: 850px) { .workspace-bar { gap: 12px; padding: 12px 18px; } .workspace-tools .connect-browser-button { display: none; } .content { padding: 30px 22px 120px; } }
-@media (max-width: 560px) { .workspace-bar { grid-template-columns: auto minmax(100px, 1fr) auto; gap: 10px; padding: 12px; } .brand-name { display: none; } .workspace-tools .drive-action { display: none; } .library-count { display: none; } .library-grid, .library-grid.card-size-compact { columns: 1; } .reader-backdrop { padding: 12px; } .app-settings, .extension-setup { padding: 26px 22px; } .card-reader .detail-panel { padding: 20px; } }
+@media (max-width: 560px) { .workspace-bar { grid-template-columns: auto minmax(100px, 1fr) auto; gap: 10px; padding: 12px; } .brand-name { display: none; } .workspace-tools .drive-action { display: none; } .library-count { display: none; } .library-grid, .library-grid.card-size-compact { columns: 1; } .reader-backdrop { padding: 12px; } .app-settings, .extension-setup { box-sizing: border-box; width: 100%; padding: 26px 22px; } .card-reader .detail-panel { padding: 20px; } }
 @media (hover: none) { .tile-header input { opacity: 1; } }
 .settings-profile-card { display:flex; flex-direction:column; align-items:flex-start; padding:24px; border-radius:12px; background:var(--surface-alt); }
 .settings-avatar { width:76px; height:76px; border-radius:16px; font-size:1.8rem; }
@@ -2886,7 +2886,7 @@ button, .library-options > summary { transition:background-color 160ms ease,colo
   .bottom-dock .dock-home { flex: 0 0 40px; }
   .bottom-dock .profile-menu { margin-left: 2px; padding-left: 4px; }
   .bottom-dock .profile-trigger { width: 40px; height: 58px; }
-  .bottom-dock .profile-popover { width: 100%; }
+  .bottom-dock .profile-popover { position: fixed; left: auto; right: 12px; bottom: calc(78px + max(12px, env(safe-area-inset-bottom) + 8px)); width: min(290px, calc(100vw - 24px)); max-width: calc(100vw - 24px); transform: none; }
   .bottom-dock .profile-avatar { width: 34px; height: 34px; border-radius: 11px; }
   .bottom-dock .profile-avatar-large { width: 64px; height: 64px; }
   .dock-home .duckler-mark { width: 29px; height: 28px; }
@@ -2897,7 +2897,7 @@ button, .library-options > summary { transition:background-color 160ms ease,colo
   .bookmark-card-preview { padding: 23px 21px; }
   .card-body { padding: 13px 20px 16px; }
   .collection-menu, .library-options { position: static; }
-  .collection-menu-popover, .library-options-popover { position: absolute; left: 50%; right: auto; top: calc(100% + 8px); width: 100%; max-width: none; max-height: calc(100dvh - 300px); transform: translateX(-50%); }
+  .collection-menu-popover, .library-options-popover { position: absolute; left: 12px; right: 12px; top: calc(100% + 8px); width: auto; max-width: calc(100vw - 24px); max-height: calc(100dvh - 300px); transform: none; }
   .reader-backdrop { padding: 12px; }
   .app-settings, .extension-setup { padding: 25px 20px; max-height: calc(100dvh - 24px); }
   .app-settings h2, .extension-setup h2 { padding-right: 22px; }

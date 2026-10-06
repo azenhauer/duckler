@@ -26,20 +26,26 @@ declare global {
 export const getGoogleDriveClientId = (): string => googleConfig().clientId;
 export const isGoogleDriveConfigured = (): boolean => getGoogleDriveClientId().length > 0;
 
-export const loadGoogleIdentityScript = (): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || window.google?.accounts?.oauth2) { resolve(); return; }
-    const existing = document.querySelector<HTMLScriptElement>('script[data-google-drive-script="true"]');
-    const script = existing ?? document.createElement('script');
-    script.addEventListener('load', () => resolve(), { once: true });
-    script.addEventListener('error', () => reject(new Error('Google sign-in could not load. Check your connection and try again.')), { once: true });
-    if (!existing) {
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.dataset.googleDriveScript = 'true';
-      document.head.appendChild(script);
-    }
+// One load per page. A failed load removes its script tag, so the next attempt starts clean instead
+// of waiting forever on a tag whose load event already fired.
+let scriptLoad: Promise<void> | null = null;
+export const loadGoogleIdentityScript = (): Promise<void> => {
+  if (typeof window === 'undefined' || window.google?.accounts?.oauth2) return Promise.resolve();
+  scriptLoad ??= new Promise<void>((resolve, reject) => {
+    document.querySelector('script[data-google-drive-script="true"]')?.remove();
+    const script = document.createElement('script');
+    script.onload = () => { script.onload = script.onerror = null; resolve(); };
+    script.onerror = () => {
+      script.onload = script.onerror = null; script.remove(); scriptLoad = null;
+      reject(new Error('Google sign-in could not load. Check your connection and try again.'));
+    };
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.dataset.googleDriveScript = 'true';
+    document.head.appendChild(script);
   });
+  return scriptLoad;
+};
 
 export type GoogleToken = { accessToken: string; expiresAt: number };
 

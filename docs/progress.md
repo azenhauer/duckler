@@ -332,3 +332,15 @@ The owner asked for Drive integration, account creation and sharing collections 
 - Security pass: see `docs/security-review-2026-10-06.md`. Shared-in items need confirmation; the dead `?ducklerCapture=` import was removed; AI routes return 404; dev server is localhost-only; HSTS added.
 - Note: the uncommitted `wrangler.jsonc` edit (`VITE_GOOGLE_*` under `vars`) must not be committed. Those values belong in the Pages build variables.
 
+
+## Drive sync: wasted work, leaks and hardening — October 6, 2026 (night)
+- Quiet syncs are free: each run remembers library.json's Drive `version`. When neither this device (Dexie change event) nor Drive changed, a run is one listing request. It used to read every card, images included, out of IndexedDB and download library.json every 5 minutes and on every focus.
+- Hidden tabs no longer poll; returning to the tab syncs.
+- Share links: re-publishing now saves `sharedAt` on the Drive file (multipart PATCH). Before, an edited shared collection was re-encrypted and re-uploaded on every sync forever. `refreshShares` returns the updated records.
+- The per-run extra `readLibraryFile` is gone (`syncLibrary` returns the stored library and its version). Cards are read only when Drive brought changes or links exist.
+- Orphan sweep (once per sign-in): image files no card points to, older than 1 h (so another device's in-flight upload is safe), are deleted. These were left behind by interrupted syncs.
+- Sign-out or account switch during a run: the old run stops writing state and the loop picks up the new session.
+- Security: Drive file ids and page tokens are URL-encoded; share-link downloads are capped at `MAX_SHARE_BYTES` while streaming (a link can point at any public file); the stored Google account is validated on read and no longer keeps the photo URL (it was never shown).
+- Leaks: the Google script loader is a single cached promise (a failed load used to leave a dead tag that later calls waited on forever, adding listeners each time); the thumbnail session cache drops entries once the card carries its thumbnail.
+- Checked and fine: listeners/observers/timers in App, pickers, sounds (AudioContext closed on unmount), OCR worker termination, extension bridge.
+- Tests: skip/no-skip, orphan sweep, id encoding, share re-publish once, oversized share link. Note: `apps/extension/src/popup.test.ts` has 4 timing-flaky cases under the full parallel suite (they pass alone).

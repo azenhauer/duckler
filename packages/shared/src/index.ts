@@ -123,7 +123,8 @@ export const normalizeCollectionHierarchy = <T extends Pick<CollectionRecord, 'i
     const parent = byId.get(item.parentId);
     const valid = parent && parent.id !== item.id && !parent.parentId;
     if (valid) return item;
-    const { parentId: _dropped, ...rest } = item;
+    const rest = { ...item };
+    delete rest.parentId;
     return rest as T;
   });
 };
@@ -318,19 +319,11 @@ export const applyRevision = (state: SyncReducerState, revision: SyncRevision): 
   nextState.entities[revision.id] = revision;
 
   const entityKey = getEntityKey(revision.entityType, revision.entityId);
-  const currentHeads = nextState.heads[entityKey] ?? [];
-  const nextHeads = new Set(currentHeads);
-
-  if (currentHeads.length === 0) {
-    nextHeads.add(revision.id);
-  } else if (currentHeads.some((headId) => revision.parentIds.includes(headId))) {
-    for (const headId of currentHeads) {
-      nextHeads.delete(headId);
-    }
-    nextHeads.add(revision.id);
-  } else {
-    nextHeads.add(revision.id);
-  }
+  // Recompute this entity's frontier so delayed ancestors cannot become heads,
+  // and an edit of one branch cannot discard an unrelated concurrent branch.
+  const revisions = Object.values(nextState.entities).filter(item => getEntityKey(item.entityType, item.entityId) === entityKey);
+  const nextHeads = new Set(revisions.map(item => item.id));
+  for (const item of revisions) for (const parentId of item.parentIds) nextHeads.delete(parentId);
 
   const nextHeadList = Array.from(nextHeads).sort((left, right) => {
     const leftRevision = nextState.entities[left];

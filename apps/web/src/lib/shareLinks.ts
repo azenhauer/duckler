@@ -1,4 +1,4 @@
-import { createShareKey, createShareSnapshot, decryptShare, encryptShare, SHARE_KEY_PATTERN, type CardRecord, type CollectionRecord, type SharedCollection, type ShareOwner } from '@visual-library/shared';
+import { createShareKey, createShareSnapshot, decryptShare, encryptShare, MAX_SHARE_BYTES, SHARE_KEY_PATTERN, type CardRecord, type CollectionRecord, type SharedCollection, type ShareOwner } from '@visual-library/shared';
 import { editLibraryFile, type DriveClient } from './driveSync';
 import { googleConfig, loadGoogleConfig } from './googleConfig';
 
@@ -29,7 +29,7 @@ export async function shareCollection(drive: DriveClient, rootId: string, collec
   const existing = (await listShares(drive, rootId)).find(share => share.collectionId === collection.id);
   const known = keys[collection.id];
   if (existing && known) {
-    await drive.update(existing.fileId, await sealed(collection, cards, owner, known));
+    await drive.update(existing.fileId, await sealed(collection, cards, owner, known), { kind: 'share', collection: collection.id, sharedAt });
     return { share: { ...existing, sharedAt }, url: shareUrl(existing.fileId, known), key: known };
   }
   if (existing) await drive.remove(existing.fileId); // its key is lost: start a fresh link
@@ -50,17 +50,45 @@ export async function stopSharing(drive: DriveClient, rootId: string, share: Sha
   });
 }
 
-/** Keeps live links current: re-publishes changed collections and removes links to deleted ones. */
-export async function refreshShares(drive: DriveClient, shares: ShareRecord[], keys: Record<string, string>, collections: CollectionRecord[], cards: CardRecord[], owner: ShareOwner) {
+/**
+ * Keeps live links current: re-publishes changed collections and removes links to deleted ones.
+ * Returns the shares still live, with `sharedAt` moved forward for the ones re-published (it is saved
+ * on the file too, so the next sync does not upload the same snapshot again).
+ */
+export async function refreshShares(drive: DriveClient, shares: ShareRecord[], keys: Record<string, string>, collections: CollectionRecord[], cards: CardRecord[], owner: ShareOwner): Promise<ShareRecord[]> {
   const byId = new Map(collections.map(item => [item.id, item]));
   const cardById = new Map(cards.map(card => [card.id, card]));
+  const live: ShareRecord[] = [];
   for (const share of shares) {
     const collection = byId.get(share.collectionId), key = keys[share.collectionId];
     if (!collection || !key) { await drive.remove(share.fileId); continue; }
     const since = Date.parse(share.sharedAt) || 0;
     const changed = Date.parse(collection.updatedAt) > since || collection.cardIds.some(id => Date.parse(cardById.get(id)?.updatedAt ?? '') > since);
-    if (changed) await drive.update(share.fileId, await sealed(collection, cards, owner, key));
+    if (!changed) { live.push(share); continue; }
+    const sharedAt = new Date().toISOString();
+    await drive.update(share.fileId, await sealed(collection, cards, owner, key), { kind: 'share', collection: share.collectionId, sharedAt });
+    live.push({ ...share, sharedAt });
   }
+  return live;
+}
+
+/** Reads a response body, refusing more than `limit` bytes (a link can point at any public Drive file). */
+async function readCapped(response: Response, limit: number): Promise<Uint8Array> {
+  if (Number(response.headers.get('Content-Length') ?? 0) > limit) throw new Error('This shared collection is too large to open.');
+  if (!response.body) return new Uint8Array(await response.arrayBuffer());
+  const reader = response.body.getReader(), parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > limit) { await reader.cancel().catch(() => {}); throw new Error('This shared collection is too large to open.'); }
+    parts.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const part of parts) { bytes.set(part, offset); offset += part.length; }
+  return bytes;
 }
 
 /** Opens a share link. Works without signing in: a browser API key downloads the public file. */
@@ -71,5 +99,5 @@ export async function loadSharedCollection(fileId: string, key: string, fetcher:
   const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&key=${encodeURIComponent(apiKey)}`);
   if (response.status === 404 || response.status === 403) throw new Error('This link was turned off, or it does not exist.');
   if (!response.ok) throw new Error('This shared collection could not be loaded. Try again in a moment.');
-  return decryptShare(new Uint8Array(await response.arrayBuffer()), key);
+  return decryptShare(await readCapped(response, MAX_SHARE_BYTES), key);
 }

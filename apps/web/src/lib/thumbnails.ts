@@ -59,14 +59,16 @@ const supported = () => typeof createImageBitmap === 'function' && typeof Offscr
  */
 export function useThumbnail(card: CardRecord, source: string | undefined, store: (cardId: string, thumb: CardThumb) => void): string | undefined {
   const of = source ? imageFingerprint(source) : '';
-  const saved = card.thumb?.of === of ? card.thumb : made.get(`${card.id}:${of}`);
+  const key = `${card.id}:${of}`;
+  // Once the card carries its thumbnail, the session copy is dead weight (tens of KB per image).
+  if (card.thumb?.of === of) made.delete(key);
+  const saved = card.thumb?.of === of ? card.thumb : made.get(key);
   const [, rerender] = useState(0);
   const storeRef = useRef(store);
   storeRef.current = store;
   useEffect(() => {
     if (!source || saved || !supported()) return;
     let live = true;
-    const key = `${card.id}:${of}`;
     let job = pending.get(key);
     if (!job) {
       job = shrink(source).then(thumb => { made.set(key, thumb); pending.delete(key); storeRef.current(card.id, thumb); return thumb; });
@@ -74,7 +76,7 @@ export function useThumbnail(card: CardRecord, source: string | undefined, store
     }
     void job.then(() => { if (live) rerender(n => n + 1); });
     return () => { live = false; };
-  }, [card.id, of, source, saved]);
+  }, [card.id, key, source, saved]);
   if (!source) return undefined;
   if (!supported()) return source;
   return saved ? saved.url || source : undefined;

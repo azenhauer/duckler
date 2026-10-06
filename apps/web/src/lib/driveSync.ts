@@ -17,7 +17,7 @@ export class DriveAuthError extends Error {
   constructor() { super('Your Google sign-in expired. Sign in again to keep syncing.'); }
 }
 
-export type DriveFile = { id: string; name?: string; version?: string; appProperties?: Record<string, string> };
+export type DriveFile = { id: string; name?: string; version?: string; createdTime?: string; appProperties?: Record<string, string> };
 
 export function driveClient(token: string, fetcher: typeof fetch = (...args) => fetch(...args)) {
   const call = async (url: string, init: RequestInit = {}) => {
@@ -28,12 +28,14 @@ export function driveClient(token: string, fetcher: typeof fetch = (...args) => 
   };
   const json = async <T>(url: string, init?: RequestInit) => (await (await call(url, init)).json()) as T;
   const quote = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
-  const fields = 'id,name,version,appProperties';
+  const fields = 'id,name,version,createdTime,appProperties';
+  // Ids come from Drive or from library.json; encoding keeps a malformed one from changing the request path.
+  const file = (id: string) => `${API}/files/${encodeURIComponent(id)}`;
   const list = async (q: string) => {
     const files: DriveFile[] = [];
     let pageToken = '';
     do {
-      const page = await json<{ files?: DriveFile[]; nextPageToken?: string }>(`${API}/files?q=${encodeURIComponent(`${q} and trashed = false`)}&spaces=drive&pageSize=1000&fields=nextPageToken,files(${fields})${pageToken ? `&pageToken=${pageToken}` : ''}`);
+      const page = await json<{ files?: DriveFile[]; nextPageToken?: string }>(`${API}/files?q=${encodeURIComponent(`${q} and trashed = false`)}&spaces=drive&pageSize=1000&fields=nextPageToken,files(${fields})${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`);
       files.push(...(page.files ?? []));
       pageToken = page.nextPageToken ?? '';
     } while (pageToken);
@@ -49,19 +51,22 @@ export function driveClient(token: string, fetcher: typeof fetch = (...args) => 
     list,
     /** Files in a folder carrying an app property, e.g. ('kind', 'media'). */
     byProperty: (parentId: string, key: string, value: string) => list(`${quote(parentId)} in parents and appProperties has { key=${quote(key)} and value=${quote(value)} }`),
-    get: (id: string) => json<DriveFile>(`${API}/files/${id}?fields=${fields}`),
+    get: (id: string) => json<DriveFile>(`${file(id)}?fields=${fields}`),
     create: (metadata: { name: string; parents?: string[]; mimeType?: string; appProperties?: Record<string, string> }, body?: Blob) => body
       ? json<DriveFile>(`${UPLOAD}/files?uploadType=multipart&fields=${fields}`, { method: 'POST', body: multipart(metadata, body) })
       : json<DriveFile>(`${API}/files?fields=${fields}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(metadata) }),
-    update: (id: string, body: Blob) => json<DriveFile>(`${UPLOAD}/files/${id}?uploadType=media&fields=${fields}`, { method: 'PATCH', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body }),
-    text: async (id: string) => (await call(`${API}/files/${id}?alt=media`)).text(),
-    blob: async (id: string) => (await call(`${API}/files/${id}?alt=media`)).blob(),
+    /** Replaces a file's content; `appProperties` are changed in the same request. */
+    update: (id: string, body: Blob, appProperties?: Record<string, string>) => appProperties
+      ? json<DriveFile>(`${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=multipart&fields=${fields}`, { method: 'PATCH', body: multipart({ appProperties }, body) })
+      : json<DriveFile>(`${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=media&fields=${fields}`, { method: 'PATCH', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body }),
+    text: async (id: string) => (await call(`${file(id)}?alt=media`)).text(),
+    blob: async (id: string) => (await call(`${file(id)}?alt=media`)).blob(),
     remove: async (id: string) => {
-      try { await call(`${API}/files/${id}`, { method: 'DELETE' }); }
+      try { await call(file(id), { method: 'DELETE' }); }
       catch (error) { if (!(error instanceof Error && / 404\./.test(error.message))) throw error; } // already gone
     },
     /** Anyone with the link can view (used for share links only). */
-    shareWithLink: (id: string) => json(`${API}/files/${id}/permissions?fields=id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) }),
+    shareWithLink: (id: string) => json(`${file(id)}/permissions?fields=id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) }),
     about: () => json<{ user?: { displayName?: string; emailAddress?: string; photoLink?: string } }>(`${API}/about?fields=user(displayName,emailAddress,photoLink)`),
   };
 }
@@ -76,17 +81,36 @@ export async function findOrCreateRoot(drive: DriveClient): Promise<string> {
 const toDataUrl = async (blob: Blob) => `data:${blob.type || 'application/octet-stream'};base64,${bytesToBase64(new Uint8Array(await blob.arrayBuffer()))}`;
 const toBlob = async (dataUrl: string) => (await fetch(dataUrl)).blob();
 
-export type SyncSummary = { received: number; sent: number; deleted: number };
+export type SyncSummary = {
+  received: number; sent: number; deleted: number;
+  /** library.json as it now is on Drive, and its Drive version (the next run can skip when neither side changed). */
+  library: DriveLibrary; version: string;
+  /** True when nothing changed on either side, so nothing was read or written. */
+  skipped: boolean;
+};
+export type SyncOptions = {
+  /** Drive version of library.json after the previous run, and whether this device changed since. */
+  known?: { version: string; localChanged: boolean };
+  /** Also delete image files no card points to (left behind by an interrupted upload). */
+  sweep?: boolean;
+};
+// An image uploaded by another device is unreferenced until that device writes library.json.
+const ORPHAN_AGE_MS = 60 * 60 * 1000;
 
 /**
  * One full sync: read Drive's library, merge it with this device's, move images both ways, apply
  * the result here and write library.json back. If another device wrote library.json meanwhile, the
  * merge is redone against its version (no edit is overwritten).
  */
-export async function syncLibrary(drive: DriveClient, rootId: string): Promise<SyncSummary> {
+export async function syncLibrary(drive: DriveClient, rootId: string, options: SyncOptions = {}): Promise<SyncSummary> {
   const uploaded = new Map<string, MediaRef>(); // reused if the merge has to be redone
   for (let attempt = 0; attempt < 3; attempt++) {
     const [libraryFile] = await drive.byProperty(rootId, 'kind', 'library');
+    // Nothing new here or on Drive: skip reading every image out of IndexedDB and downloading library.json.
+    const known = options.known;
+    if (attempt === 0 && !options.sweep && known && !known.localChanged && libraryFile?.version && libraryFile.version === known.version) {
+      return { received: 0, sent: 0, deleted: 0, library: emptyDriveLibrary(), version: libraryFile.version, skipped: true };
+    }
     const remote = libraryFile ? parseDriveLibrary(await drive.text(libraryFile.id)) : emptyDriveLibrary();
     const local = { cards: await cardDb.cards.toArray(), collections: await readCollections(), tombstones: await readTombstones() };
     const merged = mergeLibraries(local, remote);
@@ -119,19 +143,30 @@ export async function syncLibrary(drive: DriveClient, rootId: string): Promise<S
 
     const cards = [...byId.values()];
     const stored = toDriveLibrary({ ...merged, cards });
+    let version = libraryFile?.version ?? '';
     if (merged.remoteChanged || !libraryFile) {
       // Someone else saved since we read: merge again with their version.
       if (libraryFile && (await drive.get(libraryFile.id)).version !== libraryFile.version) continue;
       const body = new Blob([JSON.stringify(stored)], { type: 'application/json' });
-      if (libraryFile) await drive.update(libraryFile.id, body);
-      else await drive.create({ name: 'library.json', parents: [rootId], appProperties: { kind: 'library' } }, body);
+      const saved = libraryFile ? await drive.update(libraryFile.id, body) : await drive.create({ name: 'library.json', parents: [rootId], appProperties: { kind: 'library' } }, body);
+      version = saved.version ?? '';
     }
     await applySyncedLibrary({ ...merged, cardsToWrite: [...writes.values()] });
     // Images of deleted cards and replaced images go last, once library.json no longer points at them.
     for (const fileId of merged.mediaToDelete) await drive.remove(fileId);
-    return { received: writes.size + merged.collectionsToWrite.length, sent: merged.uploads.length + (merged.remoteChanged ? 1 : 0), deleted: merged.cardsToDelete.length + merged.collectionsToDelete.length };
+    if (options.sweep) await removeOrphanImages(drive, rootId, stored);
+    return { received: writes.size + merged.collectionsToWrite.length, sent: merged.uploads.length + (merged.remoteChanged ? 1 : 0), deleted: merged.cardsToDelete.length + merged.collectionsToDelete.length, library: stored, version, skipped: false };
   }
   throw new Error('Another device kept changing the library. Sync will try again shortly.');
+}
+
+/** Image files library.json does not point to, old enough not to be another device's upload in progress. */
+async function removeOrphanImages(drive: DriveClient, rootId: string, stored: DriveLibrary, now = Date.now()) {
+  const used = new Set(stored.cards.flatMap(card => (card.media ? [card.media.fileId] : [])));
+  for (const file of await drive.byProperty(rootId, 'kind', 'media')) {
+    const age = now - (Date.parse(file.createdTime ?? '') || now);
+    if (!used.has(file.id) && age > ORPHAN_AGE_MS) await drive.remove(file.id);
+  }
 }
 
 /** Reads library.json, changes it and writes it back; redone if another device saved meanwhile. */

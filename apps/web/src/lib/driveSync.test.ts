@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCardFromInput, createCollectionFromInput, parseDriveLibrary, type CardRecord } from '@visual-library/shared';
 import { cardDb, removeCard, saveCard, saveCollection } from './cardDb';
 import { driveClient, findOrCreateRoot, syncLibrary } from './driveSync';
+import { refreshShares } from './shareLinks';
 import { listShares, loadSharedCollection, shareCollection, stopSharing } from './shareLinks';
 
 // The browser API key share links use (normally from /api/config on the deployed site).
@@ -10,12 +11,12 @@ vi.mock('./googleConfig', () => ({ googleConfig: () => ({ clientId: '', apiKey: 
 
 /** A tiny in-memory Google Drive that answers the REST calls Duckler makes. */
 function fakeDrive() {
-  type File = { id: string; name: string; parents: string[]; mimeType?: string; appProperties: Record<string, string>; body: Blob; version: number; anyone: boolean };
+  type File = { id: string; name: string; parents: string[]; mimeType?: string; appProperties: Record<string, string>; body: Blob; version: number; anyone: boolean; createdTime: string };
   const files = new Map<string, File>();
   const hooks: { afterDownload?: (file: File) => void } = {};
   let next = 1;
   const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
-  const meta = (file: File) => ({ id: file.id, name: file.name, version: String(file.version), appProperties: file.appProperties });
+  const meta = (file: File) => ({ id: file.id, name: file.name, version: String(file.version), createdTime: file.createdTime, appProperties: file.appProperties });
   const fetcher = vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? 'GET';
@@ -37,13 +38,17 @@ function fakeDrive() {
       let metadata: Record<string, unknown>, body = new Blob([]);
       if (init.body instanceof FormData) { metadata = JSON.parse(await (init.body.get('metadata') as Blob).text()); body = init.body.get('file') as Blob; }
       else metadata = JSON.parse(String(init.body));
-      const file: File = { id: `file-${next++}`, name: String(metadata.name), parents: (metadata.parents as string[]) ?? [], mimeType: metadata.mimeType as string | undefined, appProperties: (metadata.appProperties as Record<string, string>) ?? {}, body, version: 1, anyone: false };
+      const file: File = { id: `file-${next++}`, name: String(metadata.name), parents: (metadata.parents as string[]) ?? [], mimeType: metadata.mimeType as string | undefined, appProperties: (metadata.appProperties as Record<string, string>) ?? {}, body, version: 1, anyone: false, createdTime: new Date().toISOString() };
       files.set(file.id, file);
       return json(meta(file));
     }
     const file = id ? files.get(id) : undefined;
     if (!file || (!signedIn && !file.anyone)) return json({ error: 'not found' }, 404);
-    if (method === 'PATCH') { file.body = init.body as Blob; file.version++; return json(meta(file)); }
+    if (method === 'PATCH') {
+      if (init.body instanceof FormData) { Object.assign(file.appProperties, JSON.parse(await (init.body.get('metadata') as Blob).text()).appProperties); file.body = init.body.get('file') as Blob; }
+      else file.body = init.body as Blob;
+      file.version++; return json(meta(file));
+    }
     if (method === 'DELETE') { files.delete(file.id); return new Response(null, { status: 204 }); }
     if (url.searchParams.get('alt') === 'media') { const response = new Response(file.body, { status: 200 }); hooks.afterDownload?.(file); return response; }
     return json(meta(file));
@@ -137,6 +142,46 @@ describe('Drive sync against a fake Drive', () => {
     expect(titles).toEqual(['First', 'Mine', 'Theirs']);
     expect((await cardDb.cards.get(theirs.id))?.title).toBe('Theirs');
   });
+
+  it('skips all work when neither side changed, and syncs again after a change on either side', async () => {
+    const { fetcher } = fakeDrive();
+    const drive = driveClient('token', fetcher as typeof fetch);
+    const rootId = await findOrCreateRoot(drive);
+    await saveCard(createCardFromInput({ type: 'text', title: 'One' }));
+    const first = await syncLibrary(drive, rootId);
+    expect(first.skipped).toBe(false);
+
+    fetcher.mockClear();
+    const quiet = await syncLibrary(drive, rootId, { known: { version: first.version, localChanged: false } });
+    expect(quiet.skipped).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1); // one listing, no downloads or writes
+
+    expect((await syncLibrary(drive, rootId, { known: { version: first.version, localChanged: true } })).skipped).toBe(false);
+    expect((await syncLibrary(drive, rootId, { known: { version: 'older', localChanged: false } })).skipped).toBe(false);
+  });
+
+  it('sweeps image files nothing points to, but not fresh uploads from another device', async () => {
+    const { files, fetcher } = fakeDrive();
+    const drive = driveClient('token', fetcher as typeof fetch);
+    const rootId = await findOrCreateRoot(drive);
+    await saveCard(createCardFromInput({ type: 'image', title: 'Kept', dataUrl: image }));
+    await syncLibrary(drive, rootId);
+    const orphan = await drive.create({ name: 'img-lost', parents: [rootId], appProperties: { kind: 'media', card: 'lost' } }, new Blob(['x']));
+    const fresh = await drive.create({ name: 'img-new', parents: [rootId], appProperties: { kind: 'media', card: 'new' } }, new Blob(['y']));
+    files.get(orphan.id)!.createdTime = new Date(Date.now() - 2 * 3600_000).toISOString();
+    await syncLibrary(drive, rootId, { sweep: true });
+    const media = [...files.values()].filter(file => file.appProperties.kind === 'media').map(file => file.id);
+    expect(media).not.toContain(orphan.id);
+    expect(media).toContain(fresh.id);
+    expect(media).toHaveLength(2); // the kept card's image and the fresh upload
+  });
+
+  it('encodes file ids in request paths', async () => {
+    const { fetcher } = fakeDrive();
+    const drive = driveClient('token', fetcher as typeof fetch);
+    await drive.remove('../about?x=1');
+    expect(String(fetcher.mock.calls.at(-1)![0])).toContain('/files/..%2Fabout%3Fx%3D1');
+  });
 });
 
 describe('share links against a fake Drive', () => {
@@ -162,5 +207,31 @@ describe('share links against a fake Drive', () => {
     await stopSharing(drive, rootId, share);
     await expect(loadSharedCollection(share.fileId, key, fetcher as typeof fetch)).rejects.toThrow(/turned off/);
     expect((await library(files)).shareKeys).toEqual({});
+  });
+
+  it('re-publishes a changed collection once, not on every sync', async () => {
+    const { fetcher } = fakeDrive();
+    const drive = driveClient('token', fetcher as typeof fetch);
+    const rootId = await findOrCreateRoot(drive);
+    const note = createCardFromInput({ type: 'text', title: 'Pier' });
+    const collection = createCollectionFromInput({ name: 'Piers', cardIds: [note.id] });
+    const { key } = await shareCollection(drive, rootId, collection, [note], { name: 'Paulo' }, {});
+    const edited = { ...note, title: 'Pier at noon', updatedAt: new Date(Date.now() + 1000).toISOString() };
+    const keys = { [collection.id]: key };
+    const updates = () => fetcher.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH').length;
+
+    const before = updates();
+    vi.setSystemTime(Date.now() + 5000); // the refresh happens after the edit
+    await refreshShares(drive, await listShares(drive, rootId), keys, [collection], [edited], { name: 'Paulo' });
+    expect(updates()).toBe(before + 1);
+    // The next sync reads the saved sharedAt back from Drive: nothing to re-publish.
+    await refreshShares(drive, await listShares(drive, rootId), keys, [collection], [edited], { name: 'Paulo' });
+    expect(updates()).toBe(before + 1);
+    vi.useRealTimers();
+  });
+
+  it('refuses a link whose file is larger than any share can be', async () => {
+    const huge = vi.fn(async () => new Response(new Uint8Array(16), { status: 200, headers: { 'Content-Length': String(61 * 1024 * 1024) } }));
+    await expect(loadSharedCollection('abcdefghijkl', 'A'.repeat(22), huge as unknown as typeof fetch)).rejects.toThrow(/too large/);
   });
 });

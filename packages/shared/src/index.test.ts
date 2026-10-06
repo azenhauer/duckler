@@ -163,6 +163,22 @@ describe('shared package', () => {
     expect(third.heads['card:card-1']).toEqual([updateFromA.id, updateFromB.id].sort());
   });
 
+  it('keeps delayed ancestors out of the frontier after concurrent branches converge', () => {
+    const base = createSyncRevision('card', 'card-1', { title: 'Base' }, 'device-a', [], 1);
+    const left = createSyncRevision('card', 'card-1', { title: 'Left' }, 'device-a', [base.id], 2);
+    const right = createSyncRevision('card', 'card-1', { title: 'Right' }, 'device-b', [base.id], 2);
+    const merged = createSyncRevision('card', 'card-1', { title: 'Merged' }, 'device-a', [left.id, right.id], 3);
+
+    let state = applyRevision(createSyncReducerState(), base);
+    state = applyRevision(state, left);
+    state = applyRevision(state, right);
+    state = applyRevision(state, merged);
+    state = applyRevision(state, base);
+
+    expect(state.heads['card:card-1']).toEqual([merged.id]);
+    expect(state.conflicts['card:card-1']).toEqual([]);
+  });
+
   it('tracks upload jobs and sync inventory across fake Drive cursor advances', () => {
     const job = createUploadJob('batch', 'abc123');
     const retrying = advanceUploadJob(job, 'retry', '429');
