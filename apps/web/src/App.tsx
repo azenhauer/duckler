@@ -65,6 +65,7 @@ import { AvatarCropper, CARD_IMAGE_SHAPE } from './components/AvatarCropper';
 import { EditableName } from './components/EditableName';
 import { LibraryCard, type CardApi } from './components/LibraryCard';
 import { CollectionPickerPopover } from './components/CollectionPicker';
+import { ShortcutLegend, ShortcutTables } from './components/ShortcutLegend';
 
 // The canvas (React Flow) and the card editor are separate chunks, fetched when the app is idle so they
 // open without delay but do not slow the first screen. React Flow's stylesheet stays in the main CSS.
@@ -779,7 +780,8 @@ function App() {
     const back = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.repeat || escapeBackBlocked.current) return;
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
-      const open = document.querySelectorAll('[role="dialog"], [role="menu"], .tile-menu, .color-pop, [aria-expanded="true"]');
+      // The corner shortcut legend reports itself expanded, but it is not something Esc should close.
+      const open = document.querySelectorAll('[role="dialog"], [role="menu"], .tile-menu, .color-pop, [aria-expanded="true"]:not(.ps-shortcut-legend-title)');
       // Copies left by closing animations (.is-leaving) don't count.
       if ([...open].some(element => !element.closest('.is-leaving'))) return;
       goBackRef.current();
@@ -1974,9 +1976,6 @@ function App() {
             <InterfaceIcon name="settings" />
           </button>
       </div>
-      <ul className="ps-hints" aria-hidden="true">
-        <li><b className="crs">✕</b>Enter</li><li><b className="cir">○</b>Back</li><li><b className="tri">△</b>Options</li><li><b className="sqr">□</b>Select</li>
-      </ul>
       {textMenu && <TileMenu title="Selected text" position={textMenu} onClose={() => setTextMenu(null)} items={[
         { label: 'New note from selection', onSelect: () => { void createNoteFromText(textMenu.cardId, textMenu.text); } },
         { label: 'Copy', onSelect: () => { void navigator.clipboard?.writeText(textMenu.text).catch(() => {}); } },
@@ -2073,16 +2072,16 @@ function App() {
           </button>
         </div>
       </nav>
+      <ShortcutLegend onShowAll={() => setShortcutsOpen(true)} context={
+        cardComposerOpen ? 'composer'
+          : (activeView === 'library' || activeView === 'canvas') && selectedCard ? 'editor'
+            : activeView === 'canvas' && selectedCanvas ? 'canvas'
+              : activeView === 'library' && selectedCardIds.length ? 'selection'
+                : activeView === 'library' ? 'library' : 'home'} />
       {shortcutsOpen && <Dialog label="Keyboard shortcuts" className="app-settings shortcuts-dialog" onClose={() => setShortcutsOpen(false)}>
         <BButton className="close-detail" label="Close keyboard shortcuts" onClick={() => setShortcutsOpen(false)} />
         <h2>Keyboard shortcuts</h2>
-        <dl className="shortcut-list">
-          {([
-            ['/', 'Search'], ['N', 'New note'], ['F', 'Star or unstar the selected cards'], ['Ctrl / ⌘ + A', 'Select every card in view'], ['Click', 'Select or deselect a card'],
-            ['Double-click · Enter', 'Open a card'], ['Delete', 'Delete the selected cards (with Undo)'], ['Esc', 'Close, clear the selection, or go back'],
-            ['Shift + F10', 'Quick add menu'], ['?', 'This list'],
-          ] as const).map(([keys, what]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{what}</dd></div>)}
-        </dl>
+        <ShortcutTables />
       </Dialog>}
       {settingsOpen && <Dialog label="Settings" className="app-settings" onClose={() => setSettingsOpen(false)}>
         <BButton className="close-detail" label="Close settings" onClick={() => setSettingsOpen(false)} />

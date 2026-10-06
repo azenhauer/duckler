@@ -288,6 +288,27 @@ describe('App', () => {
     expect(JSON.parse(localStorage.getItem('duckler-recent-collections')!)).toEqual([research.id]);
   });
 
+  it('shows a PS2-style shortcut legend for the screen in use, and every table on ?', async () => {
+    render(<App />);
+    const legend = () => screen.getByRole('complementary', { name: 'Keyboard shortcuts for this screen' });
+    await screen.findByRole('button', { name: 'All notes' });
+    expect(within(legend()).getByRole('button', { expanded: true })).toHaveTextContent('Home');
+    fireEvent.click(screen.getByRole('button', { name: 'All notes' }));
+    const design = await screen.findByRole('article', { name: 'Open Design note' });
+    expect(legend()).toHaveTextContent('Library');
+    fireEvent.click(design);
+    expect(legend()).toHaveTextContent('Selection');
+    expect(legend()).toHaveTextContent('Star');
+    fireEvent.click(within(legend()).getByRole('button', { name: /All shortcuts/ }));
+    const tables = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    expect(within(tables).getAllByRole('region').map(table => table.getAttribute('aria-label'))).toEqual(['Anywhere shortcuts', 'Cards shortcuts', 'Writing a card shortcuts', 'Canvas shortcuts']);
+    // Folding the legend is remembered.
+    fireEvent.click(screen.getByRole('button', { name: 'Close keyboard shortcuts' }));
+    fireEvent.click(within(legend()).getByRole('button', { expanded: true }));
+    expect(within(legend()).getByRole('button', { expanded: false })).toHaveTextContent('Keys');
+    expect(localStorage.getItem('duckler-shortcut-legend')).toBe('closed');
+  });
+
   it('has keyboard shortcuts that stay out of the way while typing', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));

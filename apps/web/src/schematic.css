@@ -854,13 +854,34 @@ html:not([data-theme='dark']) .profile-identity-card.has-cover::after { opacity:
 /* The collection menu hangs from the left-aligned title (centred, it ran off the left edge). */
 @media (min-width: 561px) { .collection-menu-popover { left: 0 !important; transform: none !important; animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both !important; } }
 
-/* Keyboard shortcuts (?): a PS2 legend of keys and what they do. */
-.shortcuts-dialog { width: min(100%, 460px) !important; }
-.shortcut-list { display: grid; gap: 2px; margin: 14px 0 0; }
-.shortcut-list > div { display: grid; grid-template-columns: minmax(130px, auto) 1fr; align-items: center; gap: 14px; padding: 7px 4px; border-bottom: 1px solid var(--sx-line-soft); }
-.shortcut-list dt, .shortcut-list dd { margin: 0; }
-.shortcut-list dd { color: var(--ui-text-muted); font-size: .82rem; }
-.shortcut-list kbd { display: inline-block; padding: 3px 7px; border: 1px solid var(--sx-line-soft); border-bottom-width: 2px; border-radius: 3px; color: var(--ui-text); font: 700 .66rem/1.2 var(--sx-label); letter-spacing: .08em; white-space: nowrap; }
+/* Keyboard shortcuts, PS2 system-menu style: small tables of glyph · key · action ("?" shows them all;
+   the corner legend shows the ones for the screen in use). Glyph colours follow the PS2 face buttons. */
+.shortcuts-dialog { width: min(100%, 720px) !important; }
+.ps-shortcut-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; margin-top: 16px; }
+.ps-shortcut-table { border: 1px solid var(--sx-line-soft); background: color-mix(in srgb, var(--sx-panel) 70%, transparent); }
+.ps-shortcut-table h3 { margin: 0; padding: 7px 10px; border-bottom: 1px solid var(--sx-line-soft); background: color-mix(in srgb, var(--ui-accent-primary) 10%, transparent); color: var(--ui-accent-primary); font: 700 .62rem/1 var(--sx-label); letter-spacing: .18em; text-transform: uppercase; }
+.ps-shortcut-table dl, .ps-shortcut-legend dl { display: grid; margin: 0; padding: 4px 0; }
+.ps-shortcut-row { display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: 10px; padding: 5px 10px; }
+.ps-shortcut-row + .ps-shortcut-row { border-top: 1px dotted color-mix(in srgb, var(--sx-line-soft) 70%, transparent); }
+.ps-shortcut-row dt, .ps-shortcut-row dd { margin: 0; }
+.ps-shortcut-row dd { color: var(--ui-text-muted); font-size: .78rem; }
+.ps-shortcut-glyph { justify-self: center; font: 700 .9rem/1 var(--sx-label); }
+.ps-shortcut-glyph.glyph-crs { color: var(--sx-crs); } .ps-shortcut-glyph.glyph-cir { color: var(--sx-cir); }
+.ps-shortcut-glyph.glyph-tri { color: var(--sx-tri); } .ps-shortcut-glyph.glyph-sqr { color: var(--sx-sqr); }
+.ps-shortcut-row kbd, .ps-shortcut-legend-more kbd { display: inline-block; min-width: 18px; padding: 2px 6px; border: 1px solid var(--sx-line-soft); border-bottom-width: 2px; border-radius: 3px; color: var(--ui-text); text-align: center; font: 700 .6rem/1.3 var(--sx-label); letter-spacing: .06em; white-space: nowrap; }
+
+/* Corner legend: bottom-left, out of the way of the dock and the + button; keyboards only. */
+.ps-shortcut-legend { position: fixed; left: 22px; bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 40; width: 220px; border: 1px solid var(--sx-line-soft); background: color-mix(in srgb, var(--sx-panel) 88%, transparent); backdrop-filter: blur(6px); box-shadow: 4px 4px 0 color-mix(in srgb, #000 30%, transparent); animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both; }
+.ps-shortcut-legend:not(.is-open) { width: auto; }
+.ps-shortcut-legend-title { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; background: transparent; color: var(--ui-text-muted); font: 700 .58rem/1 var(--sx-label); letter-spacing: .18em; text-transform: uppercase; cursor: pointer; }
+.ps-shortcut-legend.is-open .ps-shortcut-legend-title { border-bottom: 1px solid var(--sx-line-soft); color: var(--ui-accent-primary); }
+.ps-shortcut-legend-title:hover { color: var(--ui-text); }
+.ps-shortcut-legend-title .glyph-tri { color: var(--sx-tri); font-size: .8rem; }
+.ps-shortcut-legend .ps-shortcut-row { padding: 3px 10px; }
+.ps-shortcut-legend .ps-shortcut-row dd { font-size: .72rem; }
+.ps-shortcut-legend-more { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 6px 10px; border: 0; border-top: 1px solid var(--sx-line-soft); background: transparent; color: var(--ui-text-muted); font: 700 .56rem/1 var(--sx-label); letter-spacing: .14em; text-transform: uppercase; cursor: pointer; }
+.ps-shortcut-legend-more:hover { color: var(--ui-text); }
+@media (hover: none), (max-width: 1100px) { .ps-shortcut-legend { display: none; } }
 
 /* Picker sections: "Recent" above the collections used lately, "All collections" after them. */
 .collection-picker-row[data-heading] { position: relative; margin-top: 18px; }
