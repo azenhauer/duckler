@@ -1,6 +1,6 @@
 import { emptyDriveLibrary, mediaFingerprint, mergeLibraries, parseDriveLibrary, toDriveLibrary, type CardRecord, type DriveLibrary, type MediaRef } from '@visual-library/shared';
 import { bytesToBase64 } from '../../../../packages/shared/src/captureProtocol';
-import { applySyncedLibrary, cardDb, readCollections, readTombstones } from './cardDb';
+import { applySyncedLibrary, cardDb, readCollections, readSyncCanvases, readTombstones } from './cardDb';
 
 /**
  * Drive sync for the signed-in owner. Everything lives in a `Duckler` folder in their own Drive
@@ -112,7 +112,7 @@ export async function syncLibrary(drive: DriveClient, rootId: string, options: S
       return { received: 0, sent: 0, deleted: 0, library: emptyDriveLibrary(), version: libraryFile.version, skipped: true };
     }
     const remote = libraryFile ? parseDriveLibrary(await drive.text(libraryFile.id)) : emptyDriveLibrary();
-    const local = { cards: await cardDb.cards.toArray(), collections: await readCollections(), tombstones: await readTombstones() };
+    const local = { cards: await cardDb.cards.toArray(), collections: await readCollections(), tombstones: await readTombstones(), canvases: await readSyncCanvases() };
     const merged = mergeLibraries(local, remote);
 
     // Images only on Drive: fetch them. A failed download keeps this device's version for now.
@@ -155,7 +155,7 @@ export async function syncLibrary(drive: DriveClient, rootId: string, options: S
     // Images of deleted cards and replaced images go last, once library.json no longer points at them.
     for (const fileId of merged.mediaToDelete) await drive.remove(fileId);
     if (options.sweep) await removeOrphanImages(drive, rootId, stored);
-    return { received: writes.size + merged.collectionsToWrite.length, sent: merged.uploads.length + (merged.remoteChanged ? 1 : 0), deleted: merged.cardsToDelete.length + merged.collectionsToDelete.length, library: stored, version, skipped: false };
+    return { received: writes.size + merged.collectionsToWrite.length + merged.canvasesToWrite.length, sent: merged.uploads.length + (merged.remoteChanged ? 1 : 0), deleted: merged.cardsToDelete.length + merged.collectionsToDelete.length + merged.canvasesToDelete.length, library: stored, version, skipped: false };
   }
   throw new Error('Another device kept changing the library. Sync will try again shortly.');
 }

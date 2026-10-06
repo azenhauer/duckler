@@ -25,7 +25,7 @@ const canvasDocumentSchema = z.object({
 }).strict();
 const viewportSchema = z.object({ x: z.number().finite(), y: z.number().finite(), zoom: z.number().min(.15).max(2) }).strict();
 // Geometry, field allowlists and limits are enforced by validateCanvasContent.
-const canvasBackupSchema = z.object({
+export const canvasBackupSchema = z.object({
   document: canvasDocumentSchema,
   viewport: viewportSchema.optional(),
   placements: z.array(z.record(z.unknown())),

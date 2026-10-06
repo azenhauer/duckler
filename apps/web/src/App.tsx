@@ -191,7 +191,9 @@ function App() {
   const [captureQueue, setCaptureQueue] = useState<CaptureQueueItem[]>([]);
   const [captureReceipts, setCaptureReceipts] = useState<Record<string, string>>({});
   // Google account + Drive sync. When Drive brings changes, the library re-reads them.
-  const drive = useDriveSync((nextCards, nextCollections) => { setCards(nextCards); setCollections(nextCollections); }, () => ({
+  // Bumped when Drive brought changes, so an open canvas reloads what another device saved.
+  const [pulledVersion, setPulledVersion] = useState(0);
+  const drive = useDriveSync((nextCards, nextCollections) => { setCards(nextCards); setCollections(nextCollections); setPulledVersion(version => version + 1); }, () => ({
     name: displayProfileName === 'My Library' ? '' : displayProfileName, photo: profilePhoto || undefined,
     tag: displayProfileTag || undefined, bio: profileBio || undefined, color: profileCardColor, cover: profileCover || undefined,
   }));
@@ -1235,6 +1237,15 @@ function App() {
     };
   }, [quickAddPosition]);
 
+  // The + menu and the right-click menu offer the same actions, in the same order (two groups).
+  const createActions: { label: string; icon: React.ReactNode; group: 0 | 1; run: () => void }[] = [
+    { label: 'Collection', icon: <NavigationIcon name="collections" />, group: 0, run: () => { navigateTo('library'); setCollectionMenuOpen(true); } },
+    { label: 'Canvas', icon: <NavigationIcon name="canvas" />, group: 0, run: () => { void handleCreateEmptyCanvas(); } },
+    { label: 'Link', icon: <InterfaceIcon name="link" />, group: 1, run: () => handleQuickAddCard('bookmark') },
+    { label: 'Upload', icon: <InterfaceIcon name="upload" />, group: 1, run: () => imagePickerRef.current?.click() },
+    { label: 'Note', icon: <InterfaceIcon name="note" />, group: 1, run: () => handleQuickAddCard('text') },
+  ];
+
   const openQuickAddMenu = (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest('input,textarea,select,button,a,[contenteditable="true"],article,.card-collection-pills')) return;
@@ -1872,7 +1883,7 @@ function App() {
         )}
 
         {activeView === 'canvas' && (selectedCanvas
-          ? <CollectionCanvas key={selectedCanvas.id} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack}
+          ? <CollectionCanvas key={`${selectedCanvas.id}:${pulledVersion}`} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack}
             onNavigate={target => target === 'settings' ? setSettingsOpen(true) : navigateTo(target === 'home' ? 'home' : target === 'collections' ? 'collections' : 'canvas')} />
           : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} onCreateCanvas={() => void handleCreateEmptyCanvas()}
             onTileContextMenu={(event, id) => openTileMenu(event, id, 'canvas')} renamingId={renamingCollectionId}
@@ -2097,47 +2108,19 @@ function App() {
         // Safari doesn't focus clicked buttons, so a blur while the pointer is on the menu isn't "leaving" it.
         onBlur={event => { if (!quickAddHovered.current && !event.currentTarget.contains(event.relatedTarget as Node | null)) setQuickAddPosition(null); }}>
         <strong>Quick add</strong>
-        <button type="button" role="menuitem" onClick={() => { navigateTo('library'); setQuickAddPosition(null); setCollectionMenuOpen(true); }}><NavigationIcon name="collections" />Collection</button>
-        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); void handleCreateEmptyCanvas(); }}><NavigationIcon name="canvas" />Canvas</button>
-        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); handleQuickAddCard('bookmark'); }}><InterfaceIcon name="link" />Link</button>
-        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); imagePickerRef.current?.click(); }}><InterfaceIcon name="upload" />Upload</button>
-        <button type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); handleQuickAddCard('text'); }}><InterfaceIcon name="note" />Note</button>
+        {createActions.map(action => <button key={action.label} type="button" role="menuitem" onClick={() => { setQuickAddPosition(null); action.run(); }}>{action.icon}{action.label}</button>)}
       </div>}
+      {/* One file input for every Upload action (it used to live inside the + menu, so right-click Upload had none). */}
+      <input ref={imagePickerRef} type="file" accept="image/*,application/pdf,.pdf" onChange={handleFileChange} hidden />
       <div className={`add-menu ${addMenuOpen ? 'is-open' : ''}`} ref={addMenuRef} {...addHover}>
         <button ref={cardComposerTriggerRef} type="button" className="floating-add-button" aria-label="Add card" aria-expanded={addMenuOpen} aria-haspopup="true" title="Add card" onFocus={() => { if (skipAddFocusOpen.current) skipAddFocusOpen.current = false; else setAddMenuOpen(true); }} onClick={() => setAddMenuOpen(true)}>+</button>
         {addMenuOpen && <div ref={addMenuExitRef} className="add-menu-popover" aria-label="Create">
-          <div className="add-menu-group">
-            <button type="button" onClick={() => {
-              navigateTo('library');
-              setAddMenuOpen(false);
-              setCollectionMenuOpen(true);
-            }}>
-              <span className="add-menu-icon" aria-hidden="true"><NavigationIcon name="collections" /></span>
-              <span>Collection</span>
-            </button>
-            <button type="button" onClick={() => {
-              setAddMenuOpen(false);
-              void handleCreateEmptyCanvas();
-            }}>
-              <span className="add-menu-icon" aria-hidden="true"><NavigationIcon name="canvas" /></span>
-              <span>Canvas</span>
-            </button>
-          </div>
-          <div className="add-menu-group">
-            <button type="button" onClick={() => handleQuickAddCard('bookmark')}>
-              <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="link" /></span>
-              <span>Link</span>
-            </button>
-            <label className="add-menu-action">
-              <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="upload" /></span>
-              <span>Upload</span>
-              <input ref={imagePickerRef} type="file" accept="image/*,application/pdf,.pdf" onChange={handleFileChange} />
-            </label>
-            <button type="button" onClick={() => handleQuickAddCard('text')}>
-              <span className="add-menu-icon" aria-hidden="true"><InterfaceIcon name="note" /></span>
-              <span>Note</span>
-            </button>
-          </div>
+          {([0, 1] as const).map(group => <div key={group} className="add-menu-group">
+            {createActions.filter(action => action.group === group).map(action => <button key={action.label} type="button" onClick={() => { setAddMenuOpen(false); action.run(); }}>
+              <span className="add-menu-icon" aria-hidden="true">{action.icon}</span>
+              <span>{action.label}</span>
+            </button>)}
+          </div>)}
         </div>}
       </div>
       {cardComposerOpen && (

@@ -508,6 +508,18 @@ describe('App', () => {
     expect(await screen.findByRole('dialog', { name: 'Add card' })).toBeInTheDocument();
   });
 
+  it('opens the file picker from right-click Upload while the + menu is closed', async () => {
+    const pick = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      render(<App />);
+      await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false'));
+      fireEvent.contextMenu(screen.getByRole('main'), { clientX: 200, clientY: 200 });
+      fireEvent.click(within(screen.getByRole('menu', { name: 'Quick add' })).getByRole('menuitem', { name: 'Upload' }));
+      expect(pick).toHaveBeenCalledTimes(1);
+      expect((pick.mock.contexts[0] as HTMLInputElement).type).toBe('file');
+    } finally { pick.mockRestore(); }
+  });
+
   it('saves a note with Enter, naming it after its first words, and keeps Shift+Enter for new lines', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false'));

@@ -1,11 +1,17 @@
 import { z } from 'zod';
 import { cardSchema, collectionSchema, type CardRecord, type CollectionRecord } from './index';
+import { canvasBackupSchema, type CanvasBackup } from './backup';
+import { validateCanvasContent, type CanvasContent } from './canvas';
 
 /**
  * Drive sync model. The library lives in the owner's Drive as `library.json` (cards without their
  * image data, collections, deletions) plus one file per image. Merging is per record: the newer
  * `updatedAt` wins, and a deletion wins over any version older than it, so a card deleted on one
  * device is deleted everywhere, including its image file on Drive.
+ *
+ * Canvases travel whole (document + placements, drawings, connectors), like in the native backup:
+ * the newer `document.updatedAt` wins. A canvas shares its collection's id and is deleted with it.
+ * The viewport (zoom/pan) stays on each device.
  */
 export const DRIVE_LIBRARY_FORMAT = 1;
 
@@ -13,6 +19,7 @@ export type Tombstone = { id: string; kind: 'card' | 'collection'; deletedAt: st
 /** An image stored as its own Drive file; `of` fingerprints the image data it holds. */
 export type MediaRef = { fileId: string; of: string };
 export type SyncedCard = Omit<CardRecord, 'dataUrl' | 'thumb'> & { media?: MediaRef };
+export type SyncedCanvas = Omit<CanvasBackup, 'viewport'>;
 
 export type DriveLibrary = {
   format: number;
@@ -20,6 +27,7 @@ export type DriveLibrary = {
   cards: SyncedCard[];
   collections: CollectionRecord[];
   tombstones: Tombstone[];
+  canvases: SyncedCanvas[];
   /** Keys of this owner's share links (collection id → key). Only in their private library file. */
   shareKeys: Record<string, string>;
 };
@@ -33,21 +41,28 @@ const driveLibrarySchema = () => z.object({
   cards: z.array(cardSchema.omit({ dataUrl: true, thumb: true }).extend({ media: mediaSchema.optional() })).max(100000),
   collections: z.array(collectionSchema).max(10000),
   tombstones: z.array(tombstoneSchema).max(200000).default([]),
+  canvases: z.array(canvasBackupSchema).max(10000).default([]),
   shareKeys: z.record(z.string().max(200), z.string().regex(/^[A-Za-z0-9_-]{22}$/)).default({}),
 });
 
 export function parseDriveLibrary(json: string): DriveLibrary {
   const parsed = driveLibrarySchema().parse(JSON.parse(json));
   if (parsed.format > DRIVE_LIBRARY_FORMAT) throw new Error('This library was saved by a newer Duckler. Reload the app to update it.');
-  return parsed;
+  // Same checks as a backup import: geometry, field allowlists and limits, objects on their own canvas.
+  const canvases = parsed.canvases.map(({ document, placements, elements, connectors }) => {
+    const content = { placements, elements, connectors } as unknown as CanvasContent;
+    validateCanvasContent(document.id, content);
+    return { document, ...content };
+  });
+  return { ...parsed, canvases };
 }
 
-export const emptyDriveLibrary = (): DriveLibrary => ({ format: DRIVE_LIBRARY_FORMAT, savedAt: new Date(0).toISOString(), cards: [], collections: [], tombstones: [], shareKeys: {} });
+export const emptyDriveLibrary = (): DriveLibrary => ({ format: DRIVE_LIBRARY_FORMAT, savedAt: new Date(0).toISOString(), cards: [], collections: [], tombstones: [], canvases: [], shareKeys: {} });
 
 /** Identifies image data without hashing megabytes (same rule as the grid thumbnails). */
 export const mediaFingerprint = (dataUrl: string) => `${dataUrl.length}:${dataUrl.slice(-40)}`;
 
-type Local = { cards: CardRecord[]; collections: CollectionRecord[]; tombstones: Tombstone[] };
+type Local = { cards: CardRecord[]; collections: CollectionRecord[]; tombstones: Tombstone[]; canvases?: SyncedCanvas[] };
 
 export type MergeResult = {
   cards: CardRecord[];
@@ -58,6 +73,10 @@ export type MergeResult = {
   collectionsToWrite: CollectionRecord[];
   cardsToDelete: string[];
   collectionsToDelete: string[];
+  canvases: SyncedCanvas[];
+  /** Canvases to replace on this device (newer on Drive), and canvases whose collection is gone. */
+  canvasesToWrite: SyncedCanvas[];
+  canvasesToDelete: string[];
   /** Drive image file of each card whose image is already on Drive. */
   media: Map<string, MediaRef>;
   /** Cards whose image this device has and Drive does not (yet). */
@@ -83,7 +102,7 @@ export function mergeLibraries(local: Local, remote: DriveLibrary, now = new Dat
     if (!known || newer(stone.deletedAt, known.deletedAt)) stones.set(stone.id, stone);
   }
   const deleted = (id: string, updatedAt: string) => { const stone = stones.get(id); return Boolean(stone && !newer(updatedAt, stone.deletedAt)); };
-  const result: MergeResult = { cards: [], collections: [], tombstones: [], cardsToWrite: [], collectionsToWrite: [], cardsToDelete: [], collectionsToDelete: [], media: new Map(), uploads: [], downloads: [], mediaToDelete: [], shareKeys: {}, remoteChanged: false };
+  const result: MergeResult = { cards: [], collections: [], tombstones: [], cardsToWrite: [], collectionsToWrite: [], cardsToDelete: [], collectionsToDelete: [], canvases: [], canvasesToWrite: [], canvasesToDelete: [], media: new Map(), uploads: [], downloads: [], mediaToDelete: [], shareKeys: {}, remoteChanged: false };
 
   const localCards = new Map(local.cards.map(card => [card.id, card]));
   const remoteCards = new Map(remote.cards.map(card => [card.id, card]));
@@ -160,6 +179,23 @@ export function mergeLibraries(local: Local, remote: DriveLibrary, now = new Dat
     return pruned;
   });
 
+  // Canvases: whole records, newer wins; one whose collection no longer exists goes with it.
+  const liveIds = new Set(result.collections.map(item => item.id));
+  const localCanvases = new Map((local.canvases ?? []).map(item => [item.document.id, item]));
+  const remoteCanvases = new Map(remote.canvases.map(item => [item.document.id, item]));
+  for (const id of new Set([...localCanvases.keys(), ...remoteCanvases.keys()])) {
+    const mine = localCanvases.get(id), theirs = remoteCanvases.get(id);
+    if (!liveIds.has(id)) {
+      if (mine) result.canvasesToDelete.push(id);
+      if (theirs) result.remoteChanged = true;
+      continue;
+    }
+    const remoteWins = Boolean(theirs && (!mine || newer(theirs.document.updatedAt, mine.document.updatedAt)));
+    result.canvases.push(remoteWins ? theirs! : mine!);
+    if (remoteWins && (!mine || mine.document.updatedAt !== theirs!.document.updatedAt)) result.canvasesToWrite.push(theirs!);
+    if (!remoteWins && (!theirs || theirs.document.updatedAt !== mine!.document.updatedAt)) result.remoteChanged = true;
+  }
+
   const oldest = now.getTime() - TOMBSTONE_DAYS * 86400000;
   result.tombstones = [...stones.values()].filter(stone => Date.parse(stone.deletedAt) >= oldest);
   const onDrive = new Set(remote.tombstones.map(stone => `${stone.id}@${stone.deletedAt}`));
@@ -173,7 +209,7 @@ export function mergeLibraries(local: Local, remote: DriveLibrary, now = new Dat
 }
 
 /** The library as stored on Drive: no image data, no grid thumbnails, media references instead. */
-export function toDriveLibrary(merged: Pick<MergeResult, 'cards' | 'collections' | 'tombstones' | 'media'> & { shareKeys?: Record<string, string> }, savedAt = new Date().toISOString()): DriveLibrary {
+export function toDriveLibrary(merged: Pick<MergeResult, 'cards' | 'collections' | 'tombstones' | 'media'> & { canvases?: SyncedCanvas[]; shareKeys?: Record<string, string> }, savedAt = new Date().toISOString()): DriveLibrary {
   return {
     format: DRIVE_LIBRARY_FORMAT,
     savedAt,
@@ -183,6 +219,7 @@ export function toDriveLibrary(merged: Pick<MergeResult, 'cards' | 'collections'
     }),
     collections: merged.collections,
     tombstones: merged.tombstones,
+    canvases: merged.canvases ?? [],
     shareKeys: merged.shareKeys ?? {},
   };
 }

@@ -2503,8 +2503,7 @@ html[data-theme='dark'] .profile-message.error {
   border-top: 1px solid var(--border);
 }
 
-.add-menu-group button,
-.add-menu-action {
+.add-menu-group button {
   min-height: 42px;
   display: flex;
   align-items: center;
@@ -2519,8 +2518,7 @@ html[data-theme='dark'] .profile-message.error {
   cursor: pointer;
 }
 
-.add-menu-group button:hover,
-.add-menu-action:hover {
+.add-menu-group button:hover {
   background: var(--selected);
 }
 
@@ -2533,19 +2531,10 @@ html[data-theme='dark'] .profile-message.error {
   font-weight: 600;
 }
 
-.add-menu-action input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-}
-
 .collection-menu-trigger:focus-visible,
 .library-options > summary:focus-visible,
 .add-menu .floating-add-button:focus-visible,
 .add-menu-group button:focus-visible,
-.add-menu-action:focus-within,
 .collection-menu-item:focus-visible,
 .library-option-actions button:focus-visible {
   outline: 2px solid var(--focus);

@@ -354,3 +354,10 @@ The owner asked for Drive integration, account creation and sharing collections 
 - Collection menu list and "create collection" go through `navigateTo`, so Back returns to the previous collection.
 - Fixed the flaky `popup.test.ts`: the panel's `window.close()` 650 ms after a send tore down jsdom's document mid-file on slow runs; the test stubs it.
 - Not covered yet: dropping into the card editor (only the new-card composer accepts drops).
+
+## One action list for + and right-click; canvases in Drive sync — October 6, 2026 (night, later still)
+- `+` and right-click menus render one `createActions` list. Right-click "Upload" did nothing before (its file input lived inside the + menu, which was closed); there is now one always-mounted input.
+- Confirmed: the card editor's collection checkboxes are a draft applied on Save.
+- Canvases sync through Drive: each canvas travels whole in `library.json` (the backup's `CanvasBackup` shape and validation, minus the per-device viewport). Newer `document.updatedAt` wins; a canvas goes with its collection's deletion. Applied canvases get a new local revision so a stale tab reloads instead of overwriting. Board colour changes now bump `updatedAt`. Canvas edits trigger sync (hook on the `canvases` table). An open canvas remounts when Drive brought changes.
+- Older clients ignore `canvases` and could drop it from library.json; the next new client re-uploads its copy (no data loss, devices update on reload).
+- Next: XSS sweep, Obsidian conflict status, sound events, then a speed pass (measure slow paths, e.g. the ~350 ms 300-card open).

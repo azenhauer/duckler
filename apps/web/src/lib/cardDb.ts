@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Tombstone, CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent, CanvasBackup, LibraryBackup } from '@visual-library/shared';
+import type { Tombstone, CardRecord, CollectionRecord, CanvasLayout, CanvasDocument, CanvasPlacement, CanvasElement, CanvasConnector, CanvasState, CanvasContent, CanvasBackup, LibraryBackup, SyncedCanvas } from '@visual-library/shared';
 import { buildSearchText, createCardFromInput, createCollectionFromInput, createCanvasPlacement, canvasCardPosition, validateCanvasContent } from '@visual-library/shared';
 import { type Capture, hashBytes, MAX_CAPTURE_BYTES, validateCapture } from '../../../../packages/shared/src/captureProtocol';
 
@@ -49,14 +49,35 @@ for (const table of [cardDb.cards, cardDb.collections]) {
   });
   table.hook('deleting', () => { changed(); });
 }
+// Every canvas edit rewrites its document (revision, updatedAt), so watching that table is enough.
+// Opening a canvas re-saves an unchanged document, which is not an edit.
+cardDb.canvases.hook('creating', () => { changed(); });
+cardDb.canvases.hook('updating', (modifications: object) => { if (Object.keys(modifications).length) changed(); });
 
 export const readTombstones = () => cardDb.tombstones.toArray();
 
+async function removeCanvasObjects(canvasId: string, withDocument: boolean) {
+  await cardDb.canvasPlacements.where('canvasId').equals(canvasId).delete();
+  await cardDb.canvasElements.where('canvasId').equals(canvasId).delete();
+  await cardDb.canvasConnectors.where('canvasId').equals(canvasId).delete();
+  if (withDocument) { await cardDb.canvases.delete(canvasId); await cardDb.canvasLayouts.delete(canvasId); }
+}
+
 /** Applies a Drive merge on this device in one transaction, without counting it as a local change. */
-export async function applySyncedLibrary(change: { cardsToWrite: CardRecord[]; collectionsToWrite: CollectionRecord[]; cardsToDelete: string[]; collectionsToDelete: string[]; tombstones: Tombstone[] }) {
+export async function applySyncedLibrary(change: { cardsToWrite: CardRecord[]; collectionsToWrite: CollectionRecord[]; cardsToDelete: string[]; collectionsToDelete: string[]; tombstones: Tombstone[]; canvasesToWrite?: SyncedCanvas[]; canvasesToDelete?: string[] }) {
   applyingSync = true;
   try {
-    await cardDb.transaction('rw', cardDb.cards, cardDb.collections, cardDb.tombstones, async () => {
+    await cardDb.transaction('rw', [cardDb.cards, cardDb.collections, cardDb.tombstones, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors, cardDb.canvasLayouts], async () => {
+      for (const id of change.canvasesToDelete ?? []) await removeCanvasObjects(id, true);
+      for (const canvas of change.canvasesToWrite ?? []) {
+        const local = await cardDb.canvases.get(canvas.document.id);
+        await removeCanvasObjects(canvas.document.id, false);
+        await cardDb.canvasPlacements.bulkPut(canvas.placements);
+        await cardDb.canvasElements.bulkPut(canvas.elements);
+        await cardDb.canvasConnectors.bulkPut(canvas.connectors);
+        // A new local revision, so a tab still showing the old board is told to reload instead of overwriting it.
+        await cardDb.canvases.put({ ...canvas.document, revision: Math.max(canvas.document.revision, local?.revision ?? 0) + 1 });
+      }
       if (change.cardsToDelete.length) await cardDb.cards.bulkDelete(change.cardsToDelete);
       if (change.collectionsToDelete.length) await cardDb.collections.bulkDelete(change.collectionsToDelete);
       if (change.cardsToWrite.length) await cardDb.cards.bulkPut(change.cardsToWrite.map(card => ({ ...card, searchText: buildSearchText(card) })));
@@ -269,7 +290,8 @@ export async function saveCanvasBackground(canvasId: string, background: string 
     const document = await cardDb.canvases.get(canvasId);
     if (!document) throw new Error('Canvas no longer exists');
     const { background: _previous, ...rest } = document;
-    await cardDb.canvases.put(background ? { ...rest, background } : rest);
+    const updated = { ...rest, updatedAt: new Date().toISOString() };
+    await cardDb.canvases.put(background ? { ...updated, background } : updated);
   });
 }
 
@@ -281,6 +303,9 @@ export async function saveCanvasViewport(canvasId: string, viewport: CanvasState
     await cardDb.canvasLayouts.put({ ...layout, collectionId: canvasId, positions: layout?.positions ?? {}, viewport, updatedAt: new Date().toISOString() });
   });
 }
+
+/** Every canvas as Drive sync stores it: the backup form without the per-device viewport. */
+export const readSyncCanvases = async (): Promise<SyncedCanvas[]> => (await readCanvasBackups()).map(({ viewport: _viewport, ...canvas }) => canvas);
 
 /** Every stored canvas with its objects, for the native backup. */
 export async function readCanvasBackups(): Promise<CanvasBackup[]> {

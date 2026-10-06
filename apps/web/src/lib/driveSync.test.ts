@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCardFromInput, createCollectionFromInput, parseDriveLibrary, type CardRecord } from '@visual-library/shared';
-import { cardDb, removeCard, saveCard, saveCollection } from './cardDb';
+import { createCardFromInput, createCollectionFromInput, defaultCanvasStyle, parseDriveLibrary, type CardRecord } from '@visual-library/shared';
+import { cardDb, commitCanvasContent, deleteCollection, readCanvasState, removeCard, saveCard, saveCollection } from './cardDb';
 import { driveClient, findOrCreateRoot, syncLibrary } from './driveSync';
 import { refreshShares } from './shareLinks';
 import { listShares, loadSharedCollection, shareCollection, stopSharing } from './shareLinks';
@@ -58,7 +58,7 @@ function fakeDrive() {
 
 const image = 'data:image/png;base64,' + Buffer.from('a picture').toString('base64');
 const library = async (files: ReturnType<typeof fakeDrive>['files']) => parseDriveLibrary(await [...files.values()].find(file => file.appProperties.kind === 'library')!.body.text());
-const wipeDevice = async () => { await cardDb.cards.clear(); await cardDb.collections.clear(); await cardDb.tombstones.clear(); };
+const wipeDevice = async () => { for (const table of [cardDb.cards, cardDb.collections, cardDb.tombstones, cardDb.canvases, cardDb.canvasPlacements, cardDb.canvasElements, cardDb.canvasConnectors, cardDb.canvasLayouts]) await table.clear(); };
 
 beforeEach(async () => { await wipeDevice(); });
 
@@ -174,6 +174,44 @@ describe('Drive sync against a fake Drive', () => {
     expect(media).not.toContain(orphan.id);
     expect(media).toContain(fresh.id);
     expect(media).toHaveLength(2); // the kept card's image and the fresh upload
+  });
+
+  it('carries canvases to another device, newer edits back, and deletes them with their collection', async () => {
+    const { fetcher } = fakeDrive();
+    const drive = driveClient('token', fetcher as typeof fetch);
+    const rootId = await findOrCreateRoot(drive);
+    const note = createCardFromInput({ type: 'text', title: 'Pinned' });
+    const board = createCollectionFromInput({ name: 'Board', cardIds: [note.id] });
+    await saveCard(note); await saveCollection(board);
+    const state = await readCanvasState(board.id); // places the collection's card
+    const text = { id: 'label', canvasId: board.id, kind: 'text' as const, x: 10, y: 20, width: 200, height: 80, rotation: 0, zIndex: 1, style: defaultCanvasStyle, text: 'Look here', fontSize: 18 };
+    await commitCanvasContent(board.id, state.document.revision, { placements: state.placements, elements: [text], connectors: [] });
+    await syncLibrary(drive, rootId);
+
+    // Device B starts empty and receives the board with its drawing.
+    await wipeDevice();
+    await syncLibrary(drive, rootId);
+    expect((await cardDb.canvasElements.where('canvasId').equals(board.id).toArray()).map(item => item.text)).toEqual(['Look here']);
+    expect(await cardDb.canvasPlacements.where('canvasId').equals(board.id).count()).toBe(1);
+
+    // B edits the label later; A (still on the old version) receives it.
+    const onB = await readCanvasState(board.id);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await commitCanvasContent(board.id, onB.document.revision, { placements: onB.placements, elements: [{ ...text, text: 'Edited on B' }], connectors: [] });
+    await syncLibrary(drive, rootId);
+    await cardDb.canvasElements.put({ ...text, text: 'Look here' });
+    await cardDb.canvases.put({ ...state.document, updatedAt: '2000-01-01T00:00:00.000Z' });
+    await syncLibrary(drive, rootId);
+    expect((await cardDb.canvasElements.get('label'))?.text).toBe('Edited on B');
+
+    // Deleting the collection removes its canvas on the other device too.
+    await deleteCollection(board.id);
+    await syncLibrary(drive, rootId);
+    await cardDb.canvases.put({ ...state.document });
+    await cardDb.canvasElements.put(text);
+    await syncLibrary(drive, rootId);
+    expect(await cardDb.canvases.get(board.id)).toBeUndefined();
+    expect(await cardDb.canvasElements.get('label')).toBeUndefined();
   });
 
   it('encodes file ids in request paths', async () => {
