@@ -498,6 +498,44 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add card' })).not.toBeInTheDocument());
   });
 
+  it('runs a right-click menu item even though pressing it is a pointerdown inside the menu', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false'));
+    fireEvent.contextMenu(screen.getByRole('main'), { clientX: 200, clientY: 200 });
+    const note = within(screen.getByRole('menu', { name: 'Quick add' })).getByRole('menuitem', { name: 'Note' });
+    fireEvent.pointerDown(note);
+    fireEvent.click(note);
+    expect(await screen.findByRole('dialog', { name: 'Add card' })).toBeInTheDocument();
+  });
+
+  it('saves a note with Enter, naming it after its first words, and keeps Shift+Enter for new lines', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add card' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Note' }));
+    const body = screen.getByLabelText('Note');
+    fireEvent.change(body, { target: { value: 'Call the framer about the poster' } });
+    fireEvent.keyDown(body, { key: 'Enter', shiftKey: true });
+    expect(screen.getByRole('dialog', { name: 'Add card' })).toBeInTheDocument();
+    fireEvent.keyDown(body, { key: 'Enter' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add card' })).not.toBeInTheDocument());
+    expect((await readCards()).some(card => card.title === 'Call the framer about the poster')).toBe(true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); // saving does not reopen the card in the editor
+  });
+
+  it('does not ask a paired browser to connect again from an empty library', async () => {
+    await cardDb.collections.put(createCollectionFromInput({ name: 'Empty shelf', cardIds: [] }));
+    const bridge = await import('./lib/extensionBridge');
+    const paired = vi.spyOn(bridge, 'getExtensionConnection').mockReturnValue({} as ReturnType<typeof bridge.getExtensionConnection>);
+    try {
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Open collections' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Open collection Empty shelf' }));
+      expect(await screen.findByRole('button', { name: 'New note' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect your browser' })).not.toBeInTheDocument();
+    } finally { paired.mockRestore(); }
+  });
+
   it('keeps search and the centered entry points on an empty Home without library filters', async () => {
     await cardDb.cards.clear();
     await cardDb.collections.clear();

@@ -42,6 +42,7 @@ import { ProfileHover } from './components/ProfileHover';
 import { clearPendingShareItems, readPendingShareItems, type PendingShareItem } from './lib/shareQueue';
 import { parseShareTargetFallback } from './lib/shareTargetFallback';
 import { startExtensionBridge, getExtensionConnection } from './lib/extensionBridge';
+import { appendToNote, isExternalDrop, readDrop, type DroppedItem } from './lib/drop';
 import { ExtensionSetup } from './components/ExtensionSetup';
 import { Dialog } from './components/Dialog';
 import { CardEditor } from './components/CardEditor';
@@ -79,6 +80,13 @@ const emptyCollectionForm = {
 
 
 type TypeFilter = 'all' | 'image' | 'link' | 'text';
+/** A short title from the first words of a text (whole words, about 60 characters). */
+const titleFromText = (text: string) => {
+  const words = text.replace(/\s+/g, ' ').trim();
+  return words.length > 60 ? `${words.slice(0, 57).replace(/\s\S*$/, '')}…` : words;
+};
+/** A link's site name ("example.com"), used when a dropped link has no title yet. */
+const titleFromUrl = (value: string) => { try { return new URL(value).hostname.replace(/^www\./, ''); } catch { return ''; } };
 type SortMode = 'newest' | 'oldest';
 type ActiveView = 'home' | 'library' | 'collections' | 'canvas';
 type NavigationEntry = { view: ActiveView; collectionId: string | null; canvasId: string | null };
@@ -393,6 +401,8 @@ function App() {
     });
     return () => { disposed = true; stop(); };
   }, [extensionConnectionVersion]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-read when pairing changes
+  const extensionPaired = useMemo(() => Boolean(getExtensionConnection()), [extensionConnectionVersion]);
 
   useEffect(() => { localStorage.setItem('duckler-card-size', cardSize); }, [cardSize]);
 
@@ -503,7 +513,8 @@ function App() {
       if (accountMenuOpen && !profileMenuRef.current?.contains(event.target) && !(event.target instanceof Element && event.target.closest('.color-pop'))) {
         setAccountMenuOpen(false);
       }
-      if (quickAddPosition) setQuickAddPosition(null);
+      // Only presses outside the menu close it; closing on a press inside removed the item before its click.
+      if (quickAddPosition && !quickAddRef.current?.contains(event.target)) setQuickAddPosition(null);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') {
@@ -673,9 +684,7 @@ function App() {
   const createNoteFromText = async (sourceId: string, text: string) => {
     const source = cards.find(card => card.id === sourceId);
     if (!source || !text.trim()) return;
-    const words = text.replace(/\s+/g, ' ').trim();
-    const title = words.length > 60 ? `${words.slice(0, 57).replace(/\s\S*$/, '')}…` : words;
-    const base = createCardFromInput({ type: 'text', title, note: text.trim().slice(0, 100000) });
+    const base = createCardFromInput({ type: 'text', title: titleFromText(text), note: text.trim().slice(0, 100000) });
     const memberOf = collections.filter(item => item.cardIds.includes(sourceId));
     const changed = memberOf.map(item => ({ ...item, cardIds: [...new Set([...item.cardIds, base.id])], updatedAt: base.createdAt }));
     await saveCardWithCollections(base, changed);
@@ -746,35 +755,79 @@ function App() {
   const selectedCard = cards.find((card) => card.id === selectedId) ?? null;
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-      event.target.value = '';
-      setAddMenuOpen(false);
-      void handleAddPdf(file);
-      return;
-    }
+    event.target.value = '';
+    if (file) openComposerWithFile(file, selectedCollectionId ? [selectedCollectionId] : []);
+  };
 
-    setForm({ ...emptyForm, type: 'image' });
+  const isPdfFile = (file: File) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  /** Opens the composer on a fresh card. `fields` prefill it (a dropped link, text…). */
+  const openComposer = (fields: Partial<typeof emptyForm>, collectionIds: string[]) => {
+    setComposerError('');
+    setAddMenuOpen(false);
     setMediaPreview(null);
-    setNewCardCollectionIds(selectedCollectionId ? [selectedCollectionId] : []);
-    setComposerSourceOpen(false);
+    setForm({ ...emptyForm, ...fields });
+    setNewCardCollectionIds(collectionIds);
+    setComposerSourceOpen(Boolean(fields.sourceUrl) || fields.type === 'bookmark');
     setComposerCollectionsOpen(false);
     setCardComposerOpen(true);
-    setAddMenuOpen(false);
+  };
+  const loadComposerImage = (file: File) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      setMediaPreview(String(reader.result ?? ''));
-    };
+    reader.onload = () => { setMediaPreview(String(reader.result ?? '')); };
     reader.readAsDataURL(file);
     // Name it from the image's own metadata or a meaningful file name, never "Screenshot 2026-…".
     void inferImageTitle(file).then(title => { if (title) setForm(current => current.title ? current : { ...current, title }); });
-    event.target.value = '';
+  };
+  /** A PDF becomes a card straight away; an image opens the composer with its preview. */
+  const openComposerWithFile = (file: File, collectionIds: string[], fields: Partial<typeof emptyForm> = {}) => {
+    if (isPdfFile(file)) { setAddMenuOpen(false); void handleAddPdf(file, collectionIds); return; }
+    openComposer({ ...fields, type: 'image' }, collectionIds);
+    loadComposerImage(file);
+  };
+
+  // Drag and drop from other apps and websites. Dropping on the app (or on a collection tile) starts a
+  // card with what was dropped; dropping while a card is being written adds it to that card.
+  const dropDepth = useRef(0);
+  const [dropping, setDropping] = useState(false);
+  const dropTargetCollection = (target: EventTarget) =>
+    (target instanceof Element ? target.closest('[data-collection-id]')?.getAttribute('data-collection-id') : null) ?? null;
+  const addDropToComposer = (item: DroppedItem) => {
+    const image = item.file && !isPdfFile(item.file) ? item.file : undefined;
+    setForm(current => {
+      const sourceUrl = current.sourceUrl || item.url;
+      return { ...current, type: image ? 'image' : current.type, sourceUrl, note: appendToNote(current.note, [item.text, item.url !== sourceUrl ? item.url : '']) };
+    });
+    if (item.url) setComposerSourceOpen(true);
+    if (image) loadComposerImage(image);
+    else if (item.file) void handleAddPdf(item.file, newCardCollectionIds);
+  };
+  const handleExternalDrop = (event: React.DragEvent<HTMLElement>) => {
+    dropDepth.current = 0;
+    setDropping(false);
+    if (!isExternalDrop(event.dataTransfer.types)) return;
+    const intoField = event.target instanceof Element && event.target.closest('input, textarea, [contenteditable="true"]');
+    const hasFile = event.dataTransfer.types.includes('Files');
+    if (intoField && !hasFile) return; // text dropped into a field goes where the caret is
+    event.preventDefault(); // a dropped file must never replace the app in the tab
+    const item = readDrop(event.dataTransfer);
+    if (!item) return;
+    if (cardComposerOpen) { addDropToComposer(item); return; }
+    if (document.querySelector('[role="dialog"]')) return; // another dialog (editor, settings) is in front
+    const target = dropTargetCollection(event.target) ?? (activeView === 'library' ? selectedCollectionId : null);
+    const collectionIds = target ? [target] : [];
+    if (item.file) openComposerWithFile(item.file, collectionIds, { sourceUrl: item.url, note: item.text });
+    else if (item.url) openComposer({ type: 'bookmark', sourceUrl: item.url, note: item.text }, collectionIds);
+    else openComposer({ type: 'text', note: item.text }, collectionIds);
+  };
+  const dropHandlers = {
+    onDragEnter: (event: React.DragEvent<HTMLElement>) => { if (isExternalDrop(event.dataTransfer.types)) { dropDepth.current++; setDropping(true); } },
+    onDragLeave: (event: React.DragEvent<HTMLElement>) => { if (isExternalDrop(event.dataTransfer.types) && --dropDepth.current <= 0) { dropDepth.current = 0; setDropping(false); } },
+    onDragOver: (event: React.DragEvent<HTMLElement>) => { if (isExternalDrop(event.dataTransfer.types)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } },
+    onDrop: handleExternalDrop,
   };
 
   // A PDF becomes a card straight away: first page as its picture, the file and its text kept with it.
-  const handleAddPdf = async (file: File) => {
+  const handleAddPdf = async (file: File, collectionIds: string[] = selectedCollectionId ? [selectedCollectionId] : []) => {
     // Each upload's "Reading…" notice is replaced by that upload's own result.
     const noticeKey = `pdf:${crypto.randomUUID()}`;
     notify({ kind: 'progress', key: noticeKey, title: 'Reading PDF', detail: file.name });
@@ -783,7 +836,7 @@ function App() {
       const { title, thumbnail, pdf } = await readPdfFile(file);
       const base = createCardFromInput({ type: 'pdf', title, dataUrl: thumbnail, note: '' });
       const card = { ...base, pdf, searchText: buildSearchText({ ...base, pdf }) };
-      const changed = selectedCollectionId ? collections.filter(item => item.id === selectedCollectionId).map(item => ({ ...item, cardIds: [...new Set([...item.cardIds, card.id])], updatedAt: card.createdAt })) : [];
+      const changed = collections.filter(item => collectionIds.includes(item.id)).map(item => ({ ...item, cardIds: [...new Set([...item.cardIds, card.id])], updatedAt: card.createdAt }));
       await saveCardWithCollections(card, changed);
       if (changed.length) setCollections(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
       setCards(current => [card, ...current]);
@@ -798,8 +851,10 @@ function App() {
     event.preventDefault();
     if (composerSavingRef.current) return;
 
-    const trimmedTitle = form.title.trim();
+    // A note typed without a title is named after its first words.
+    const trimmedTitle = form.title.trim() || titleFromText(form.note) || titleFromUrl(form.sourceUrl);
     if (!trimmedTitle) {
+      setComposerError('Add a title or some text first.');
       return;
     }
 
@@ -836,9 +891,9 @@ function App() {
       }
       setCards((current) => [card, ...current]);
       setNewlyCreatedCardId(card.id);
-      setSelectedId(card.id);
       notify({ title: 'Card added', detail: `“${card.title}”` });
-      setActiveView('library');
+      // Saving is the end of the task: show the new card (in its collection when made elsewhere) instead of reopening it.
+      if (activeView !== 'library') navigateTo('library', newCardCollectionIds[0] ?? null);
       setForm(emptyForm);
       setMediaPreview(null);
       setCardComposerOpen(false);
@@ -941,7 +996,8 @@ function App() {
     });
 
     setCollections((current) => [collection, ...current]);
-    setSelectedCollectionId(collection.id);
+    // Opening the new collection is a navigation, so Back returns to where it was made.
+    if (activeView === 'library') navigateTo('library', collection.id); else setSelectedCollectionId(collection.id);
     setBulkDestinationId(collection.id);
     setCollectionForm(emptyCollectionForm);
     await saveCollection(collection);
@@ -1333,7 +1389,7 @@ function App() {
   </button>;
 
   return (
-    <main className="app-shell" data-canvas-open={activeView === 'canvas' && selectedCanvas ? 'true' : undefined} aria-busy={!libraryLoaded} onContextMenu={openQuickAddMenu} onKeyDown={event => { if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) openQuickAddMenu(event); }} {...cardStyle.shellProps} style={{ '--profile-accent': profileCardColor, ...appearanceStyle(appearance.values, theme), ...cardStyle.shellStyle } as CSSProperties}>
+    <main className="app-shell" data-canvas-open={activeView === 'canvas' && selectedCanvas ? 'true' : undefined} data-dropping={dropping ? 'true' : undefined} {...dropHandlers} aria-busy={!libraryLoaded} onContextMenu={openQuickAddMenu} onKeyDown={event => { if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) openQuickAddMenu(event); }} {...cardStyle.shellProps} style={{ '--profile-accent': profileCardColor, ...appearanceStyle(appearance.values, theme), ...cardStyle.shellStyle } as CSSProperties}>
       <button type="button" className="mobile-menu-toggle" onClick={() => setMobileSidebarOpen((current) => !current)} aria-label="Toggle navigation">
         ☰
       </button>
@@ -1385,7 +1441,7 @@ function App() {
             <button
               type="button"
               className={`collection-button ${selectedCollectionId === null ? 'active' : ''}`}
-              onClick={() => setSelectedCollectionId(null)}
+              onClick={() => navigateTo('library', null)}
             >
               <span className="collection-check" aria-hidden="true" />
               <span>All cards</span>
@@ -1395,7 +1451,7 @@ function App() {
                 <button
                   type="button"
                   className={`collection-button ${selectedCollectionId === collection.id ? 'active' : ''}`}
-                  onClick={() => setSelectedCollectionId(collection.id)}
+                  onClick={() => navigateTo('library', collection.id)}
                 >
                   <span className="collection-check" aria-hidden="true" />
                   <span>{collection.name}</span>
@@ -1619,7 +1675,7 @@ function App() {
               ).length;
 
               return (
-                <article key={collection.id} className={`collection-tile ${depth ? 'is-child' : ''}`} data-depth={depth} onContextMenu={event => openTileMenu(event, collection.id, 'collection')}>
+                <article key={collection.id} className={`collection-tile ${depth ? 'is-child' : ''}`} data-depth={depth} data-collection-id={collection.id} onContextMenu={event => openTileMenu(event, collection.id, 'collection')}>
                   <button
                     type="button"
                     className="collection-tile-main"
@@ -1721,8 +1777,9 @@ function App() {
 
         {activeView === 'library' && visibleCards.length === 0 && <div className="library-empty">
           <span aria-hidden="true">✧</span><h2>{searchTerm ? 'No matches' : 'No cards yet'}</h2>
-          <p>{searchTerm ? 'Try a different search or clear your filters.' : ''}</p>
-          <button type="button" onClick={() => searchTerm ? changeSearch('') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : 'Connect your browser'}</button>
+          <p>{searchTerm ? 'Try a different search or clear your filters.' : extensionPaired ? 'Capture from the Duckler side panel, drop something here, or write a note.' : ''}</p>
+          {/* A browser that is already paired is not asked to connect again. */}
+          <button type="button" onClick={() => searchTerm ? changeSearch('') : extensionPaired ? handleQuickAddCard('text') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : extensionPaired ? 'New note' : 'Connect your browser'}</button>
         </div>}
         {activeView === 'library' && <p id="card-select-hint" hidden>Click to select, double-click or Enter to edit.</p>}
         {connectFrom && (() => { const from = cards.find(card => card.id === connectFrom); return from ? <div className="selection-hint connect-hint" role="status">
@@ -2179,7 +2236,6 @@ function App() {
                 className="composer-title"
                 aria-label="Title"
                 autoComplete="off"
-                required
                 placeholder="Untitled"
                 value={form.title}
                 onChange={(event) => setForm({ ...form, title: event.target.value })}
@@ -2188,9 +2244,14 @@ function App() {
                 ref={composerNoteRef}
                 className="composer-note"
                 aria-label="Note"
-                placeholder="Type here..."
+                placeholder="Type here… Enter saves, Shift+Enter starts a new line"
                 value={form.note}
                 onChange={(event) => setForm({ ...form, note: event.target.value })}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }}
               />
               <label className="composer-tags">
                 <span className="visually-hidden">Tags</span>

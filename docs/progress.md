@@ -344,3 +344,13 @@ The owner asked for Drive integration, account creation and sharing collections 
 - Leaks: the Google script loader is a single cached promise (a failed load used to leave a dead tag that later calls waited on forever, adding listeners each time); the thumbnail session cache drops entries once the card carries its thumbnail.
 - Checked and fine: listeners/observers/timers in App, pickers, sounds (AudioContext closed on unmount), OCR worker termination, extension bridge.
 - Tests: skip/no-skip, orphan sweep, id encoding, share re-publish once, oversized share link. Note: `apps/extension/src/popup.test.ts` has 4 timing-flaky cases under the full parallel suite (they pass alone).
+
+## Usage fixes: right-click, Enter to save, drag and drop — October 6, 2026 (night, later)
+- Right-click "Quick add" items did nothing with a real mouse: the global pointerdown handler closed the menu on any press, including inside it, so the item was gone before its click. Presses inside the menu no longer close it.
+- Enter saves a note from the composer body (Shift+Enter is a new line); a note without a title is named after its first words (`titleFromText`), a link after its site. Saving no longer reopens the new card in the editor; made outside the library, it lands in its collection (a history entry).
+- Empty library/collection: a paired browser is offered "New note" instead of "Connect your browser".
+- Drag and drop (pattern from react-dropzone / Obsidian): dropping a link, text, image or PDF anywhere opens the composer prefilled, with the collection tile it was dropped on (or the open collection) selected. Dropping onto an open composer adds to that card: text and extra links into the note, the first link as source, an image as its picture. Only http(s) links; Duckler's own drags are left alone; text dropped into a field goes to the caret. `lib/drop.ts` + tests.
+- Notices: progress notices are capped at 60 s; on phones the stack sits above the dock, clear of Back and Settings (they auto-dismissed already).
+- Collection menu list and "create collection" go through `navigateTo`, so Back returns to the previous collection.
+- Fixed the flaky `popup.test.ts`: the panel's `window.close()` 650 ms after a send tore down jsdom's document mid-file on slow runs; the test stubs it.
+- Not covered yet: dropping into the card editor (only the new-card composer accepts drops).

@@ -13,6 +13,7 @@ type NoticeInput = { kind?: NoticeKind; title: string; detail?: string; key?: st
 export const NOTICE_EVENT = 'duckler:notice';
 const MAX_VISIBLE = 3;
 const DURATION: Record<NoticeKind, number> = { success: 3200, info: 3600, error: 6500, progress: 0 };
+const PROGRESS_LIMIT_MS = 60000;
 const GLYPH: Record<NoticeKind, string> = { success: '✕', error: '○', info: '△', progress: '□' };
 
 let notices: Notice[] = [];
@@ -37,7 +38,8 @@ export function notify(input: NoticeInput): string {
   if (replaced) dismissNotice(replaced.id);
   notices = [...notices, notice];
   while (notices.length > MAX_VISIBLE) dismissNotice(notices[0].id);
-  if (notice.duration) timers.set(notice.id, window.setTimeout(() => dismissNotice(notice.id), notice.duration));
+  // A progress notice waits to be replaced, but never longer than a minute (a task that failed silently must not leave it up).
+  timers.set(notice.id, window.setTimeout(() => dismissNotice(notice.id), notice.duration || PROGRESS_LIMIT_MS));
   emit();
   if (kind !== 'progress') window.dispatchEvent(new CustomEvent(NOTICE_EVENT, { detail: kind }));
   return notice.id;

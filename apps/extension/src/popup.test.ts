@@ -30,7 +30,9 @@ function initialize({ unavailableOptions = false, unavailableTabs = false, unava
   return chrome;
 }
 
-beforeEach(() => { document.body.innerHTML = html; });
+// The panel closes itself 650 ms after sending. In jsdom a real window.close() tears down the shared
+// document, so on a slow run every later test in this file found no `document`.
+beforeEach(() => { vi.spyOn(window, 'close').mockImplementation(() => {}); document.body.innerHTML = html; });
 afterEach(() => { window.dispatchEvent(new Event('pagehide')); document.body.innerHTML = ''; });
 
 describe('extension Settings access', () => {

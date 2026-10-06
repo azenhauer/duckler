@@ -445,6 +445,8 @@ html:not([data-theme='dark']) .content::after { opacity: .075 !important; }
 
 /* ---- Notifications: console "achievement" panels. Transform/opacity only, no blur. ---- */
 .notice-stack { position: fixed; top: max(78px, calc(env(safe-area-inset-top) + 56px)); right: 28px; z-index: 95; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+/* Phones: the top corners hold Back and Settings, so notices sit above the dock instead. */
+@media (max-width: 560px) { .notice-stack { top: auto; left: 16px; right: 16px; bottom: calc(92px + env(safe-area-inset-bottom)); align-items: stretch; flex-direction: column-reverse; } .notice { width: auto; } }
 .notice { position: relative; display: flex; align-items: center; gap: 12px; width: min(340px, calc(100vw - 32px)); padding: 10px 14px 12px 10px; overflow: hidden; pointer-events: auto; cursor: pointer;
   background: var(--sx-panel); border: 1px solid var(--sx-line-soft); border-left: 3px solid var(--notice-tone); color: var(--ui-text); box-shadow: 4px 4px 0 color-mix(in srgb, #000 35%, transparent);
   animation: notice-in 180ms cubic-bezier(.2,.9,.3,1.15) both; }
@@ -827,3 +829,7 @@ html:not([data-theme='dark']) .profile-identity-card.has-cover::after { opacity:
 .incoming-share-list li { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--sx-line-soft); border-radius: 4px; overflow-wrap: anywhere; }
 .incoming-share-list small { color: var(--ui-accent-primary); font-size: .76rem; }
 .incoming-share-list span { color: var(--ui-text-muted); font-size: .8rem; }
+
+/* =====================  Drop from other apps  ===================== */
+.app-shell[data-dropping='true']::after { content: ''; position: fixed; inset: 10px; z-index: 89; pointer-events: none; border: 1px dashed var(--ui-accent-primary); border-radius: 12px; background: color-mix(in srgb, var(--ui-accent-primary) 6%, transparent); }
+.app-shell[data-dropping='true'] .collection-tile:hover { outline: 1px solid var(--ui-accent-primary); outline-offset: 4px; }
