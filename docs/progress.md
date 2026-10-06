@@ -410,3 +410,5 @@ What changed (no feature or visual change intended):
 - Back/Forward restore the scroll position of the page being returned to (saved on its history entry; `history.scrollRestoration = 'manual'`).
 - "Add to collection" under each card shows on the card in use (hover, focus, selected) and always on touch screens; its space is kept.
 - Not done: dragging cards onto collection tiles (cards and tiles never share a screen; external drops onto tiles already work); re-encoding the UI sound WAVs (no audio encoder on this PC).
+- Favorites: cards have an optional `favorite` flag (synced like any edit). ☆ in the card action bar or `F` (selected/focused cards) stars them; starred cards show a gold ★. The built-in Favorites area (`FAVORITES_ID = 'favorites'`, opened like a collection, not stored) is linked from Home and sits next to All cards in Collections; it can't be renamed or deleted.
+- Vitest `testTimeout` 15 s: the parallel full run occasionally pushed jsdom App tests past 5 s on this PC.

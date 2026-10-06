@@ -69,7 +69,7 @@ export function SharedCollectionPage({ fileId, keyFragment }: { fileId: string; 
   const open = cards.find(card => card.id === openId) ?? null;
 
   const api = useCallback((): CardApi => ({
-    connectingFrom: null, select: () => {}, open: setOpenId, startConnect: () => {}, connect: () => {}, remove: () => {},
+    connectingFrom: null, select: () => {}, open: setOpenId, startConnect: () => {}, connect: () => {}, remove: () => {}, toggleFavorite: () => {},
     move: async () => {}, textMenu: () => {}, changeMembership: () => {}, createCollection: () => {}, openCollection: () => {}, storeThumb: () => {},
   }), []);
 

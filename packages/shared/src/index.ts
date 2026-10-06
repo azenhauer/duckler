@@ -52,6 +52,8 @@ export const cardSchema = z.object({
   searchText: z.string().default(''),
   /** Optional card colour (#rrggbb) chosen in the editor; absent means the global card style. */
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  /** Starred: shown in the Favorites area. */
+  favorite: z.boolean().optional(),
   ocr: ocrTextSchema.optional(),
   pdf: pdfDocumentSchema.optional(),
   /** Provenance for an image captured from a PDF page in the same library. */

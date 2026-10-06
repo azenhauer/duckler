@@ -52,14 +52,15 @@ describe('App', () => {
     fireEvent.click(card);
     fireEvent.keyDown(screen.getByPlaceholderText('Search all notes'), { key: 'Delete' }); // typing: ignored
     fireEvent.doubleClick(card);
+    const close = await screen.findByRole('button', { name: 'Close details' }, { timeout: 8000 }); // the editor chunk loads on first use
     fireEvent.keyDown(document, { key: 'Delete' }); // a dialog is open: ignored
     expect(card).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
+    fireEvent.click(close);
     fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.keyDown(card, { key: 'Delete' });
     await waitFor(() => expect(card).not.toBeInTheDocument());
     expect((await readCards()).some(item => item.title === 'Design note')).toBe(false);
-  });
+  }, 15000);
   it('removes a badge relationship, restores it with Undo and permits retry after failed Undo', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
@@ -213,6 +214,34 @@ describe('App', () => {
       expect(inbox.cardIds).not.toContain(storedCard.id);
     });
     expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
+  });
+
+  it('stars cards into a Favorites area, from the toolbar or with F', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    const design = await screen.findByRole('article', { name: 'Open Design note' });
+    fireEvent.pointerEnter(design.parentElement!); // the action bar is made on first hover
+    fireEvent.click(within(design.parentElement!).getByRole('button', { name: 'Add Design note to favorites' }));
+    await waitFor(async () => expect((await readCards()).find(card => card.title === 'Design note')?.favorite).toBe(true));
+    expect(within(design).getByLabelText('Favorite')).toBeInTheDocument();
+
+    // Home shows the area; it lists only starred cards.
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Favorites' }));
+    expect(await screen.findByRole('article', { name: 'Open Design note' })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Open Spec checklist' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search favorites')).toBeInTheDocument();
+
+    // F unstars the selected card; the area is then empty.
+    fireEvent.click(screen.getByRole('article', { name: 'Open Design note' }));
+    fireEvent.keyDown(document.body, { key: 'f' });
+    expect(await screen.findByRole('heading', { name: 'No favorites yet' })).toBeInTheDocument();
+    await waitFor(async () => expect((await readCards()).find(card => card.title === 'Design note')?.favorite).toBeUndefined());
+
+    // Collections lists Favorites next to All cards.
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open collections' }));
+    expect(await screen.findByRole('button', { name: 'Open Favorites' })).toBeInTheDocument();
   });
 
   it('lists recently used collections first in the picker', async () => {

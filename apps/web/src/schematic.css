@@ -873,3 +873,9 @@ html:not([data-theme='dark']) .profile-identity-card.has-cover::after { opacity:
   .collection-badge-add { transition: opacity var(--sx-fast) ease-out; }
   .library-card:not(:hover):not(:focus-within):not(.is-checked) .collection-badge-add:not([aria-expanded='true']) { opacity: 0; }
 }
+
+/* Favorites: a gold star on starred cards, and in their action bar. */
+.card-favorite-badge { position: absolute; top: 8px; right: 10px; z-index: 3; color: var(--sx-tri, #f2d33d); font-size: .9rem; line-height: 1; text-shadow: 0 0 6px color-mix(in srgb, var(--sx-tri, #f2d33d) 55%, transparent); pointer-events: none; }
+.card-link-badge ~ .card-favorite-badge { right: 52px; }
+.card-favorite-toggle[aria-pressed='true'] { color: var(--sx-tri, #f2d33d) !important; }
+.home-favorites svg, .collection-tile-favorites .collection-folder-icon { color: var(--sx-tri, #f2d33d); }

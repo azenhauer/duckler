@@ -74,6 +74,9 @@ const CardEditor = lazy(() => loadCardEditor().then(module => ({ default: module
 const CollectionCanvas = lazy(() => loadCollectionCanvas().then(module => ({ default: module.CollectionCanvas })));
 const preloadViews = () => { void loadCardEditor().catch(() => {}); void loadCollectionCanvas().catch(() => {}); };
 
+/** The built-in Favorites area is opened like a collection, under this id (it is not a stored collection). */
+const FAVORITES_ID = 'favorites';
+
 const emptyForm = {
   type: 'bookmark' as CardRecord['type'],
   title: '',
@@ -216,7 +219,7 @@ function App() {
     setCards(nextCards); setCollections(nextCollections); setPulledVersion(version => version + 1);
     // After an account switch the open collection or canvas may not exist in the new library.
     const openId = selectedCollectionIdRef.current;
-    if (openId && !nextCollections.some(collection => collection.id === openId)) navigateHomeRef.current();
+    if (openId && openId !== FAVORITES_ID && !nextCollections.some(collection => collection.id === openId)) navigateHomeRef.current();
   }, () => ({
     name: displayProfileName === 'My Library' ? '' : displayProfileName, photo: profilePhoto || undefined,
     tag: displayProfileTag || undefined, bio: profileBio || undefined, color: profileCardColor, cover: profileCover || undefined,
@@ -595,12 +598,13 @@ function App() {
   const selectedCanvas = collections.find(collection => collection.id === selectedCanvasId) ?? null;
   const isHome = activeView === 'home';
   const activeCardCount = cards.filter(card => !card.trashed).length;
+  const favoriteCount = useMemo(() => cards.filter(card => card.favorite && !card.trashed).length, [cards]);
   const showLibraryFilters = activeView === 'library';
   // The search field always works on what the current page shows.
   const searchPlaceholder = isHome ? 'Search refs'
     : activeView === 'collections' ? 'Search collections'
     : activeView === 'canvas' ? 'Search canvases'
-    : selectedCollection ? `Search ${selectedCollection.name}` : 'Search all notes';
+    : selectedCollection ? `Search ${selectedCollection.name}` : selectedCollectionId === FAVORITES_ID ? 'Search favorites' : 'Search all notes';
   const showAllCardsTile = !searchTerm.trim() || 'all cards'.includes(searchTerm.trim().toLocaleLowerCase());
   const visibleCollections = searchTerm.trim()
     ? collections.filter(collection => collection.name.toLocaleLowerCase().includes(searchTerm.trim().toLocaleLowerCase()))
@@ -668,6 +672,10 @@ function App() {
           return false;
         }
 
+        if (selectedCollectionId === FAVORITES_ID && !card.favorite) {
+          return false;
+        }
+
         if (typeFilter === 'image' && card.type !== 'image') {
           return false;
         }
@@ -691,7 +699,7 @@ function App() {
         const rightTime = new Date(right.updatedAt).getTime();
         return sortMode === 'newest' ? rightTime - leftTime : leftTime - rightTime;
       });
-  }, [cards, searchTerm, selectedCollection, sortMode, typeFilter]);
+  }, [cards, searchTerm, selectedCollection, selectedCollectionId, sortMode, typeFilter]);
 
   // ---- Connected cards ("dialogues") and notes made from selected text ----
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
@@ -754,6 +762,7 @@ function App() {
     changeMembership: (cardId, collectionId, included) => { void changeMembership(cardId, collectionId, included); },
     createCollection: async (cardId, name) => { await handleCreateCollectionForCard(cardId, name); },
     openCollection: collectionId => navigateTo('library', collectionId),
+    toggleFavorite: ids => { void toggleFavorite(ids); },
     // Saved quietly: no updatedAt change, so it is not an edit.
     storeThumb: (cardId, thumb) => {
       void saveCardThumb(cardId, thumb).catch(() => {});
@@ -795,6 +804,11 @@ function App() {
     if (event.key === '/') { event.preventDefault(); document.querySelector<HTMLInputElement>('.refs-search input')?.focus(); }
     else if (event.key.toLowerCase() === 'n' && !event.shiftKey) { event.preventDefault(); handleQuickAddCard('text'); }
     else if (event.key === '?') { event.preventDefault(); setShortcutsOpen(true); }
+    else if (event.key.toLowerCase() === 'f' && !event.shiftKey && activeView === 'library') {
+      const focused = target?.closest('[data-card-id]')?.getAttribute('data-card-id');
+      const ids = selectedCardIds.length ? selectedCardIds : focused ? [focused] : [];
+      if (ids.length) { event.preventDefault(); void toggleFavorite(ids); }
+    }
   };
   useEffect(() => {
     const listen = (event: KeyboardEvent) => shortcutRef.current(event);
@@ -1095,6 +1109,21 @@ function App() {
     setCards((current) => current.map((card) => (card.id === cardId ? nextCard : card)));
     await saveCard(nextCard);
     notify(nextCard.trashed ? { kind: 'info', title: 'Moved to trash', detail: `“${nextCard.title}”` } : { title: 'Restored', detail: `“${nextCard.title}”` });
+  };
+
+  // Starring is an edit like any other (updatedAt changes), so it syncs to the account's other devices.
+  // Several cards: if all are starred they are unstarred, otherwise all become starred.
+  const toggleFavorite = async (cardIds: string[]) => {
+    const targets = cards.filter(card => cardIds.includes(card.id));
+    if (!targets.length) return;
+    const favorite = !targets.every(card => card.favorite);
+    const now = new Date().toISOString();
+    const updated = targets.map(card => {
+      const { favorite: _previous, ...rest } = card;
+      return favorite ? { ...rest, favorite: true, updatedAt: now } : { ...rest, updatedAt: now };
+    });
+    setCards(current => current.map(card => updated.find(item => item.id === card.id) ?? card));
+    for (const card of updated) await saveCard(card);
   };
 
   // Deleting asks nothing: the cards go at once and an Undo stays for a few seconds instead.
@@ -1547,6 +1576,9 @@ function App() {
           {activeCardCount > 0 && <button type="button" className="home-all-notes" aria-label="All notes" onClick={() => navigateTo('library')}>
             All notes <span>{activeCardCount}</span><InterfaceIcon name="link" />
           </button>}
+          {favoriteCount > 0 && <button type="button" className="home-all-notes home-favorites" aria-label="Favorites" onClick={() => navigateTo('library', FAVORITES_ID)}>
+            Favorites <span>{favoriteCount}</span><InterfaceIcon name="star-filled" />
+          </button>}
         </div>}
         {!isHome && <header className="page-header">
           <button type="button" className="page-back b-button" aria-label="Go back" onClick={goBack}><span className="b-ring" aria-hidden="true" /><span className="b-label" aria-hidden="true">Back</span></button>
@@ -1566,7 +1598,7 @@ function App() {
             {selectedCollection && <div className="collection-owner-row"><ProfileHover showName label={`${displayProfileName}'s profile`} profile={{ name: displayProfileName, photo: profilePhoto || undefined, tag: displayProfileTag || undefined, bio: profileBio || undefined, color: profileCardColor, cover: profileCover || undefined }} /></div>}
             <div className="collection-menu" ref={collectionMenuRef} {...collectionHover}>
               <button type="button" className="collection-menu-trigger" aria-label="Choose collection" aria-expanded={collectionMenuOpen} aria-haspopup="true" onClick={() => setCollectionMenuOpen((open) => !open)}>
-                <span>{selectedCollection?.name ?? 'All notes'}</span>
+                <span>{selectedCollectionId === FAVORITES_ID ? 'Favorites' : selectedCollection?.name ?? 'All notes'}</span>
                 <span className="collection-menu-count">{selectedCollection?.cardIds.length ?? cards.filter((card) => !card.trashed).length}</span>
                 <span className="menu-chevron" aria-hidden="true">⌄</span>
               </button>
@@ -1701,6 +1733,27 @@ function App() {
                 </button>
               </article>;
             })()}
+            {(!searchTerm.trim() || 'favorites'.includes(searchTerm.trim().toLocaleLowerCase())) && (() => {
+              // Starred cards, from every collection; like All cards, it can't be renamed or deleted.
+              const starred = cards.filter(card => card.favorite && !card.trashed);
+              return <article className="collection-tile collection-tile-all collection-tile-favorites">
+                <button type="button" className="collection-tile-main" aria-label="Open Favorites" onClick={() => navigateTo('library', FAVORITES_ID)}>
+                  <span className="collection-tile-preview" aria-hidden="true">
+                    {starred.length ? starred.slice(0, 4).map(card => <span key={card.id} className={`collection-preview-item ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-image' : ''}`}>
+                      {(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? <img src={card.thumb?.url || card.dataUrl} alt="" decoding="async" loading="lazy" /> : <span>{card.title.slice(0, 1).toUpperCase()}</span>}
+                    </span>) : <span className="collection-preview-empty"><InterfaceIcon name="star" /></span>}
+                  </span>
+                  <span className="collection-tile-info">
+                    <span className="collection-tile-heading">
+                      <span className="collection-folder-icon" aria-hidden="true"><InterfaceIcon name="star-filled" /></span>
+                      <strong>Favorites</strong>
+                      <span className="collection-tile-count">{starred.length}</span>
+                    </span>
+                    <span className="collection-tile-description">Cards you starred</span>
+                  </span>
+                </button>
+              </article>;
+            })()}
             {orderCollectionTree(visibleCollections).map(({ collection, depth }) => {
               const memberCards = collection.cardIds
                 .map((cardId) => cards.find((card) => card.id === cardId && !card.trashed))
@@ -1784,8 +1837,8 @@ function App() {
 
 
         {activeView === 'library' && visibleCards.length === 0 && <div className="library-empty">
-          <span aria-hidden="true">✧</span><h2>{searchTerm ? 'No matches' : 'No cards yet'}</h2>
-          <p>{searchTerm ? 'Try a different search or clear your filters.' : extensionPaired ? 'Capture from the Duckler side panel, drop something here, or write a note.' : ''}</p>
+          <span aria-hidden="true">✧</span><h2>{searchTerm ? 'No matches' : selectedCollectionId === FAVORITES_ID ? 'No favorites yet' : 'No cards yet'}</h2>
+          <p>{searchTerm ? 'Try a different search or clear your filters.' : selectedCollectionId === FAVORITES_ID ? 'Star a card with ☆ in its toolbar, or select cards and press F.' : extensionPaired ? 'Capture from the Duckler side panel, drop something here, or write a note.' : ''}</p>
           {/* A browser that is already paired is not asked to connect again. */}
           <button type="button" onClick={() => searchTerm ? changeSearch('') : extensionPaired ? handleQuickAddCard('text') : setExtensionSetupOpen(true)}>{searchTerm ? 'Clear search' : extensionPaired ? 'New note' : 'Connect your browser'}</button>
         </div>}
@@ -2025,7 +2078,7 @@ function App() {
         <h2>Keyboard shortcuts</h2>
         <dl className="shortcut-list">
           {([
-            ['/', 'Search'], ['N', 'New note'], ['Ctrl / ⌘ + A', 'Select every card in view'], ['Click', 'Select or deselect a card'],
+            ['/', 'Search'], ['N', 'New note'], ['F', 'Star or unstar the selected cards'], ['Ctrl / ⌘ + A', 'Select every card in view'], ['Click', 'Select or deselect a card'],
             ['Double-click · Enter', 'Open a card'], ['Delete', 'Delete the selected cards (with Undo)'], ['Esc', 'Close, clear the selection, or go back'],
             ['Shift + F10', 'Quick add menu'], ['?', 'This list'],
           ] as const).map(([keys, what]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{what}</dd></div>)}

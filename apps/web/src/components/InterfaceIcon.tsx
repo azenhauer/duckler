@@ -1,8 +1,10 @@
 // PS2-schematic icon set: square caps, mitred corners, hardware-diagram shapes.
-export type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more' | 'sound' | 'mute' | 'restore' | 'close' | 'check' | 'connect' | 'image';
+export type IconName = 'back' | 'search' | 'sun' | 'moon' | 'link' | 'upload' | 'note' | 'browser' | 'edit' | 'move' | 'trash' | 'settings' | 'more' | 'sound' | 'mute' | 'restore' | 'close' | 'check' | 'connect' | 'image' | 'star' | 'star-filled';
 export function InterfaceIcon({ name }: { name: IconName }) {
   const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'square' as const, strokeLinejoin: 'miter' as const };
   return <svg className={`ui-icon ui-icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
+    {/* Five-point star: outline (☆) or filled (★, favourite) */}
+    {(name === 'star' || name === 'star-filled') && <path {...p} fill={name === 'star-filled' ? 'currentColor' : 'none'} d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8L12 3.5Z" />}
     {/* Picture frame: mountains and sun */}
     {name === 'image' && <><path {...p} d="M3.5 5h17v14h-17V5Z" /><path {...p} d="M3.5 16l5-5 4 4 2.5-2.5 5 5" /><circle {...p} cx="16" cy="9" r="1.5" /></>}
     {/* Pen nib over a baseline */}

@@ -14,6 +14,7 @@ export type CardApi = {
   startConnect: (cardId: string) => void;
   connect: (fromId: string, toId: string) => void;
   remove: (cardId: string) => void;
+  toggleFavorite: (cardIds: string[]) => void;
   move: (card: CardRecord, collectionId: string) => Promise<void>;
   textMenu: (menu: { left: number; top: number; text: string; cardId: string }) => void;
   changeMembership: (cardId: string, collectionId: string, included: boolean) => void;
@@ -68,6 +69,7 @@ export const LibraryCard = memo(function LibraryCard({ card, collections, api, i
             onChange={() => api().select(card.id)} onClick={event => event.stopPropagation()} />
         </div>
         {showActions && <CardActions cardId={card.id} title={card.title} collections={collections}
+          favorite={card.favorite} onFavorite={() => api().toggleFavorite([card.id])}
           onConnect={() => api().startConnect(card.id)} onEdit={() => api().open(card.id)}
           onDelete={() => api().remove(card.id)} onMove={collectionId => api().move(card, collectionId)} />}
       </>}
@@ -112,6 +114,7 @@ export const LibraryCard = memo(function LibraryCard({ card, collections, api, i
         {card.type === 'pdf' && <span className="card-pdf-badge">PDF · {card.pdf?.pageCount ?? '?'} p</span>}
         {card.source && <span className="card-pdf-badge card-source-badge">Page {card.source.page}</span>}
         {connectionCount > 0 && <span className="card-pdf-badge card-link-badge" title="Connected cards">⇄ {connectionCount}</span>}
+        {card.favorite && <span className="card-favorite-badge" title="Favorite" aria-label="Favorite">★</span>}
         {isCaptured && <span className="capture-flash" aria-hidden="true"><i /><i /><i /><i /></span>}
         {card.type === 'text' ? <div className="text-card-preview note-card-preview"><span className="card-kind">NOTE</span><p>{card.note || card.title}</p>{card.caption && <small className="note-caption">{card.caption}</small>}</div> : null}
         {card.type === 'bookmark' ? <div className="bookmark-card-preview">
