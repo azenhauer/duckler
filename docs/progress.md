@@ -353,7 +353,7 @@ The owner asked for Drive integration, account creation and sharing collections 
 - Notices: progress notices are capped at 60 s; on phones the stack sits above the dock, clear of Back and Settings (they auto-dismissed already).
 - Collection menu list and "create collection" go through `navigateTo`, so Back returns to the previous collection.
 - Fixed the flaky `popup.test.ts`: the panel's `window.close()` 650 ms after a send tore down jsdom's document mid-file on slow runs; the test stubs it.
-- Not covered yet: dropping into the card editor (only the new-card composer accepts drops).
+- Dropping into the card editor: added October 7, 2026 (see below).
 
 ## One action list for + and right-click; canvases in Drive sync — October 6, 2026 (night, later still)
 - `+` and right-click menus render one `createActions` list. Right-click "Upload" did nothing before (its file input lived inside the + menu, which was closed); there is now one always-mounted input.
@@ -413,3 +413,4 @@ What changed (no feature or visual change intended):
 - Favorites: cards have an optional `favorite` flag (synced like any edit). ☆ in the card action bar or `F` (selected/focused cards) stars them; starred cards show a gold ★. The built-in Favorites area (`FAVORITES_ID = 'favorites'`, opened like a collection, not stored) is linked from Home and sits next to All cards in Collections; it can't be renamed or deleted.
 - Vitest `testTimeout` 15 s: the parallel full run occasionally pushed jsdom App tests past 5 s on this PC.
 - Dependency upgrade: vite 5 → 7.3, vitest 2 → 4.1, esbuild 0.24 → 0.28, typescript-eslint 7 → 8.71, @vitejs/plugin-react 4 → 5 (Vite 8 was skipped: plugin-react 6 needs it and it swaps the bundler). `npm audit`: 15 dev-only advisories (2 critical, 10 high) → 0; production was already 0. Typecheck, lint, 257 tests, web and extension builds, and a browser smoke of the built app all pass.
+- Card editor accepts drops into its draft (saved with Save): text and links go into the note (a link card's first link becomes its source), a raster picture (PNG/JPEG/WebP/GIF/AVIF, no SVG) becomes the card's image (a note or link becomes an image card, keeping its text); PDFs keep their pages. The preview, kind and OCR panel follow the draft. Test: "adds dropped text, links and pictures to the card being edited".

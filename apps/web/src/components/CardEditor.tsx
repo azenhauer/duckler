@@ -11,6 +11,16 @@ const kindLabel = (type: CardRecord['type']) => type === 'image' ? 'Image' : typ
 import { InterfaceIcon } from './InterfaceIcon';
 import { OcrPanel } from './OcrPanel';
 import { PdfViewer, type PdfPageNote } from './PdfViewer';
+import { appendToNote, isExternalDrop, readDrop } from '../lib/drop';
+
+// Pictures an editor accepts by drop: raster formats only (the same rule as share links; no SVG).
+const DROPPABLE_IMAGE = /^image\/(png|jpeg|webp|gif|avif)$/;
+const asDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result ?? ''));
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(file);
+});
 
 /** PS2-palette tints for a single card; "none" falls back to the global card style. */
 export const CARD_TINTS = ['#3cc8ff', '#2a2ca6', '#f2d33d', '#3ddc84', '#ff4b4b', '#ff7ad9', '#9aa6ff', '#e6f6ff'];
@@ -38,7 +48,28 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
   const [memberships, setMemberships] = useState(collections.filter(item => item.cardIds.includes(card.id)).map(item => item.id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const kind = card.type === 'image' ? 'Image' : card.type === 'pdf' ? 'PDF' : card.type === 'text' ? 'Note' : 'Link';
+  const kind = draft.type === 'image' ? 'Image' : draft.type === 'pdf' ? 'PDF' : draft.type === 'text' ? 'Note' : 'Link';
+  // Drops from other apps and websites land in this draft (saved with Save, like any edit): text and
+  // links go into the note (a link card's first link becomes its source), a picture becomes the card's
+  // image. Text dropped straight into a field goes where the caret is.
+  const [dropping, setDropping] = useState(false);
+  const dropInto = async (event: React.DragEvent<HTMLFormElement>) => {
+    setDropping(false);
+    if (!isExternalDrop(event.dataTransfer.types)) return;
+    const hasFile = event.dataTransfer.types.includes('Files');
+    if (!hasFile && event.target instanceof Element && event.target.closest('input, textarea')) return;
+    event.preventDefault(); event.stopPropagation(); // the page's own drop would start a new card
+    const item = readDrop(event.dataTransfer);
+    if (!item) return;
+    const picture = item.file && DROPPABLE_IMAGE.test(item.file.type) ? item.file : undefined;
+    if (item.file && !picture) setError(card.type === 'pdf' ? 'A PDF card keeps its pages. Drop the picture on the page to make a new card.' : 'Only PNG, JPEG, WebP, GIF or AVIF pictures can be added.');
+    const dataUrl = picture && card.type !== 'pdf' ? await asDataUrl(picture).catch(() => '') : '';
+    setDraft(current => {
+      const linkAsSource = current.type !== 'text' && !current.sourceUrl && item.url ? item.url : '';
+      const next = { ...current, sourceUrl: current.sourceUrl || linkAsSource || undefined, note: appendToNote(current.note, [item.text, item.url !== linkAsSource ? item.url : '']) };
+      return dataUrl ? { ...next, type: 'image' as const, dataUrl } : next;
+    });
+  };
   const toggleMembership = (id: string) => setMemberships(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
 
   const selectionItems = selectionMenu ? [
@@ -46,7 +77,11 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
     { label: 'Copy', onSelect: () => { void navigator.clipboard?.writeText(selectionMenu.text).catch(() => {}); } },
   ] : [];
   return <>{selectionMenu && <TileMenu title="Selected text" position={selectionMenu} items={selectionItems} onClose={() => setSelectionMenu(null)} />}<Dialog label="Card details" className="card-editor" onClose={() => { if (!saving) onClose(); }}>
-    <form className="editor-sheet" style={draft.color ? { '--card-tint': draft.color } as React.CSSProperties : undefined} onSubmit={async event => {
+    <form className="editor-sheet" data-dropping={dropping || undefined} style={draft.color ? { '--card-tint': draft.color } as React.CSSProperties : undefined}
+      onDragOver={event => { if (isExternalDrop(event.dataTransfer.types)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy'; setDropping(true); } }}
+      onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false); }}
+      onDrop={event => { void dropInto(event); }}
+      onSubmit={async event => {
       event.preventDefault(); if (saving) return;
       if (!draft.title.trim()) { setError('Enter a title.'); return; }
       if (draft.sourceUrl) { try { if (!['http:', 'https:'].includes(new URL(draft.sourceUrl).protocol)) throw new Error(); } catch { setError('Enter a valid website address.'); return; } }
@@ -64,10 +99,10 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
         </div>
       </header>
 
-      <div className={`editor-body ${(card.type === 'image' || card.type === 'pdf') && card.dataUrl ? 'has-preview' : ''}`}>
+      <div className={`editor-body ${(draft.type === 'image' || draft.type === 'pdf') && draft.dataUrl ? 'has-preview' : ''}`}>
         {card.type === 'pdf' && card.pdf ? <figure className="editor-preview"><PdfViewer pdf={card.pdf} onCapture={onCapturePdfPage} notes={pdfNotes} onOpenNote={onOpenCard}
           onCreateNote={onCreateLinkedNote ? (page, text) => onCreateLinkedNote(text, page) : undefined} /></figure>
-          : card.type === 'image' && card.dataUrl && <figure className="editor-preview"><img className="editor-image" src={card.dataUrl} alt={card.title} />
+          : draft.type === 'image' && draft.dataUrl && <figure className="editor-preview"><img className="editor-image" src={draft.dataUrl} alt={draft.title} />
             {/* Connected notes speak over the image, like notes on a PDF page. */}
             {connectedNotes.length > 0 && <ul className="pdf-messages" aria-label="Connected notes">{connectedNotes.slice(0, 3).map(item => <li key={item.id}>
               <button type="button" className="pdf-message" onClick={() => onOpenCard?.(item.id)} aria-label={`Open note ${item.title}`}><b>Note</b><span>{item.note || item.title}</span></button></li>)}
@@ -78,7 +113,7 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
           <label className="editor-field"><span>Title</span>
             <input aria-label="Title" className="editor-title" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Untitled" maxLength={1000} /></label>
           <label className="editor-field editor-field-note"><span>Note</span>
-            <textarea aria-label="Note" placeholder="Type here…" value={draft.note} rows={card.type === 'text' ? 6 : 3} onChange={event => setDraft({ ...draft, note: event.target.value })}
+            <textarea aria-label="Note" placeholder="Type here…" value={draft.note} rows={draft.type === 'text' ? 6 : 3} onChange={event => setDraft({ ...draft, note: event.target.value })}
               onContextMenu={event => {
                 const field = event.currentTarget, text = field.value.slice(field.selectionStart, field.selectionEnd).trim();
                 if (!text || !onNoteFromSelection) return;
@@ -86,7 +121,7 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
                 setSelectionMenu({ left: event.clientX, top: event.clientY, text });
               }} /></label>
           {draft.caption !== undefined && <label className="editor-field"><span>Caption</span><textarea aria-label="Caption" value={draft.caption} maxLength={10000} rows={2} onChange={event => setDraft({ ...draft, caption: event.target.value })} /></label>}
-          {card.type === 'image' && card.dataUrl && <OcrPanel dataUrl={card.dataUrl} value={draft.ocr} onChange={ocr => setDraft({ ...draft, ocr })}
+          {draft.type === 'image' && draft.dataUrl && <OcrPanel dataUrl={draft.dataUrl} value={draft.ocr} onChange={ocr => setDraft({ ...draft, ocr })}
             onCreateNote={card.source && onCreateLinkedNote ? text => onCreateLinkedNote(text) : undefined} noteTarget={card.source ? `page ${card.source.page} of ${pdfSource?.title ?? card.source.fileName ?? 'its PDF'}` : undefined} />}
           {card.source && <p className="editor-provenance">From page {card.source.page} of {pdfSource ? <button type="button" className="editor-link" onClick={pdfSource.open}>{pdfSource.title}</button> : <span>{card.source.fileName ?? 'a PDF no longer in your library'}</span>}</p>}
           {connected.length > 0 && <section className="editor-dialogue" aria-label="Connected cards">
@@ -100,7 +135,7 @@ export function CardEditor({ card, collections, onClose, onSave, onTrash, onDele
             </li>)}</ul>
           </section>}
           {card.type === 'pdf' && card.pdf && <p className="editor-provenance">{card.pdf.fileName} · {card.pdf.pageCount} page{card.pdf.pageCount === 1 ? '' : 's'}{card.pdf.text ? ' · text searchable' : ' · no embedded text (scanned)'}</p>}
-          {card.type !== 'text' && card.type !== 'pdf' && <label className="editor-field"><span>Source</span>
+          {draft.type !== 'text' && draft.type !== 'pdf' && <label className="editor-field"><span>Source</span>
             <input aria-label="Source" value={draft.sourceUrl ?? ''} placeholder="Paste a link" onChange={event => setDraft({ ...draft, sourceUrl: event.target.value || undefined })} /></label>}
           <label className="editor-field"><span>Tags</span>
             <input aria-label="Tags" placeholder="comma, separated" value={draft.tags.join(', ')} onChange={event => setDraft({ ...draft, tags: event.target.value.split(',').map(tag => tag.trim()).filter(Boolean) })} /></label>

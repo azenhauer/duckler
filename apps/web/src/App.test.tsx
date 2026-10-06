@@ -216,6 +216,34 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
   });
 
+  it('adds dropped text, links and pictures to the card being edited, saved with Save', async () => {
+    const transfer = (data: Record<string, string>, files: File[] = []) => ({
+      types: [...(files.length ? ['Files'] : []), ...Object.keys(data)], files, getData: (type: string) => data[type] ?? '', dropEffect: 'none',
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    fireEvent.doubleClick(await screen.findByRole('article', { name: 'Open Design note' }));
+    const editor = await screen.findByRole('dialog', { name: 'Card details' }, { timeout: 8000 });
+    const sheet = editor.querySelector('form')!;
+    fireEvent.drop(sheet, { dataTransfer: transfer({ 'text/plain': 'A dropped quote' }) });
+    fireEvent.drop(sheet, { dataTransfer: transfer({ 'text/uri-list': 'https://example.com/ref', 'text/plain': 'https://example.com/ref' }) });
+    await waitFor(() => expect(within(editor).getByLabelText('Note')).toHaveValue('A design observation\nA dropped quote\nhttps://example.com/ref'));
+
+    fireEvent.drop(sheet, { dataTransfer: transfer({}, [new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })]) });
+    expect(await within(editor).findByText(/Only PNG, JPEG/)).toBeInTheDocument();
+    fireEvent.drop(sheet, { dataTransfer: transfer({}, [new File([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' })]) });
+    expect(await within(editor).findByRole('img', { name: 'Design note' })).toHaveAttribute('src', expect.stringMatching(/^data:image\/png;base64,/));
+    expect((await readCards()).find(card => card.title === 'Design note')?.type).toBe('text'); // nothing saved yet
+
+    fireEvent.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(async () => {
+      const saved = (await readCards()).find(card => card.title === 'Design note')!;
+      expect(saved.type).toBe('image');
+      expect(saved.dataUrl).toMatch(/^data:image\/png;base64,/);
+      expect(saved.note).toContain('A dropped quote');
+    });
+  });
+
   it('stars cards into a Favorites area, from the toolbar or with F', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));

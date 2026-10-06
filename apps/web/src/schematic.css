@@ -879,3 +879,6 @@ html:not([data-theme='dark']) .profile-identity-card.has-cover::after { opacity:
 .card-link-badge ~ .card-favorite-badge { right: 52px; }
 .card-favorite-toggle[aria-pressed='true'] { color: var(--sx-tri, #f2d33d) !important; }
 .home-favorites svg, .collection-tile-favorites .collection-folder-icon { color: var(--sx-tri, #f2d33d); }
+
+/* Something from another app is being dragged over the editor. */
+.card-editor .editor-sheet[data-dropping] { outline: 1px dashed var(--ui-accent-primary); outline-offset: -6px; }
