@@ -210,6 +210,28 @@ export const removeCard = async (cardId: string): Promise<void> => {
   });
 };
 
+/**
+ * Undo for deleted cards: puts them back with a new updatedAt (newer than their deletion, so Drive
+ * sync brings them back everywhere even if it already spread the deletion), drops their local
+ * deletion records and returns them to the collections they were in that still exist.
+ */
+export const restoreCards = async (cards: CardRecord[], memberships: Record<string, string[]>): Promise<{ cards: CardRecord[]; collections: CollectionRecord[] }> =>
+  cardDb.transaction('rw', cardDb.cards, cardDb.collections, cardDb.tombstones, async () => {
+    const now = new Date().toISOString();
+    const restored = cards.map(card => ({ ...card, updatedAt: now }));
+    await cardDb.cards.bulkPut(restored);
+    await cardDb.tombstones.bulkDelete(cards.map(card => card.id));
+    const changed: CollectionRecord[] = [];
+    for (const [collectionId, cardIds] of Object.entries(memberships)) {
+      const collection = await cardDb.collections.get(collectionId);
+      if (!collection) continue;
+      const next = { ...collection, cardIds: [...new Set([...collection.cardIds, ...cardIds])], updatedAt: now };
+      await cardDb.collections.put(next);
+      changed.push(next);
+    }
+    return { cards: restored, collections: changed };
+  });
+
 // Change one relationship against current storage, never restore a collection snapshot.
 export const setCardCollectionMembership = async (
   cardId: string, collectionId: string, included: boolean,

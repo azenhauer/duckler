@@ -26,6 +26,7 @@ import {
   readCards,
   readCollections,
   removeCard,
+  restoreCards,
   restoreLibraryBackup,
   saveCard,
   saveCardThumb,
@@ -252,6 +253,13 @@ function App() {
   const knownCardIds = useRef<Set<string> | null>(null);
   const [removingCardIds, setRemovingCardIds] = useState<string[]>([]);
   const [undoMembership, setUndoMembership] = useState<{ cardId: string; collection: CollectionRecord } | null>(null);
+  // Cards just deleted, with the collections they were in, while their Undo is offered.
+  const [undoDelete, setUndoDelete] = useState<{ cards: CardRecord[]; memberships: Record<string, string[]> } | null>(null);
+  useEffect(() => {
+    if (!undoDelete) return;
+    const timeout = window.setTimeout(() => setUndoDelete(null), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [undoDelete]);
   const [membershipSaving, setMembershipSaving] = useState(false);
   const membershipSavingRef = useRef(false);
   const membershipInFlight = useRef(new Set<string>());
@@ -762,6 +770,29 @@ function App() {
     window.addEventListener('keydown', back);
     return () => window.removeEventListener('keydown', back);
   }, []);
+  // Single-key shortcuts (the list opens with ?). Ignored while typing, with a dialog or menu open, or
+  // with modifier keys, so the browser's own shortcuts keep working.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutRef = useRef<(event: KeyboardEvent) => void>(() => {});
+  shortcutRef.current = event => {
+    if (event.defaultPrevented || event.repeat || event.altKey) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    if ([...document.querySelectorAll('[role="dialog"], [role="menu"], .tile-menu, .color-pop')].some(element => !element.closest('.is-leaving'))) return;
+    const command = event.ctrlKey || event.metaKey;
+    if (command && event.key.toLowerCase() === 'a' && activeView === 'library' && visibleCards.length) {
+      event.preventDefault(); setSelectedCardIds(visibleCards.map(card => card.id)); return;
+    }
+    if (command) return;
+    if (event.key === '/') { event.preventDefault(); document.querySelector<HTMLInputElement>('.refs-search input')?.focus(); }
+    else if (event.key.toLowerCase() === 'n' && !event.shiftKey) { event.preventDefault(); handleQuickAddCard('text'); }
+    else if (event.key === '?') { event.preventDefault(); setShortcutsOpen(true); }
+  };
+  useEffect(() => {
+    const listen = (event: KeyboardEvent) => shortcutRef.current(event);
+    window.addEventListener('keydown', listen);
+    return () => window.removeEventListener('keydown', listen);
+  }, []);
   useEffect(() => {
     if (!selectedCardIds.length) return;
     const clear = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('[role="dialog"]')) setSelectedCardIds([]); };
@@ -1058,26 +1089,41 @@ function App() {
     notify(nextCard.trashed ? { kind: 'info', title: 'Moved to trash', detail: `“${nextCard.title}”` } : { title: 'Restored', detail: `“${nextCard.title}”` });
   };
 
-  const handleDelete = async (cardId: string) => {
-    const card = cards.find(item => item.id === cardId);
-    if (!card || !window.confirm(`Delete “${card.title}” permanently? This cannot be undone.`)) return;
-    setRemovingCardIds(current => current.includes(cardId) ? current : [...current, cardId]);
-    if (selectedId === cardId) setSelectedId(null);
+  // Deleting asks nothing: the cards go at once and an Undo stays for a few seconds instead.
+  const handleDelete = async (cardIds: string | string[]) => {
+    const ids = [...new Set(Array.isArray(cardIds) ? cardIds : [cardIds])].filter(id => !removingCardIds.includes(id));
+    const doomed = cards.filter(item => ids.includes(item.id));
+    if (!doomed.length) return;
+    const memberships: Record<string, string[]> = {};
+    for (const collection of collections) {
+      const inside = collection.cardIds.filter(id => ids.includes(id));
+      if (inside.length) memberships[collection.id] = inside;
+    }
+    setRemovingCardIds(current => [...new Set([...current, ...ids])]);
+    if (selectedId && ids.includes(selectedId)) setSelectedId(null);
     await new Promise(resolve => window.setTimeout(resolve, 180));
     try {
-      setCollections((current) =>
-        current.map((collection) => ({
-          ...collection,
-          cardIds: collection.cardIds.filter((id) => id !== cardId),
-          updatedAt: new Date().toISOString(),
-        })),
-      );
-      setSelectedCardIds((current) => current.filter((id) => id !== cardId));
-      await removeCard(cardId);
-      setCards((current) => current.filter((card) => card.id !== cardId));
-      notify({ kind: 'info', title: 'Deleted', detail: `“${card.title}”` });
+      const now = new Date().toISOString();
+      setCollections(current => current.map(collection => collection.cardIds.some(id => ids.includes(id)) ? { ...collection, cardIds: collection.cardIds.filter(id => !ids.includes(id)), updatedAt: now } : collection));
+      setSelectedCardIds(current => current.filter(id => !ids.includes(id)));
+      for (const id of ids) await removeCard(id);
+      setCards(current => current.filter(card => !ids.includes(card.id)));
+      setUndoDelete({ cards: doomed, memberships });
     } finally {
-      setRemovingCardIds(current => current.filter(id => id !== cardId));
+      setRemovingCardIds(current => current.filter(id => !ids.includes(id)));
+    }
+  };
+  const handleUndoDelete = async () => {
+    const pending = undoDelete;
+    if (!pending) return;
+    setUndoDelete(null);
+    try {
+      const restored = await restoreCards(pending.cards, pending.memberships);
+      setCards(current => [...restored.cards, ...current.filter(card => !restored.cards.some(item => item.id === card.id))]);
+      setCollections(current => current.map(collection => restored.collections.find(item => item.id === collection.id) ?? collection));
+      notify({ title: 'Restored', detail: restored.cards.length === 1 ? `“${restored.cards[0].title}”` : `${restored.cards.length} cards` });
+    } catch (error) {
+      notify({ kind: 'error', title: "Couldn't restore", detail: error instanceof Error ? error.message : undefined });
     }
   };
 
@@ -1090,7 +1136,7 @@ function App() {
       const ids = selectedCardIds.length ? selectedCardIds : focusedId ? [focusedId] : [];
       if (!ids.length) return;
       event.preventDefault();
-      void (async () => { for (const id of ids) if (!removingCardIds.includes(id)) await handleDelete(id); })().catch(error => notify({ kind: 'error', title: "Couldn't delete card", detail: error instanceof Error ? error.message : undefined }));
+      void handleDelete(ids).catch(error => notify({ kind: 'error', title: "Couldn't delete card", detail: error instanceof Error ? error.message : undefined }));
     };
     document.addEventListener('keydown', deleteSelected);
     return () => document.removeEventListener('keydown', deleteSelected);
@@ -1966,6 +2012,17 @@ function App() {
           </button>
         </div>
       </nav>
+      {shortcutsOpen && <Dialog label="Keyboard shortcuts" className="app-settings shortcuts-dialog" onClose={() => setShortcutsOpen(false)}>
+        <BButton className="close-detail" label="Close keyboard shortcuts" onClick={() => setShortcutsOpen(false)} />
+        <h2>Keyboard shortcuts</h2>
+        <dl className="shortcut-list">
+          {([
+            ['/', 'Search'], ['N', 'New note'], ['Ctrl / ⌘ + A', 'Select every card in view'], ['Click', 'Select or deselect a card'],
+            ['Double-click · Enter', 'Open a card'], ['Delete', 'Delete the selected cards (with Undo)'], ['Esc', 'Close, clear the selection, or go back'],
+            ['Shift + F10', 'Quick add menu'], ['?', 'This list'],
+          ] as const).map(([keys, what]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{what}</dd></div>)}
+        </dl>
+      </Dialog>}
       {settingsOpen && <Dialog label="Settings" className="app-settings" onClose={() => setSettingsOpen(false)}>
         <BButton className="close-detail" label="Close settings" onClick={() => setSettingsOpen(false)} />
         <h2>Settings</h2>
@@ -2055,6 +2112,7 @@ function App() {
       {profileCropFile && <AvatarCropper file={profileCropFile} onCancel={() => setProfileCropFile(null)} onSave={saveCroppedProfilePhoto} />}
       {profileCoverFile && <AvatarCropper file={profileCoverFile} shape={CARD_IMAGE_SHAPE} onCancel={() => setProfileCoverFile(null)} onSave={saveProfileCover} />}
       {undoMembership && <div className="membership-undo" role="status"><span>Removed from {undoMembership.collection.name}</span><button type="button" disabled={membershipSaving} onClick={() => void handleUndoMembership()}>Undo</button></div>}
+      {undoDelete && !undoMembership && <div className="membership-undo" role="status"><span>Deleted {undoDelete.cards.length === 1 ? `“${undoDelete.cards[0].title.slice(0, 40)}”` : `${undoDelete.cards.length} cards`}</span><button type="button" onClick={() => void handleUndoDelete()}>Undo</button></div>}
       {quickAddPosition && <div ref={quickAddRef} className="quick-add-context" role="menu" aria-label="Quick add" tabIndex={-1} style={{ left: quickAddPosition.left, top: quickAddPosition.top }}
         onPointerEnter={() => { quickAddHovered.current = true; scheduleQuickAddClose(null); }}
         onPointerLeave={() => { quickAddHovered.current = false; scheduleQuickAddClose(HOVER_CLOSE_DELAY); }}
