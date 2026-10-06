@@ -28,7 +28,7 @@ try {
   const card = page.getByRole('article', { name: 'Open Spec checklist' });
   const actions = page.getByRole('group', { name: 'Actions for Spec checklist' });
   await page.mouse.move(0, 0);
-  assert.equal(await actions.evaluate(el => getComputedStyle(el).opacity), '0');
+  assert.equal(await actions.count(), 0, 'The action bar is only made once the card is hovered');
   await card.hover();
   const edit = actions.getByRole('button', { name: 'Edit Spec checklist' });
   await edit.waitFor({ state: 'visible' });

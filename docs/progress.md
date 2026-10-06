@@ -364,3 +364,27 @@ The owner asked for Drive integration, account creation and sharing collections 
 - XSS sweep: an App test puts script/HTML payloads in every text field (card title, note, caption, tags, javascript: source; collection name/description; profile name/bio) and checks they render as text on the collection page and in the editor. No HTML sinks exist; the only data-driven link (shared pages) is http(s)-only.
 - Obsidian export: the app passes an empty conflict state, because Drive sync resolves conflicts during the merge (newer edit wins); the manifest no longer says "unknown".
 - Sound events: the spec's hover/select/open/back/save map was already complete (spec entry was stale).
+
+## Speed pass — October 6, 2026
+Measured on the production build (`vite preview`, 127.0.0.1) with 300 cards, 100 of them 1600×1000 images; times are action → painted frame.
+
+| | Before | After |
+|---|---|---|
+| Open a 300-card view | 730–1000 ms (two full layouts, ~400–600 ms blocking) | 260–300 ms (one 127–169 ms frame) |
+| Clear a search (back to 300 cards) | 658 ms, 434 ms frame | ~235 ms, 100 ms frame |
+| Open / close the editor | layout of the whole grid each way | 55–77 ms frames |
+| Main script | 926 KB (286 KB gz) | 593 KB (182 KB gz) |
+| Offline precache | 7.0 MB | 2.7 MB |
+| Home artwork | 4.1 MB PNG | 82 KB WebP (384 px, shown at ≤128 px) |
+| Logo SVG | 271 KB | 14 KB |
+
+What changed (no feature or visual change intended):
+- `ScreenshotNote` measured each note on mount (100 image cards → a forced layout of the whole grid, ~230 ms). It now relies on its ResizeObserver, with a length-based first guess so the measured answer rarely re-lays out the grid.
+- The card hover action bar (16 elements, 4 SVGs; 40% of a card) is made on first hover/focus (always on touch screens, selected or open cards) and kept; `@starting-style` keeps its fade-in. Grid elements: 12,000 → 6,900.
+- Card dates share one `Intl.DateTimeFormat` (a new formatter per card per render before).
+- `scrollbar-gutter: stable`: dialogs lock page scroll, and the vanishing scrollbar re-laid out the whole grid on every open/close.
+- The canvas (React Flow) and card editor are lazy chunks, preloaded when the app is idle; JSZip loads only for the Obsidian export. React Flow's CSS stays in the main stylesheet (same cascade).
+- Home artwork → WebP (originals kept in `apps/web/art/`), logo cropped to its visible area; `webp` added to the precache patterns.
+- Saving a new card closes the composer first and adds the card to the grid as a transition.
+- Remaining main bundle is what the first screen needs (react-dom 209 KB, dexie 95 KB, zod 54 KB, app ~70 KB). The 750 KB of UI sound WAVs load on the first click, not at startup; converting them needs an audio encoder (not installed).
+- `scripts/ui-smoke.mjs` now expects the action bar to exist only after hover (Playwright's browsers are not installed on this PC, so the smoke scripts were not run).

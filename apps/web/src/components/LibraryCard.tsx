@@ -1,4 +1,4 @@
-import { memo, type CSSProperties } from 'react';
+import { memo, useState, type CSSProperties } from 'react';
 import type { CardRecord, CollectionRecord } from '@visual-library/shared';
 import { CardActions, CONNECT_MIME } from './CardActions';
 import { InterfaceIcon } from './InterfaceIcon';
@@ -36,6 +36,12 @@ type Props = {
   readOnly?: boolean;
 };
 
+// One formatter for every card: toLocaleDateString(…, options) builds a new Intl formatter on each call.
+const shortDate = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+
+// Touch screens show every card's action bar (there is no hover), so they render it from the start.
+const touchOnly = typeof window !== 'undefined' && (window.matchMedia?.('(hover: none)').matches ?? false);
+
 const hostOf = (url?: string) => {
   if (!url) return null;
   try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
@@ -48,16 +54,22 @@ const hostOf = (url?: string) => {
 export const LibraryCard = memo(function LibraryCard({ card, collections, api, isOpen, isChecked, isNew, isCaptured, isRemoving, connectionCount, readOnly = false }: Props) {
   const sourceLabel = hostOf(card.sourceUrl);
   const picture = useThumbnail(card, card.type === 'image' || card.type === 'pdf' ? card.dataUrl : undefined, (cardId, thumb) => api().storeThumb(cardId, thumb));
+  // The hover action bar is 40% of a card's elements but shows on one card at a time, so it is made the
+  // first time the card is hovered or focused (then kept, so its fade-out still plays).
+  const [armed, setArmed] = useState(touchOnly);
+  const showActions = armed || isChecked || isOpen;
+  const arm = armed ? undefined : () => setArmed(true);
   return (
-    <div className={`library-card ${isNew ? 'is-new' : ''} ${isCaptured ? 'is-captured' : ''} ${isRemoving ? 'is-removing' : ''} ${isChecked ? 'is-checked' : ''}`}>
+    <div className={`library-card ${isNew ? 'is-new' : ''} ${isCaptured ? 'is-captured' : ''} ${isRemoving ? 'is-removing' : ''} ${isChecked ? 'is-checked' : ''}`}
+      onPointerEnter={arm} onFocus={arm}>
       {!readOnly && <>
         <div className="tile-header">
           <input type="checkbox" aria-label={`Select ${card.title}`} checked={isChecked}
             onChange={() => api().select(card.id)} onClick={event => event.stopPropagation()} />
         </div>
-        <CardActions cardId={card.id} title={card.title} collections={collections}
+        {showActions && <CardActions cardId={card.id} title={card.title} collections={collections}
           onConnect={() => api().startConnect(card.id)} onEdit={() => api().open(card.id)}
-          onDelete={() => api().remove(card.id)} onMove={collectionId => api().move(card, collectionId)} />
+          onDelete={() => api().remove(card.id)} onMove={collectionId => api().move(card, collectionId)} />}
       </>}
       <article
         data-card-id={card.id}
@@ -111,7 +123,7 @@ export const LibraryCard = memo(function LibraryCard({ card, collections, api, i
           {card.type !== 'bookmark' && <h2>{card.title}</h2>}
           <div className="card-footer-meta" hidden={card.type === 'image'}>
             <span>{card.type === 'image' ? 'Image' : card.type === 'text' ? 'Note' : 'Link'}</span>
-            <time dateTime={card.createdAt}>{new Date(card.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time>
+            <time dateTime={card.createdAt}>{shortDate.format(new Date(card.createdAt))}</time>
           </div>
           {card.tags.length > 0 && <div className="card-tag-list">{card.tags.slice(0, 3).map(tag => <span key={tag}>#{tag}</span>)}</div>}
         </div>

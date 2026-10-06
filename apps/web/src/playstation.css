@@ -111,6 +111,8 @@
 .card-external-actions { gap:10px; opacity:0; pointer-events:none; transform:translateY(5px); transition:opacity 150ms var(--ease-standard),transform 150ms var(--ease-standard); }
 .library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions.is-open { transform:translateY(0); }
 .library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions,.card-external-actions.is-open { opacity:1; pointer-events:auto; }
+/* The bar is added on first hover; it starts from its hidden state so it still fades in. */
+@starting-style { .library-card:hover .card-external-actions,.library-card:focus-within .card-external-actions { opacity:0; transform:translateY(5px); } }
 .card-external-actions::before { content:''; position:absolute; right:0; bottom:1px; width:112px; border-bottom:1px solid color-mix(in srgb,var(--ui-line) 34%,transparent); transform:scaleX(0); transform-origin:right; transition:transform 170ms var(--ease-standard); }
 .library-card:hover .card-external-actions::before,.card-external-actions:focus-within::before { transform:scaleX(1); }
 .card-external-actions > button,.card-move-control > button { color:#92bce3; filter:drop-shadow(0 0 5px color-mix(in srgb,var(--ui-glow) 24%,transparent)); transition:color 120ms var(--ease-fast),filter 120ms var(--ease-fast),transform 120ms var(--ease-fast); }

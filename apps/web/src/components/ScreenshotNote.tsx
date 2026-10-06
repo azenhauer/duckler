@@ -4,15 +4,18 @@ export function ScreenshotNote({ note }: { note: string }) {
   const id = useId();
   const text = useRef<HTMLParagraphElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const [long, setLong] = useState(false);
+  // A first guess (4 clamped lines ≈ 180 characters) so the measured answer rarely changes the layout again.
+  const [long, setLong] = useState(() => note.split('\n').length > 4 || note.length > 180);
   useEffect(() => {
     const element = text.current;
     if (!element || expanded) return;
     const measure = () => setLong(element.scrollHeight > element.clientHeight + 1);
-    measure();
-    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
-    observer?.observe(element);
-    return () => observer?.disconnect();
+    // ResizeObserver reports once after the browser's own layout. Measuring here as well forced a
+    // synchronous layout of the whole grid (100 image cards: ~230 ms when opening a 300-card view).
+    if (typeof ResizeObserver === 'undefined') { measure(); return; }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
   }, [note, expanded]);
   if (!note.trim()) return null;
   return <aside className="screenshot-note" aria-label="Screenshot note">

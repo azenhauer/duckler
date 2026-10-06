@@ -1,6 +1,6 @@
 export function NavigationIcon({ name, expanded = false }: { name: 'library' | 'collections' | 'canvas'; expanded?: boolean }) {
   // The two Home destinations keep their approved artwork; everywhere else uses the schematic line icons.
-  if (expanded && name !== 'library') return <img className={`dock-icon home-artwork home-artwork-${name}`} src={`/icons/home-${name}.png`} alt="" aria-hidden="true" draggable={false} />;
+  if (expanded && name !== 'library') return <img className={`dock-icon home-artwork home-artwork-${name}`} src={`/icons/home-${name}.webp`} width={384} height={384} alt="" aria-hidden="true" draggable={false} />;
   const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'square' as const, strokeLinejoin: 'miter' as const };
   return <svg className={`dock-icon dock-icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
     {name === 'library' && <path {...p} d="M3.5 3.5h7v7h-7zM13.5 3.5h7v7h-7zM3.5 13.5h7v7h-7zM13.5 13.5h7v7h-7z" />}

@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import '@xyflow/react/dist/style.css';
-import JSZip from 'jszip';
 import {
   acknowledgeCapture,
   createCardFromInput,
@@ -46,7 +45,6 @@ import { startExtensionBridge, getExtensionConnection } from './lib/extensionBri
 import { appendToNote, isExternalDrop, readDrop, type DroppedItem } from './lib/drop';
 import { ExtensionSetup } from './components/ExtensionSetup';
 import { Dialog } from './components/Dialog';
-import { CardEditor } from './components/CardEditor';
 import { SoundButton, UI_SOUND_EVENT, useUiSounds } from './components/UiSounds';
 import { AppearanceSettings, appearancePresetNames } from './components/AppearanceSettings';
 import { CardStyleSettings } from './components/CardStyleSettings';
@@ -57,7 +55,6 @@ import { HOVER_CLOSE_DELAY, detailsHover, useHoverIntent } from './lib/hoverInte
 import { useExitAnimation } from './lib/exitAnimation';
 import { InterfaceIcon } from './components/InterfaceIcon';
 import { CanvasGallery } from './components/CanvasGallery';
-import { CollectionCanvas } from './components/CollectionCanvas';
 import { Notifications, notify } from './components/Notifications';
 import { BButton } from './components/BButton';
 import { ColorPopover } from './components/ColorPicker';
@@ -66,6 +63,14 @@ import { inferImageTitle } from './lib/imageName';
 import { AvatarCropper, CARD_IMAGE_SHAPE } from './components/AvatarCropper';
 import { EditableName } from './components/EditableName';
 import { LibraryCard, type CardApi } from './components/LibraryCard';
+
+// The canvas (React Flow) and the card editor are separate chunks, fetched when the app is idle so they
+// open without delay but do not slow the first screen. React Flow's stylesheet stays in the main CSS.
+const loadCardEditor = () => import('./components/CardEditor');
+const loadCollectionCanvas = () => import('./components/CollectionCanvas');
+const CardEditor = lazy(() => loadCardEditor().then(module => ({ default: module.CardEditor })));
+const CollectionCanvas = lazy(() => loadCollectionCanvas().then(module => ({ default: module.CollectionCanvas })));
+const preloadViews = () => { void loadCardEditor().catch(() => {}); void loadCollectionCanvas().catch(() => {}); };
 
 const emptyForm = {
   type: 'bookmark' as CardRecord['type'],
@@ -194,6 +199,12 @@ function App() {
   // Google account + Drive sync. When Drive brings changes, the library re-reads them.
   // Bumped when Drive brought changes, so an open canvas reloads what another device saved.
   const [pulledVersion, setPulledVersion] = useState(0);
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 1200));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const handle = idle(preloadViews);
+    return () => cancel(handle);
+  }, []);
   const drive = useDriveSync((nextCards, nextCollections) => { setCards(nextCards); setCollections(nextCollections); setPulledVersion(version => version + 1); }, () => ({
     name: displayProfileName === 'My Library' ? '' : displayProfileName, photo: profilePhoto || undefined,
     tag: displayProfileTag || undefined, bio: profileBio || undefined, color: profileCardColor, cover: profileCover || undefined,
@@ -885,21 +896,24 @@ function App() {
           updatedAt: new Date().toISOString(),
         }));
       await saveCardWithCollections(card, changedCollections);
-      if (changedCollections.length > 0) {
-        setCollections((current) =>
-          current.map((collection) =>
-            changedCollections.find((changed) => changed.id === collection.id) ?? collection,
-          ),
-        );
-      }
-      setCards((current) => [card, ...current]);
-      setNewlyCreatedCardId(card.id);
-      notify({ title: 'Card added', detail: `“${card.title}”` });
-      // Saving is the end of the task: show the new card (in its collection when made elsewhere) instead of reopening it.
-      if (activeView !== 'library') navigateTo('library', newCardCollectionIds[0] ?? null);
+      // The composer closes (and paints) first; adding the card re-lays out the whole grid, so it follows as a transition.
       setForm(emptyForm);
       setMediaPreview(null);
       setCardComposerOpen(false);
+      notify({ title: 'Card added', detail: `“${card.title}”` });
+      startTransition(() => {
+        if (changedCollections.length > 0) {
+          setCollections((current) =>
+            current.map((collection) =>
+              changedCollections.find((changed) => changed.id === collection.id) ?? collection,
+            ),
+          );
+        }
+        setCards((current) => [card, ...current]);
+        setNewlyCreatedCardId(card.id);
+        // Saving is the end of the task: show the new card (in its collection when made elsewhere) instead of reopening it.
+        if (activeView !== 'library') navigateTo('library', newCardCollectionIds[0] ?? null);
+      });
     } catch (error) {
       setComposerError(error instanceof Error ? error.message : 'Could not save. Your draft is still here.');
     } finally {
@@ -1299,6 +1313,7 @@ function App() {
     // Canvases become notes with an SVG preview and their text annotations.
     // Drive sync settles every conflict when it merges (the newer edit wins), so nothing is ever left unresolved.
     const archive = appendCanvasesToObsidianArchive(createObsidianExportArchive(cards, collections, { syncState: createSyncReducerState() }), await readCanvasBackups().catch(() => []), cards);
+    const { default: JSZip } = await import('jszip'); // only needed for this export
     const zip = new JSZip();
 
     for (const file of archive.files) {
@@ -1812,7 +1827,7 @@ function App() {
         </div>}
 
         {(activeView === 'library' || activeView === 'canvas') && selectedCard ? (
-          <CardEditor key={selectedCard.id} card={selectedCard} collections={collections} onClose={() => setSelectedId(null)}
+          <Suspense fallback={null}><CardEditor key={selectedCard.id} card={selectedCard} collections={collections} onClose={() => setSelectedId(null)}
             onTrash={() => { void handleToggleTrash(selectedCard.id); setSelectedId(null); }}
             onDelete={() => { void handleDelete(selectedCard.id); }}
             onCapturePdfPage={selectedCard.type === 'pdf' ? async (page, image) => {
@@ -1855,7 +1870,7 @@ function App() {
               await saveCardWithCollections(updated, nextCollections);
               setCards(current => current.map(card => card.id === draft.id ? updated : card)); setCollections(nextCollections);
               notify({ title: 'Saved', detail: `“${updated.title}”` });
-            }} />
+            }} /></Suspense>
         ) : null}
 
         {captureQueue.length > 0 && (
@@ -1885,8 +1900,8 @@ function App() {
         )}
 
         {activeView === 'canvas' && (selectedCanvas
-          ? <CollectionCanvas key={`${selectedCanvas.id}:${pulledVersion}`} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack}
-            onNavigate={target => target === 'settings' ? setSettingsOpen(true) : navigateTo(target === 'home' ? 'home' : target === 'collections' ? 'collections' : 'canvas')} />
+          ? <Suspense fallback={null}><CollectionCanvas key={`${selectedCanvas.id}:${pulledVersion}`} collection={selectedCanvas} cards={cards} onEditCard={setSelectedId} onRestoreCard={id => { void handleToggleTrash(id); }} onBack={goBack}
+            onNavigate={target => target === 'settings' ? setSettingsOpen(true) : navigateTo(target === 'home' ? 'home' : target === 'collections' ? 'collections' : 'canvas')} /></Suspense>
           : <CanvasGallery collections={collections} cards={cards} search={searchTerm} onOpen={id => navigateTo('canvas', id)} onCreateCollection={() => { navigateTo('library'); setCollectionMenuOpen(true); }} onCreateCanvas={() => void handleCreateEmptyCanvas()}
             onTileContextMenu={(event, id) => openTileMenu(event, id, 'canvas')} renamingId={renamingCollectionId}
             onRename={(id, name) => void handleRenameCollection(id, name)} onCancelRename={() => setRenamingCollectionId(null)} />)}

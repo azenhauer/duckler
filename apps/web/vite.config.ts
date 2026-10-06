@@ -41,7 +41,7 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,wav}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2,wav}'],
         // The ~4 MB OCR cores are only needed when someone runs OCR, so they are cached on first use instead of precached.
         globIgnores: ['**/tesseract-core-*.js'],
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],

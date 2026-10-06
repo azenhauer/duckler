@@ -17,6 +17,8 @@
   background: var(--ui-bg) !important;
 }
 html, body { background: var(--sx-page, #04060b); }
+/* Dialogs lock page scroll; keeping the scrollbar's space means the grid is not laid out again on open/close. */
+html { scrollbar-gutter: stable; }
 html[data-theme='dark'] { --sx-page: #04060b; }
 html:not([data-theme='dark']) { --sx-page: #dde8f4; }
 

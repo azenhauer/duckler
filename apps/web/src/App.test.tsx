@@ -37,7 +37,7 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Open collection C / }));
     await screen.findByText(`T ${payload}`, { exact: false });
     fireEvent.doubleClick(screen.getByRole('article', { name: /^Open T / }));
-    await screen.findByRole('dialog');
+    await screen.findByRole('dialog', {}, { timeout: 5000 }); // the editor chunk loads on first use
     const everything = document.body;
     expect(everything.querySelector('img[src="x"], script, marquee')).toBeNull();
     expect(everything.querySelector('a[href^="javascript:" i], [src^="javascript:" i]')).toBeNull();
@@ -148,6 +148,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add card' }));
     expect(screen.getByRole('button', { name: 'Link' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    fireEvent.pointerEnter((await screen.findByRole('article', { name: 'Open Design note' })).parentElement!); // makes the action bar
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Design note' }));
     const dialog = screen.getByRole('dialog', { name: 'Card details' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Note' }), { target: { value: 'Revised note' } });
@@ -189,6 +190,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Spec checklist' }));
     expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
     fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+    fireEvent.pointerEnter(card.parentElement!); // the action bar is made on first hover
     const actions = within(card.parentElement!);
     fireEvent.click(actions.getByRole('button', { name: 'Move Design note to collection' }));
     fireEvent.click(actions.getByRole('button', { name: 'Research' }));
@@ -207,6 +209,7 @@ describe('App', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
     const card = await screen.findByRole('article', { name: 'Open Design note' });
+    fireEvent.pointerEnter(card.parentElement!); // the action bar is made on first hover
     const actions = within(card.parentElement!);
     fireEvent.click(actions.getByRole('button', { name: 'Move Design note to collection' }));
     fireEvent.click(within(card.parentElement!).getByRole('button', { name: 'Delete permanently' }));
@@ -302,8 +305,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Duckler home' }));
     expect(screen.queryByRole('heading', { name: 'refs' })).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Filter by media type' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('img[src="/icons/home-collections.png"]')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('img[src="/icons/home-canvas.png"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('img[src="/icons/home-collections.webp"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('img[src="/icons/home-canvas.webp"]')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'All notes' }));
     expect(screen.getByRole('heading', { name: 'refs' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Choose collection' })).toHaveTextContent('All notes');
@@ -330,6 +333,7 @@ describe('App', () => {
   it('connects two cards from the connect button and shows them as a dialogue', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    fireEvent.pointerEnter((await screen.findByRole('article', { name: 'Open Design note' })).parentElement!); // makes the action bar
     fireEvent.click(await screen.findByRole('button', { name: 'Connect Design note' }));
     expect(document.querySelector('.connect-hint')).toHaveTextContent('Pick a card to connect with “Design note”');
     fireEvent.click(screen.getByRole('article', { name: 'Open Spec checklist' }));
@@ -579,8 +583,8 @@ describe('App', () => {
     expect(screen.queryByRole('navigation', { name: 'Filter by media type' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Search refs')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'All notes' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('img[src="/icons/home-collections.png"]')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('img[src="/icons/home-canvas.png"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open collections' }).querySelector('img[src="/icons/home-collections.webp"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open canvas' }).querySelector('img[src="/icons/home-canvas.webp"]')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Collections' }));
     expect(screen.queryByRole('navigation', { name: 'Filter by media type' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create a collection' }));
