@@ -23,6 +23,28 @@ beforeEach(async () => {
 });
 
 describe('App', () => {
+  it('renders saved text everywhere as text, never as HTML or a script (XSS sweep)', async () => {
+    const payload = '<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>';
+    await cardDb.cards.clear();
+    await cardDb.collections.clear();
+    const card = createCardFromInput({ type: 'bookmark', title: `T ${payload}`, note: `N ${payload}`, caption: payload, sourceUrl: 'javascript:alert(1)', tags: ['<marquee>x</marquee>'] });
+    await cardDb.cards.put(card);
+    await cardDb.collections.put({ ...createCollectionFromInput({ name: `C ${payload}`, cardIds: [card.id] }), description: `D ${payload}` });
+    localStorage.setItem('visual-library-profile-name', `P ${payload}`);
+    localStorage.setItem('duckler-profile-bio', `B ${payload}`);
+    const { container } = render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open collections' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Open collection C / }));
+    await screen.findByText(`T ${payload}`, { exact: false });
+    fireEvent.doubleClick(screen.getByRole('article', { name: /^Open T / }));
+    await screen.findByRole('dialog');
+    const everything = document.body;
+    expect(everything.querySelector('img[src="x"], script, marquee')).toBeNull();
+    expect(everything.querySelector('a[href^="javascript:" i], [src^="javascript:" i]')).toBeNull();
+    expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
+    expect(container.textContent).toContain(`T ${payload}`);
+  });
+
   it('deletes selected or keyboard-focused cards with Delete, but protects typing and dialogs', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     try {

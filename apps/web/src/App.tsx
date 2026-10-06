@@ -7,6 +7,7 @@ import {
   createCaptureReceipt,
   createCollectionFromInput,
   createObsidianExportArchive,
+  createSyncReducerState,
   dedupeQueueItems,
   enqueueCapture,
   collectionParentError,
@@ -1296,7 +1297,8 @@ function App() {
 
   const handleObsidianExport = async () => {
     // Canvases become notes with an SVG preview and their text annotations.
-    const archive = appendCanvasesToObsidianArchive(createObsidianExportArchive(cards, collections), await readCanvasBackups().catch(() => []), cards);
+    // Drive sync settles every conflict when it merges (the newer edit wins), so nothing is ever left unresolved.
+    const archive = appendCanvasesToObsidianArchive(createObsidianExportArchive(cards, collections, { syncState: createSyncReducerState() }), await readCanvasBackups().catch(() => []), cards);
     const zip = new JSZip();
 
     for (const file of archive.files) {
