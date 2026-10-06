@@ -27,6 +27,8 @@ type PickerProps = {
   autoFocus?: boolean;
   collections: CollectionRecord[];
   selectedIds: string[];
+  /** Collections holding only some of several selected cards: shown with a dash; ticking adds the rest. */
+  partialIds?: string[];
   onToggle: (collectionId: string, included: boolean) => void;
   onCreate: (name: string) => Promise<void> | void;
   onOpenCollection?: (collectionId: string) => void;
@@ -35,7 +37,7 @@ type PickerProps = {
   label: string;
 };
 
-export function CollectionPickerPopover({ autoFocus = true, collections, selectedIds, onToggle, onCreate, onOpenCollection, anchor, onClose, label }: PickerProps) {
+export function CollectionPickerPopover({ autoFocus = true, collections, selectedIds, partialIds = [], onToggle, onCreate, onOpenCollection, anchor, onClose, label }: PickerProps) {
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -111,10 +113,11 @@ export function CollectionPickerPopover({ autoFocus = true, collections, selecte
       {collections.length > 0 && visible.length === 0 && <p className="collection-picker-empty">No collections match “{query.trim()}”</p>}
       {visible.map(collection => {
         const checked = selectedIds.includes(collection.id);
+        const partial = !checked && partialIds.includes(collection.id);
         const name = collectionLabel(collection, collections);
-        return <div key={collection.id} className="collection-picker-row" data-checked={checked || undefined}>
+        return <div key={collection.id} className="collection-picker-row" data-checked={checked || undefined} data-partial={partial || undefined}>
           <label>
-            <input type="checkbox" checked={checked} onChange={() => onToggle(collection.id, !checked)}
+            <input type="checkbox" checked={checked} ref={box => { if (box) box.indeterminate = partial; }} onChange={() => onToggle(collection.id, !checked)}
               onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); onToggle(collection.id, !checked); } }} />
             <span className="collection-picker-check" aria-hidden="true" />
             <span className="collection-picker-name">{name}</span>
@@ -147,7 +150,7 @@ export function CardCollectionControls({ cardId, collections, onToggle, onCreate
   const [openFrom, setOpenFrom] = useState<string | null>(null);
   const memberships = collections.filter(collection => collection.cardIds.includes(cardId));
   // Hovering the badge row opens the same picker a click does; it waits before closing so it can be reached.
-  const hover = useHoverIntent(useCallback((open: boolean) => setOpenFrom(current => open ? current ?? 'hover' : current === 'hover' ? null : current), []), { openDelay: 220 });
+  const hover = useHoverIntent(useCallback((open: boolean) => setOpenFrom(current => open ? current ?? 'hover' : current === 'hover' ? null : current), []), { openDelay: 220, menu: () => document.querySelector('.collection-picker') });
   const toggleFrom = (source: string) => (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     // A click pins a hover-opened picker (so leaving no longer closes it); a second click closes it.

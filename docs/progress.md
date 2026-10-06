@@ -388,3 +388,11 @@ What changed (no feature or visual change intended):
 - Saving a new card closes the composer first and adds the card to the grid as a transition.
 - Remaining main bundle is what the first screen needs (react-dom 209 KB, dexie 95 KB, zod 54 KB, app ~70 KB). The 750 KB of UI sound WAVs load on the first click, not at startup; converting them needs an audio encoder (not installed).
 - `scripts/ui-smoke.mjs` now expects the action bar to exist only after hover (Playwright's browsers are not installed on this PC, so the smoke scripts were not run).
+
+## Hover menus, selection strip, sounds — October 6, 2026
+- Hover menus close by intent (safe triangle, as in Amazon's menu-aim / Floating UI `safePolygon`): after leaving, a menu stays open only while the pointer moves between the leave point and the menu; elsewhere it closes after 60 ms (was a flat 170 ms). Shared by every `useHoverIntent` menu and `detailsHover`. `inSafeArea` has unit tests.
+- Selection: the boxed bulk bar (native select + Add/Remove/Clear) and the legend strip were merged into one strip: "□ N selected · ✕ Collections… · △ Connect these two · ○ Esc · Clear". Collections… opens the same picker as under each card, for all selected cards: ticked = all in it, dash = some; ticking adds/removes all and keeps the selection; inline create puts every selected card in the new collection.
+- Collection picker: "Open ›" shows on the row in use (always on touch screens).
+- The collection menu under the title hung off the left edge (centred under a left-aligned title); it now aligns to the title.
+- Sounds: hovering a sound in Settings plays it (switched-off ones too) with a lit chip and ping; the gear plays its spin on hover; the + button has a new "tilt" cue.
+- Card hover: border, glow and action bar move together at 90 ms (three stylesheets disagreed; the glow snapped while the border faded and the bar trailed at 150 ms).

@@ -63,6 +63,7 @@ import { inferImageTitle } from './lib/imageName';
 import { AvatarCropper, CARD_IMAGE_SHAPE } from './components/AvatarCropper';
 import { EditableName } from './components/EditableName';
 import { LibraryCard, type CardApi } from './components/LibraryCard';
+import { CollectionPickerPopover } from './components/CollectionPicker';
 
 // The canvas (React Flow) and the card editor are separate chunks, fetched when the app is idle so they
 // open without delay but do not slow the first screen. React Flow's stylesheet stays in the main CSS.
@@ -189,8 +190,6 @@ function App() {
   const [profileError, setProfileError] = useState(false);
   const displayProfileName = profileName.trim() || 'My Library';
   const displayProfileTag = profileTag.trim().replace(/^@+/, '');
-  const [bulkDestinationId, setBulkDestinationId] = useState<string>('');
-  const [bulkNewName, setBulkNewName] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
@@ -274,7 +273,9 @@ function App() {
   const addMenuExitRef = useExitAnimation<HTMLDivElement>();
   // While the profile colour picker is open it counts as part of the account menu, so the menu stays.
   const colorPickerOpenRef = useRef(false);
-  const accountHover = useHoverIntent(useCallback((open: boolean) => { if (!open && colorPickerOpenRef.current) return; if (!open || !settingsOpenRef.current) setAccountMenuOpen(open); }, []));
+  const accountHover = useHoverIntent(useCallback((open: boolean) => { if (!open && colorPickerOpenRef.current) return; if (!open || !settingsOpenRef.current) setAccountMenuOpen(open); }, []),
+    // Trigger and popover are siblings: leaving one, the pointer may be heading to the other.
+    { menu: left => left.closest('.account-menu') ? accountTriggerRef.current : document.querySelector('.account-menu') });
   const addHover = useHoverIntent(setAddMenuOpen);
   const collectionHover = useHoverIntent(setCollectionMenuOpen);
   const cardComposerWasOpenRef = useRef(false);
@@ -569,12 +570,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('visual-library-capture-receipts', JSON.stringify(captureReceipts));
   }, [captureReceipts]);
-
-  useEffect(() => {
-    if (selectedCollectionId && !bulkDestinationId) {
-      setBulkDestinationId(selectedCollectionId);
-    }
-  }, [bulkDestinationId, selectedCollectionId]);
 
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) ?? null;
   const selectedCanvas = collections.find(collection => collection.id === selectedCanvasId) ?? null;
@@ -1015,7 +1010,6 @@ function App() {
     setCollections((current) => [collection, ...current]);
     // Opening the new collection is a navigation, so Back returns to where it was made.
     if (activeView === 'library') navigateTo('library', collection.id); else setSelectedCollectionId(collection.id);
-    setBulkDestinationId(collection.id);
     setCollectionForm(emptyCollectionForm);
     await saveCollection(collection);
     setCollectionMenuOpen(false);
@@ -1042,9 +1036,6 @@ function App() {
       .map(collection => collection.parentId === collectionId ? (({ parentId: _parent, ...rest }) => rest)(collection) : collection));
     if (selectedCollectionId === collectionId) {
       setSelectedCollectionId(null);
-    }
-    if (bulkDestinationId === collectionId) {
-      setBulkDestinationId('');
     }
   };
 
@@ -1156,67 +1147,21 @@ function App() {
     if (undoMembership) await changeMembership(undoMembership.cardId, undoMembership.collection.id, true);
   };
 
-  const handleBulkAddToCollection = async (collectionId: string) => {
-    const resolvedCollectionId = collectionId || selectedCollectionId || '';
-    if (!resolvedCollectionId || selectedCardIds.length === 0) {
-      return;
-    }
-
-    const targetCollection = collections.find((collection) => collection.id === resolvedCollectionId);
-    if (!targetCollection) {
-      return;
-    }
-
-    const nextCollection = {
-      ...targetCollection,
-      cardIds: Array.from(new Set([...targetCollection.cardIds, ...selectedCardIds])),
-      updatedAt: new Date().toISOString(),
-    };
-
-    setCollections((current) => current.map((collection) => (collection.id === resolvedCollectionId ? nextCollection : collection)));
-    setSelectedCardIds([]);
-    setBulkDestinationId(resolvedCollectionId);
-    await saveCollection(nextCollection);
+  const selectionCollectionsRef = useRef<HTMLButtonElement | null>(null);
+  const [selectionPickerOpen, setSelectionPickerOpen] = useState(false);
+  useEffect(() => { if (!selectedCardIds.length) setSelectionPickerOpen(false); }, [selectedCardIds.length]);
+  const setSelectionMembership = async (collectionId: string, included: boolean) => {
+    const target = collections.find(collection => collection.id === collectionId);
+    if (!target || !selectedCardIds.length) return;
+    const next = { ...target, cardIds: included ? [...new Set([...target.cardIds, ...selectedCardIds])] : target.cardIds.filter(id => !selectedCardIds.includes(id)), updatedAt: new Date().toISOString() };
+    setCollections(current => current.map(collection => collection.id === collectionId ? next : collection));
+    await saveCollection(next);
   };
-
-  // Create a collection on the spot from the selection bar and put every selected card in it.
-  const handleBulkCreateCollection = async () => {
-    const name = bulkNewName?.trim();
-    if (!name || selectedCardIds.length === 0) return;
-    const collection = createCollectionFromInput({ name, description: 'User-made collection', cardIds: [...selectedCardIds] });
-    try {
-      await saveCollection(collection);
-      setCollections(current => [collection, ...current]);
-      setBulkDestinationId(collection.id);
-      setSelectedCardIds([]);
-      setBulkNewName(null);
-      notify({ title: 'Collection created', detail: `“${name}” · ${collection.cardIds.length} cards` });
-    } catch {
-      notify({ kind: 'error', title: "Couldn't create collection" });
-    }
-  };
-
-  const handleBulkRemoveFromCollection = async (collectionId: string) => {
-    const resolvedCollectionId = collectionId || selectedCollectionId || '';
-    if (!resolvedCollectionId || selectedCardIds.length === 0) {
-      return;
-    }
-
-    const targetCollection = collections.find((collection) => collection.id === resolvedCollectionId);
-    if (!targetCollection) {
-      return;
-    }
-
-    const nextCollection = {
-      ...targetCollection,
-      cardIds: targetCollection.cardIds.filter((cardId) => !selectedCardIds.includes(cardId)),
-      updatedAt: new Date().toISOString(),
-    };
-
-    setCollections((current) => current.map((collection) => (collection.id === resolvedCollectionId ? nextCollection : collection)));
-    setSelectedCardIds([]);
-    setBulkDestinationId(resolvedCollectionId);
-    await saveCollection(nextCollection);
+  const createCollectionForSelection = async (name: string) => {
+    const collection = createCollectionFromInput({ name: name.trim(), description: 'User-made collection', cardIds: [...selectedCardIds] });
+    await saveCollection(collection);
+    setCollections(current => [collection, ...current]);
+    notify({ title: 'Collection created', detail: `“${collection.name}” · ${collection.cardIds.length} card${collection.cardIds.length === 1 ? '' : 's'}` });
   };
 
   const handleQuickAddCard = (type: CardRecord['type'] = 'bookmark') => {
@@ -1774,34 +1719,6 @@ function App() {
           </div>
         )}
 
-        {activeView === 'library' && selectedCardIds.length > 1 && (
-          <div className="bulk-actions" role="group" aria-label="Selected card actions">
-            <span>{selectedCardIds.length} selected</span>
-            {bulkNewName === null ? <select aria-label="Choose collection" value={bulkDestinationId} onChange={(event) => { if (event.target.value === '__new') setBulkNewName(''); else setBulkDestinationId(event.target.value); }}>
-              <option value="">Choose collection</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
-              <option value="__new">+ New collection…</option>
-            </select> : <form className="bulk-new-collection" onSubmit={event => { event.preventDefault(); void handleBulkCreateCollection(); }}>
-              <input autoFocus aria-label="New collection name" placeholder="New collection name" maxLength={120} value={bulkNewName} onChange={event => setBulkNewName(event.target.value)}
-                onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setBulkNewName(null); } }} />
-              <button type="submit" disabled={!bulkNewName.trim()}>Create &amp; add</button>
-              <BButton label="Cancel new collection" onClick={() => setBulkNewName(null)} />
-            </form>}
-            <button type="button" onClick={() => void handleBulkAddToCollection(bulkDestinationId)}>
-              Add to collection
-            </button>
-            <button type="button" className="secondary-button" onClick={() => void handleBulkRemoveFromCollection(bulkDestinationId)}>
-              Remove from collection
-            </button>
-            <button type="button" className="ghost-button" onClick={() => setSelectedCardIds([])}>
-              Clear selection
-            </button>
-          </div>
-        )}
 
         {activeView === 'library' && visibleCards.length === 0 && <div className="library-empty">
           <span aria-hidden="true">✧</span><h2>{searchTerm ? 'No matches' : 'No cards yet'}</h2>
@@ -1814,12 +1731,22 @@ function App() {
           <span><b className="glyph-tri" aria-hidden="true">△</b>Pick a card to connect with “{from.title}”</span>
           <button type="button" onClick={() => setConnectFrom(null)}><b className="glyph-cir" aria-hidden="true">○</b>Esc · Cancel</button>
         </div> : null; })()}
-        {activeView === 'library' && selectedCardIds.length > 0 && <div className="selection-hint" role="status">
-          <span><b className="glyph-sqr" aria-hidden="true">□</b>{selectedCardIds.length} selected · click cards to add or remove</span>
-          <span><b className="glyph-crs" aria-hidden="true">✕</b>Double-click to edit</span>
+        {/* One strip for any selection: count, collections (the same picker as under each card), connect, clear. */}
+        {activeView === 'library' && selectedCardIds.length > 0 && <div className="selection-hint" role="group" aria-label="Selected card actions">
+          <span role="status"><b className="glyph-sqr" aria-hidden="true">□</b>{selectedCardIds.length} selected</span>
+          <button ref={selectionCollectionsRef} type="button" className="selection-collections" aria-haspopup="dialog" aria-expanded={selectionPickerOpen}
+            onClick={() => setSelectionPickerOpen(open => !open)}><b className="glyph-crs" aria-hidden="true">✕</b>Collections…</button>
           {selectedCardIds.length === 2 && <button type="button" className="selection-connect" onClick={() => { void connectCards(selectedCardIds[0], selectedCardIds[1]); setSelectedCardIds([]); }}><b className="glyph-tri" aria-hidden="true">△</b>Connect these two</button>}
-          <button type="button" onClick={() => setSelectedCardIds([])}><b className="glyph-cir" aria-hidden="true">○</b>Esc · Clear</button>
+          <button type="button" aria-label="Clear selection" onClick={() => setSelectedCardIds([])}><b className="glyph-cir" aria-hidden="true">○</b>Esc · Clear</button>
         </div>}
+        {activeView === 'library' && selectionPickerOpen && selectedCardIds.length > 0 && selectionCollectionsRef.current && (() => {
+          const inAll = collections.filter(item => selectedCardIds.every(id => item.cardIds.includes(id))).map(item => item.id);
+          const inSome = collections.filter(item => !inAll.includes(item.id) && selectedCardIds.some(id => item.cardIds.includes(id))).map(item => item.id);
+          return <CollectionPickerPopover label="Collections for the selected cards" collections={collections} selectedIds={inAll} partialIds={inSome}
+            anchor={selectionCollectionsRef.current} onClose={() => setSelectionPickerOpen(false)}
+            onToggle={(collectionId, included) => void setSelectionMembership(collectionId, included)}
+            onCreate={createCollectionForSelection} onOpenCollection={collectionId => navigateTo('library', collectionId)} />;
+        })()}
         {activeView === 'library' && <div onClick={event => { if (event.target === event.currentTarget) setSelectedCardIds([]); }} className={`library-grid card-size-${cardSize} ${selectedCardIds.length ? 'has-selection' : ''} ${connectFrom ? 'is-connecting' : ''}`} style={{ maxWidth: Math.max(1, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length)) * (cardSize === 'compact' ? 260 : 360) + Math.max(0, Math.min(cardSize === 'compact' ? 4 : 3, visibleCards.length) - 1) * 24 }}>
           {visibleCards.map(card => <LibraryCard key={card.id} card={card} collections={collections} api={getCardApi}
             isOpen={selectedId === card.id} isChecked={selectedCardIds.includes(card.id)} isNew={newlyCreatedCardId === card.id}

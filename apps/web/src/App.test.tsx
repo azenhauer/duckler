@@ -170,7 +170,6 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Card details' })).not.toBeInTheDocument();
     fireEvent.click(spec);
     expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
-    expect(document.querySelector('.selection-hint')).toHaveTextContent('Double-click to edit');
     fireEvent.click(spec);
     expect(design).toHaveClass('is-checked');
     expect(spec).not.toHaveClass('is-checked');
@@ -181,12 +180,33 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'Card details' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close details' })).toHaveClass('b-button');
   });
-  it('shows bulk actions only for multiple cards and saves membership from card options', async () => {
+  it('manages collections for every selected card from one picker, with partial memberships shown', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
+    await screen.findByRole('article', { name: 'Open Design note' });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Design note' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Spec checklist' }));
+    const strip = screen.getByRole('group', { name: 'Selected card actions' });
+    fireEvent.click(within(strip).getByRole('button', { name: /Collections/ }));
+    const picker = screen.getByRole('dialog', { name: 'Collections for the selected cards' });
+    expect(within(picker).getByRole('checkbox', { name: 'Inbox' })).toBeChecked(); // both cards are in Inbox
+    const research = within(picker).getByRole('checkbox', { name: 'Research' }) as HTMLInputElement;
+    expect(research.indeterminate).toBe(true); // only Spec checklist is
+    fireEvent.click(research);
+    await waitFor(async () => expect((await cardDb.collections.toArray()).find(item => item.name === 'Research')?.cardIds).toHaveLength(2));
+    expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected'); // the selection stays
+    fireEvent.click(within(picker).getByRole('button', { name: '+ Create new collection' }));
+    fireEvent.change(within(picker).getByRole('textbox', { name: 'New collection name' }), { target: { value: 'Both' } });
+    fireEvent.click(within(picker).getByRole('button', { name: 'Create' }));
+    await waitFor(async () => expect((await cardDb.collections.toArray()).find(item => item.name === 'Both')?.cardIds).toHaveLength(2));
+  });
+
+  it('shows one selection strip and saves membership from card options', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'All notes' }));
     const card = await screen.findByRole('article', { name: 'Open Design note' });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Design note' }));
-    expect(screen.queryByRole('group', { name: 'Selected card actions' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('1 selected');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Spec checklist' }));
     expect(screen.getByRole('group', { name: 'Selected card actions' })).toHaveTextContent('2 selected');
     fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));

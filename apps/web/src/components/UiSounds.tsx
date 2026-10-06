@@ -17,7 +17,7 @@ export type Cue =
   | `hover-${Exclude<Zone, 'menu'>}` | `click-${Exclude<Zone, 'menu'>}`
   | 'notify' | 'notify-error' | 'notify-info' | 'select' | 'deselect' | 'gear' | 'hover-controls'
   | 'canvas-draw' | 'canvas-highlight' | 'canvas-shape' | 'canvas-text' | 'canvas-erase' | 'canvas-connect'
-  | 'canvas-place' | 'canvas-drop' | 'canvas-rotate' | 'canvas-undo' | 'canvas-redo' | 'canvas-tool' | 'share';
+  | 'canvas-place' | 'canvas-drop' | 'canvas-rotate' | 'canvas-undo' | 'canvas-redo' | 'canvas-tool' | 'share' | 'tilt';
 /**
  * A pitched sample, a short band-passed noise burst (pencil/eraser texture), or a synthesized tone.
  * The two pack samples keep every cue in one family; each cue's own tone (waveform + pitch movement)
@@ -38,6 +38,8 @@ export const cueLayers: Record<Cue, Layer[]> = {
   click: [s('click', 1)],
   open: [s('click', 1.12, .7), t('triangle', 440, 880, .09, .35, .01)],
   back: [s('click', .78, .7), t('triangle', 660, 330, .1, .35, .01)],
+  // The + button tilting up on hover: a quick upward swish.
+  tilt: [n(2600, .07, .3, 0, .9), t('sine', 520, 780, .08, .16, .01)],
   // Cards
   'hover-card': [s('hover', .84, .6), t('sine', 220, 230, .06, .18)],
   'click-card': [s('click', .9, .8), t('sine', 330, 330, .05, .2, .02)],
@@ -200,8 +202,15 @@ export function useUiSounds() {
       lastTarget = element;
       const now = performance.now();
       if (now - lastHover < 100 || now - lastClick < 100) return;
+      lastHover = now;
+      // Sound buttons in Settings play their own sound (even when switched off, so it can be auditioned).
+      const own = element.dataset.cue;
+      if (own && own in cueLayers) { play(own as Cue, true); return; }
+      // Controls with their own hover animation get a matching sound: the gear spins, + tilts up.
+      if (element.matches('.settings-gear')) { play('gear'); return; }
+      if (element.matches('.floating-add-button')) { play('tilt'); return; }
       const zone = zoneFor(element);
-      lastHover = now; play(element.closest('.top-actions') ? 'hover-controls' : zone === 'menu' ? 'hover' : `hover-${zone}`);
+      play(element.closest('.top-actions') ? 'hover-controls' : zone === 'menu' ? 'hover' : `hover-${zone}`);
     };
     const click = (event: Event) => {
       const element = target(event);
@@ -230,7 +239,7 @@ export function useUiSounds() {
     try { context.current ??= new AudioContext(); void context.current.resume().then(() => playRef.current(cue)).catch(() => {}); } catch { /* Optional audio. */ }
   }, []);
   const previews: { label: string; cues: Cue[] }[] = [
-    { label: 'Menus', cues: ['hover', 'click', 'open', 'back'] },
+    { label: 'Menus', cues: ['hover', 'click', 'open', 'back', 'tilt'] },
     { label: 'Cards', cues: ['hover-card', 'select', 'deselect', 'save', 'delete'] },
     { label: 'Settings', cues: ['gear', 'hover-controls', 'hover-settings', 'click-settings', 'toggle-on', 'toggle-off'] },
     { label: 'Canvas', cues: ['canvas-tool', 'canvas-draw', 'canvas-shape', 'canvas-erase', 'canvas-connect', 'canvas-undo'] },
@@ -240,7 +249,7 @@ export function useUiSounds() {
     <h3>PS2 UI sounds</h3>
     <label><input type="checkbox" checked={preferences.enabled} onChange={event => setPreferences({ ...preferences, enabled: event.target.checked })} /> UI sounds</label>
     <label>Volume<input aria-label="UI sound volume" type="range" min="0" max="1" step=".05" value={preferences.volume} onChange={event => setPreferences({ ...preferences, volume: Number(event.target.value) })} /></label>
-    <p className="sound-preview-hint">Click a sound to switch it off or on (switching on plays it). Click a group name to switch the whole group.</p>
+    <p className="sound-preview-hint">Hover a sound to hear it. Click it to switch it off or on; click a group name to switch the whole group.</p>
     {previews.map(group => {
       const allOff = group.cues.every(cue => preferences.muted.includes(cue));
       return <div key={group.label} className="sound-preview-row" role="group" aria-label={`${group.label} sounds`}>
@@ -249,7 +258,7 @@ export function useUiSounds() {
         {group.cues.map(cue => {
           const on = !preferences.muted.includes(cue);
           const name = cue === 'hover-controls' ? 'controls' : /^(hover|click)\b/.test(cue) ? cue.split('-')[0] : cue.replace(/^(canvas|notify)-/, '').replace(/^notify$/, 'success');
-          return <button type="button" key={cue} disabled={!preferences.enabled} aria-pressed={on} aria-label={`${group.label} ${name} sound`} title={on ? 'On · click to switch off' : 'Off · click to switch on'}
+          return <button type="button" key={cue} data-cue={cue} disabled={!preferences.enabled} aria-pressed={on} aria-label={`${group.label} ${name} sound`} title={on ? 'On · click to switch off' : 'Off · click to switch on'}
             onClick={() => { setPreferences({ ...preferences, muted: on ? [...preferences.muted, cue] : preferences.muted.filter(item => item !== cue) }); if (!on) preview(cue); }}>{name}</button>;
         })}
       </div>;

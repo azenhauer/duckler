@@ -39,13 +39,15 @@ try {
   await actions.getByRole('button', { name: 'Move Spec checklist to collection' }).click();
   await actions.getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('checkbox', { name: 'Select Spec checklist' }).check();
-  assert.equal(await page.getByRole('group', { name: 'Selected card actions' }).count(), 0);
+  await expect(page.getByRole('group', { name: 'Selected card actions' })).toContainText('1 selected');
   const secondCard = page.getByRole('article', { name: 'Open Design note' });
   await secondCard.hover();
   await page.getByRole('checkbox', { name: 'Select Design note' }).check();
   const bulk = page.getByRole('group', { name: 'Selected card actions' });
-  await bulk.waitFor();
-  assert.equal(await bulk.evaluate(el => getComputedStyle(el).position), 'static');
+  await expect(bulk).toContainText('2 selected');
+  await bulk.getByRole('button', { name: /Collections/ }).click();
+  await page.getByRole('dialog', { name: 'Collections for the selected cards' }).waitFor();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Clear selection' }).click();
   await page.getByRole('button', { name: 'Add card' }).hover();
   await page.getByRole('button', { name: 'Link', exact: true }).waitFor();

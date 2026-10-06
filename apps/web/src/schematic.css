@@ -87,7 +87,7 @@ html:not([data-theme='dark']) .content::after { opacity: .06; }
 /* ---- Cards: line-art frame; hover lights the line and draws corner registration marks. ---- */
 .card-tile, .collection-tile {
   border-radius: 2px !important; border: 1px solid var(--sx-line-soft) !important; background: var(--sx-panel) !important;
-  box-shadow: none !important; transform: none !important; transition: border-color var(--sx-fast) linear !important;
+  box-shadow: none !important; transform: none !important; transition: border-color var(--sx-fast) linear, box-shadow var(--sx-fast) linear, background-color var(--sx-fast) linear !important;
 }
 .card-tile:hover, .collection-tile:hover {
   border-color: var(--ui-accent-primary) !important;
@@ -709,6 +709,13 @@ html:not([data-theme='dark']) .profile-trigger:hover, html:not([data-theme='dark
 .sound-preview-row .sound-preview-label[aria-pressed='false'] { text-decoration: line-through; opacity: .5; }
 .sound-preview-row button[aria-pressed='true']:not(.sound-preview-label) { border-color: color-mix(in srgb, var(--ui-accent-primary) 55%, transparent); color: var(--ui-text); }
 .sound-preview-row button[aria-pressed='false']:not(.sound-preview-label) { opacity: .45; text-decoration: line-through; }
+/* Hovering a sound plays it: the chip lights up and pings while it sounds (switched-off ones too). */
+.sound-preview-row button[data-cue]:hover:not(:disabled), .sound-preview-row button[data-cue]:focus-visible { opacity: 1; color: var(--ui-bg); background: var(--ui-accent-primary); border-color: var(--ui-accent-primary); animation: sound-ping 260ms ease-out; }
+@keyframes sound-ping { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-accent-primary) 60%, transparent); } to { box-shadow: 0 0 0 7px transparent; } }
+
+/* Card action bar: appears with the card's hover border instead of trailing it (was 150 ms, eased, 5 px slide). */
+.card-external-actions { transform: translateY(3px); transition: opacity var(--sx-fast) ease-out, transform var(--sx-fast) ease-out !important; }
+@starting-style { .library-card:hover .card-external-actions, .library-card:focus-within .card-external-actions { opacity: 0; transform: translateY(3px); } }
 
 /* ---- Profile card: click the name to rename it in place. ---- */
 .profile-name-button { all: unset; cursor: text; border-bottom: 1px dashed transparent; overflow-wrap: anywhere; }
@@ -835,3 +842,14 @@ html:not([data-theme='dark']) .profile-identity-card.has-cover::after { opacity:
 /* =====================  Drop from other apps  ===================== */
 .app-shell[data-dropping='true']::after { content: ''; position: fixed; inset: 10px; z-index: 89; pointer-events: none; border: 1px dashed var(--ui-accent-primary); border-radius: 12px; background: color-mix(in srgb, var(--ui-accent-primary) 6%, transparent); }
 .app-shell[data-dropping='true'] .collection-tile:hover { outline: 1px solid var(--ui-accent-primary); outline-offset: 4px; }
+
+/* Collection picker: a dash for collections holding only some of the selected cards; "Open ›" only on the row in use. */
+.collection-picker-row[data-partial] .collection-picker-check { border-color: var(--ui-selection); background: linear-gradient(var(--ui-selection), var(--ui-selection)) center / 8px 2px no-repeat; }
+.collection-picker-row[data-partial] label { color: var(--ui-text); }
+@media (hover: hover) {
+  .collection-picker-open { opacity: 0 !important; }
+  .collection-picker-row:hover .collection-picker-open, .collection-picker-row:focus-within .collection-picker-open { opacity: .8 !important; }
+  .collection-picker-open:hover, .collection-picker-open:focus-visible { opacity: 1 !important; }
+}
+/* The collection menu hangs from the left-aligned title (centred, it ran off the left edge). */
+@media (min-width: 561px) { .collection-menu-popover { left: 0 !important; transform: none !important; animation: sx-rise 130ms cubic-bezier(.2,.8,.2,1) both !important; } }
